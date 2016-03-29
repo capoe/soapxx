@@ -5,6 +5,7 @@
 #include "types.hpp"
 #include "globals.hpp"
 #include "radialbasis.hpp"
+#include "angularbasis.hpp"
 #include "base/logger.hpp"
 
 namespace soap {
@@ -45,6 +46,7 @@ public:
 	void clean();
 
 	void compute();
+	void computeAtomic(Particle *center);
 	void computePower();
 	void computeLinear();
 
@@ -55,6 +57,7 @@ private:
 	Options *_options;
     Structure *_structure;
     RadialBasis *_radbasis;
+    AngularBasis *_angbasis;
     std::string _radbasis_type;
 
     Logger *_log;

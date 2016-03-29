@@ -16,15 +16,19 @@ options.set('radialbasis.type', 'gaussian')
 options.set('radialbasis.N', 8)
 options.set('radialbasis.Rc', 7.)
 options.set('radialbasis.sigma', 0.5)
+options.set('angularbasis.L', 6)
 
 # LOAD STRUCTURE
 structure = soap.tools.setup_structure_ase(config.config_file, config.atoms)
 soap.tools.write_xyz('test.xyz', structure)
 
+osio << osio.mg << structure.label << endl
+for atom in structure:
+    osio << atom.name << atom.type << atom.pos << endl
+
 # COMPUTE SPECTRUM
 spectrum = soap.Spectrum(structure, options)
 spectrum.compute()
-
 
 
 

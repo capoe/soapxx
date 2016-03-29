@@ -30,6 +30,7 @@ public:
         using namespace boost::python;
         class_<Particle, Particle*>("Particle", init<int>())
             .add_property("pos", &Particle::getPosNumeric, &Particle::setPosNumeric)
+			.add_property("id", &Particle::getId, &Particle::setId)
             .add_property("name", make_function(&Particle::getName, copy_non_const()), &Particle::setName)
             .add_property("type", make_function(&Particle::getType, copy_non_const()), &Particle::setType)
             .add_property("type_id", make_function(&Particle::getTypeId, copy_non_const()), &Particle::setTypeId)
@@ -46,6 +47,9 @@ public:
 
     void setName(std::string name) { _name = name; }
     std::string &getName() { return _name; }
+
+    void setId(int id) { _id = id; }
+    int getId() { return _id; }
 
     void setTypeId(int id) { _type_id = id; }
     int &getTypeId() { return _type_id; }
@@ -103,6 +107,8 @@ private:
 class Structure
 {
 public:
+	typedef std::vector<Particle*>::iterator particle_it_t;
+
     Structure(std::string label) : _id(-1), _label(label), _box(NULL) {
     	matrix box;
     	box.ZeroMatrix();

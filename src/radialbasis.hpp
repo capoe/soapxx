@@ -5,17 +5,40 @@
 #include "options.hpp"
 #include <string>
 #include <boost/numeric/ublas/matrix.hpp>
+#include "base/exceptions.hpp"
 
 namespace soap {
 
 namespace ub = boost::numeric::ublas;
 
+class RadialCoefficients : public ub::vector<double>
+{
+public:
+	RadialCoefficients(int N) {
+		this->resize(N);
+		for (int i = 0; i < N; ++i) (*this)[i] = 0.0;
+	}
+	void set(int n, double c) {
+		if (this->checkSize(n)) (*this)[n] = c;
+		else throw soap::base::OutOfRange("RadialCoefficients::set");
+	}
+    double &get(int n) {
+    	if (this->checkSize(n)) return (*this)[n];
+    	else throw soap::base::OutOfRange("RadialCoefficients::get");
+    }
+    bool checkSize(int n) { return this->size() > n; }
+};
+
+
 class RadialBasis
 {
 public:
 	std::string &identify() { return _type; }
+	const int &N() { return _N; }
     virtual ~RadialBasis() {;}
     virtual void configure(Options &options);
+    virtual RadialCoefficients computeCoefficients(double r);
+    virtual RadialCoefficients computeCoefficientsAllZero();
 
 protected:
    bool _is_ortho;
@@ -24,6 +47,7 @@ protected:
    double _Rc;
 };
 
+
 struct RadialGaussian
 {
 	RadialGaussian(double r0, double sigma);
@@ -31,7 +55,6 @@ struct RadialGaussian
 	double _r0;
 	double _sigma;
 	double _alpha;
-	double _integral_4_pi_r2_g2_dr;
 	double _integral_r2_g2_dr;
 	double _norm_dV;
 };
@@ -58,6 +81,7 @@ public:
     	_basis.clear();
     }
     void configure(Options &options);
+    RadialCoefficients computeCoefficients(double r);
 protected:
     double _sigma;
     basis_t _basis;

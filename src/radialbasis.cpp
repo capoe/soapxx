@@ -1,6 +1,7 @@
 #include "radialbasis.hpp"
 #include "globals.hpp"
 #include "linalg/operations.hpp"
+#include "base/exceptions.hpp"
 #include <math.h>
 #include <boost/math/special_functions/erf.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
@@ -16,6 +17,18 @@ void RadialBasis::configure(Options &options) {
     _Rc = options.get<double>("radialbasis.Rc");
 }
 
+RadialCoefficients RadialBasis::computeCoefficients(double r) {
+	RadialCoefficients coeffs(this->_N);
+	throw soap::base::NotImplemented("RadialBasis::computeCoefficients");
+	return coeffs;
+}
+
+RadialCoefficients RadialBasis::computeCoefficientsAllZero() {
+	RadialCoefficients coeffs(this->_N);
+    for (int i = 0; i < _N; ++i) coeffs(i) = 0.0;
+	return coeffs;
+}
+
 
 void RadialBasisGaussian::configure(Options &options) {
 	RadialBasis::configure(options);
@@ -23,20 +36,40 @@ void RadialBasisGaussian::configure(Options &options) {
 
     // CREATE & STORE EQUISPACED RADIAL GAUSSIANS
     this->clear();
-    double dr = _Rc/(_N-1);
-    for (int i = 0; i < _N; ++i) {
-        double r = i*dr;
-        double sigma = _sigma;
-        basis_fct_t *new_fct = new basis_fct_t(r, sigma);
-        _basis.push_back(new_fct);
+
+    std::string mode = "adaptive";
+    mode = "equispaced";
+    if (mode == "equispaced") {
+		double dr = _Rc/(_N-1);
+		for (int i = 0; i < _N; ++i) {
+			double r = i*dr;
+			double sigma = _sigma;
+			basis_fct_t *new_fct = new basis_fct_t(r, sigma);
+			_basis.push_back(new_fct);
+		}
+    }
+    else if (mode == "adaptive") {
+        double delta = 0.5;
+        int L = 6;
+        double r = 0.;
+        double sigma = 0.;
+        while (r < _Rc) {
+            sigma = sqrt(4./(2*L+1))*(r+delta);
+            basis_fct_t *new_fct = new basis_fct_t(r, sigma);
+			_basis.push_back(new_fct);
+			r = r + sigma;
+        }
+    }
+    else {
+    	throw std::runtime_error("Not implemented.");
     }
     // SUMMARIZE
     GLOG() << "Created " << _N << " radial Gaussians at r = { ";
     for (basis_it_t bit = _basis.begin(); bit != _basis.end(); ++bit) {
-        GLOG() << (*bit)->_r0 << " ";
+        GLOG() << (*bit)->_r0 << " (" << (*bit)->_sigma << ") ";
     }
     GLOG() << "}" << std::endl;
-    // COMPUTE OVERLAP MATRIX
+    // COMPUTE OVERLAP MATRIX s_{ij} = \int g_i(r) g_j(r) r^2 dr
     _Sij = ub::matrix<double>(_N, _N);
     basis_it_t it;
     basis_it_t jt;
@@ -44,18 +77,6 @@ void RadialBasisGaussian::configure(Options &options) {
     int j;
     for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
     	for (jt = _basis.begin(), j = 0; jt != _basis.end(); ++jt, ++j) {
-    		/*
-    		double a = (*it)->_alpha;
-    		double a32 = pow(a, 1.5);
-    		double b = (*it)->_r0;
-    		double c = (*jt)->_r0;
-    		double pre = 4.*M_PI/(16.*a32);
-			double s = pre*exp(-a*(b*b+c*c)) * (
-			  sqrt(2.*M_PI)*(1.+a*(b+c)*(b+c))*exp(0.5*a*(b+c)*(b+c)) * \
-				 (1. - boost::math::erf<double>(-1.*sqrt(0.5*a)*(b+c)))
-			  + 2.*sqrt(a)*(b+c)
-			);
-			*/
             double a = (*it)->_alpha;
             double b = (*jt)->_alpha;
             double r0 = (*it)->_r0;
@@ -69,7 +90,6 @@ void RadialBasisGaussian::configure(Options &options) {
 						1 - boost::math::erf<double>(-W0/sqrt(w))
 					)
 				);
-
 			s *= (*it)->_norm_dV*(*jt)->_norm_dV;
 			_Sij(i,j) = s;
     	}
@@ -107,19 +127,31 @@ void RadialBasisGaussian::configure(Options &options) {
 	}
 }
 
+RadialCoefficients RadialBasisGaussian::computeCoefficients(double r) {
+
+	ub::vector<double> coeffs_raw(_N);
+	basis_it_t it;
+	int i;
+    for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
+        coeffs_raw(i) = (*it)->at(r);
+    }
+
+    coeffs_raw = ub::prod(_Tij, coeffs_raw);
+
+    RadialCoefficients coeffs(this->_N);
+    for (int n = 0; n < _N; ++n) {
+    	coeffs.set(n, coeffs_raw(n));
+    }
+
+	return coeffs;
+}
+
 
 RadialGaussian::RadialGaussian(double r0, double sigma)
 : _r0(r0),
   _sigma(sigma),
   _alpha(1./(2.*sigma*sigma)) {
 	// COMPUTE NORMALIZATION
-    /*
-	double alpha2 = 2*_alpha;
-    _integral_4_pi_r2_g2_dr =
-        pow(M_PI/alpha2, 1.5) * (1.+2.*alpha2*_r0*_r0)*(1.-boost::math::erf<double>(-sqrt(alpha2)*_r0))
-      + pow(M_PI/alpha2, 1.5) * 2*sqrt(alpha2/M_PI)*_r0*exp(-alpha2*_r0*_r0);
-    _norm_dV = 1./std::sqrt(_integral_4_pi_r2_g2_dr);
-    */
     double w = 2*_alpha;
     double W0 = 2*_alpha*_r0;
     _integral_r2_g2_dr =
@@ -130,6 +162,12 @@ RadialGaussian::RadialGaussian(double r0, double sigma)
 			)
         );
     _norm_dV = 1./sqrt(_integral_r2_g2_dr);
+}
+
+double RadialGaussian::at(double r) {
+	double p = _alpha*(r-_r0)*(r-_r0);
+	if (p < 40) return _norm_dV * exp(-p);
+	else return 0.0;
 }
 
 /*

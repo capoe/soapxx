@@ -51,6 +51,7 @@ def setup_structure_ase(label, ase_config):
         particle.pos = pos
         particle.mass = mass
         particle.name = name
+        particle.type = name
         particle.type_id = typ
     return structure
 
