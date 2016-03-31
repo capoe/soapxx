@@ -1,11 +1,12 @@
 #ifndef _SOAP_RADIALBASIS_HPP
 #define _SOAP_RADIALBASIS_HPP
 
-#include "base/objectfactory.hpp"
-#include "options.hpp"
 #include <string>
 #include <boost/numeric/ublas/matrix.hpp>
+
 #include "base/exceptions.hpp"
+#include "base/objectfactory.hpp"
+#include "options.hpp"
 
 namespace soap {
 
@@ -33,11 +34,15 @@ public:
 class RadialBasis
 {
 public:
+	typedef ub::matrix<double> radcoeff_t;
+	typedef ub::zero_matrix<double> radcoeff_zero_t;
+
 	std::string &identify() { return _type; }
 	const int &N() { return _N; }
     virtual ~RadialBasis() {;}
     virtual void configure(Options &options);
     virtual RadialCoefficients computeCoefficients(double r);
+    virtual void computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here);
     virtual RadialCoefficients computeCoefficientsAllZero();
 
 protected:
@@ -45,6 +50,8 @@ protected:
    std::string _type;
    int _N;
    double _Rc;
+
+   static const double RADZERO = 1e-10;
 };
 
 
@@ -55,8 +62,12 @@ struct RadialGaussian
 	double _r0;
 	double _sigma;
 	double _alpha;
+	// Integral S g^2 r^2 dr
 	double _integral_r2_g2_dr;
-	double _norm_dV;
+	double _norm_r2_g2_dr;
+	// Integral S g r^2 dr
+	double _integral_r2_g_dr;
+	double _norm_r2_g_dr;
 };
 
 class RadialBasisGaussian : public RadialBasis
@@ -82,6 +93,7 @@ public:
     }
     void configure(Options &options);
     RadialCoefficients computeCoefficients(double r);
+    void computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here);
 protected:
     double _sigma;
     basis_t _basis;

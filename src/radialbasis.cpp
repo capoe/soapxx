@@ -1,16 +1,20 @@
-#include "radialbasis.hpp"
-#include "globals.hpp"
-#include "linalg/operations.hpp"
-#include "base/exceptions.hpp"
 #include <math.h>
 #include <boost/math/special_functions/erf.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/numeric/ublas/io.hpp>
 
+#include "base/exceptions.hpp"
+#include "linalg/operations.hpp"
+#include "globals.hpp"
+#include "radialbasis.hpp"
+
 namespace soap {
 
 namespace ub = boost::numeric::ublas;
 
+// ======================
+// RadialBasis BASE CLASS
+// ======================
 
 void RadialBasis::configure(Options &options) {
     _N = options.get<int>("radialbasis.N");
@@ -23,12 +27,21 @@ RadialCoefficients RadialBasis::computeCoefficients(double r) {
 	return coeffs;
 }
 
+void RadialBasis::computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here) {
+	throw soap::base::NotImplemented("RadialBasis::computeCoefficients");
+	return;
+}
+
 RadialCoefficients RadialBasis::computeCoefficientsAllZero() {
 	RadialCoefficients coeffs(this->_N);
     for (int i = 0; i < _N; ++i) coeffs(i) = 0.0;
 	return coeffs;
 }
 
+
+// ======================
+// RadialBasisGaussian
+// ======================
 
 void RadialBasisGaussian::configure(Options &options) {
 	RadialBasis::configure(options);
@@ -90,7 +103,7 @@ void RadialBasisGaussian::configure(Options &options) {
 						1 - boost::math::erf<double>(-W0/sqrt(w))
 					)
 				);
-			s *= (*it)->_norm_dV*(*jt)->_norm_dV;
+			s *= (*it)->_norm_r2_g2_dr*(*jt)->_norm_r2_g2_dr;
 			_Sij(i,j) = s;
     	}
     }
@@ -146,46 +159,106 @@ RadialCoefficients RadialBasisGaussian::computeCoefficients(double r) {
 	return coeffs;
 }
 
+struct SphericalGaussian
+{
+	SphericalGaussian(vec r0, double sigma) :
+		_r0(r0), _sigma(sigma), _alpha(1./(2*sigma*sigma)) {
+		_norm_g_dV = pow(_alpha/M_PI, 1.5);
+	}
+
+	vec _r0;
+	double _sigma;
+	double _alpha;
+	double _norm_g_dV;
+};
+
+
+void RadialBasisGaussian::computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here) {
+	// Delta-type expansion =>
+	// Second (l) dimension of <save_here> and <particle_sigma> ignored here
+	if (particle_sigma < RadialBasis::RADZERO) {
+		basis_it_t it;
+		int n = 0;
+		for (it = _basis.begin(), n = 0; it != _basis.end(); ++it, ++n) {
+			double gn_at_r = (*it)->at(r);
+			for (int l = 0; l != save_here.size2(); ++l) {
+				save_here(n, l) = gn_at_r;
+			}
+		}
+
+		save_here = ub::prod(_Tij, save_here);
+	}
+	else {
+		throw soap::base::NotImplemented("...");
+
+		// Particle properties
+		double ai = 1./(2*particle_sigma*particle_sigma);
+		double ri = r;
+
+		basis_it_t it;
+		int k = 0;
+		for (it = _basis.begin(), k = 0; it != _basis.end(); ++it, ++k) {
+			// Radial Gaussian properties
+			double ak = (*it)->_alpha;
+			double rk = (*it)->_r0;
+			// Combined properties
+			double beta_ik = ai+ak;
+			double rho_ik = ak*rk/beta_ik;
+			double bessel_arg_ik = 2*ai*ri*rho_ik;
+
+
+		}
+	}
+    return;
+}
+
+
+// ======================
+// RadialGaussian
+// ======================
 
 RadialGaussian::RadialGaussian(double r0, double sigma)
 : _r0(r0),
   _sigma(sigma),
   _alpha(1./(2.*sigma*sigma)) {
-	// COMPUTE NORMALIZATION
+
+	// COMPUTE NORMALIZATION S g^2 r^2 dr
+	// This normalization is to be used for radial basis functions
     double w = 2*_alpha;
     double W0 = 2*_alpha*_r0;
     _integral_r2_g2_dr =
-        1./(4.*pow(w, 2.5))*exp(-2*_alpha*_r0*_r0)*(
+        1./(4.*pow(w, 2.5))*exp(-w*_r0*_r0)*(
             2*sqrt(w)*W0 +
 			sqrt(M_PI)*exp(W0*W0/w)*(w+2*W0*W0)*(
 			    1 - boost::math::erf<double>(-W0/sqrt(w))
 			)
         );
-    _norm_dV = 1./sqrt(_integral_r2_g2_dr);
+    _norm_r2_g2_dr = 1./sqrt(_integral_r2_g2_dr);
+
+    // COMPUTE NORMALIZATION S g r^2 dr
+    // This normalization is to be used for "standard" radial Gaussians
+    w = _alpha;
+	W0 = _alpha*_r0;
+	_integral_r2_g_dr =
+		1./(4.*pow(w, 2.5))*exp(-w*_r0*_r0)*(
+			2*sqrt(w)*W0 +
+			sqrt(M_PI)*exp(W0*W0/w)*(w+2*W0*W0)*(
+				1 - boost::math::erf<double>(-W0/sqrt(w))
+			)
+		);
+	_norm_r2_g_dr = 1./_integral_r2_g_dr;
 }
 
 double RadialGaussian::at(double r) {
 	double p = _alpha*(r-_r0)*(r-_r0);
-	if (p < 40) return _norm_dV * exp(-p);
+	if (p < 40) return _norm_r2_g2_dr * exp(-p);
 	else return 0.0;
 }
 
-/*
-self.r0 = r0
-self.sigma = sigma
-self.alpha = 1./(2*sigma**2)
-# Normalization
-alpha2 = 2*self.alpha
-self.integral_4_pi_r2_g2_dr = (np.pi/alpha2)**1.5*(1.+2.*alpha2*self.r0**2)*(1.-scipy.special.erf(-alpha2**0.5*self.r0)) + (np.pi/alpha2)**1.5*2*(alpha2/np.pi)**0.5*self.r0*np.exp(-alpha2*self.r0**2)
-self.norm_dV = self.integral_4_pi_r2_g2_dr**(-0.5)
-return
-def EvaluateExp(self, r):
-return np.exp(-(r-self.r0)**2/(2.*self.sigma**2))
-def __call__(self, r):
-return self.EvaluateExp(r)*self.norm_dV
-*/
 
-
+// ======================
+// RadialBasisFactory
+// ======================
 
 void RadialBasisFactory::registerAll(void) {
 	RadialBasisOutlet().Register<RadialBasisGaussian>("gaussian");

@@ -50,6 +50,8 @@ def setup_structure_ase(label, ase_config):
         particle = structure.addParticle(segment)
         particle.pos = pos
         particle.mass = mass
+        particle.weight = 1.
+        particle.sigma = 0.5
         particle.name = name
         particle.type = name
         particle.type_id = typ

@@ -141,6 +141,7 @@ public:
            class_< std::vector<Particle*> >("ParticleContainer")
         	   .def(vector_indexing_suite<std::vector<Particle*> >());
     }
+    std::vector<Particle*> &particles() { return _particles; }
     std::vector<Particle*>::iterator beginParticles() { return _particles.begin(); }
     std::vector<Particle*>::iterator endParticles() { return _particles.end(); }
     std::string &getLabel() { return _label; }

@@ -6,6 +6,7 @@
 #include "globals.hpp"
 #include "radialbasis.hpp"
 #include "angularbasis.hpp"
+#include "basis.hpp"
 #include "base/logger.hpp"
 
 namespace soap {
@@ -54,13 +55,10 @@ public:
 
 private:
 
+	Logger *_log;
 	Options *_options;
     Structure *_structure;
-    RadialBasis *_radbasis;
-    AngularBasis *_angbasis;
-    std::string _radbasis_type;
-
-    Logger *_log;
+    Basis *_basis;
 };
 
 

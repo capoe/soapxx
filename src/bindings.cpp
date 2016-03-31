@@ -14,5 +14,6 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::Spectrum::registerPython();
 
     soap::RadialBasisFactory::registerAll();
+    soap::AngularBasisFactory::registerAll();
 }
 

@@ -18,6 +18,18 @@ public:
     explicit NotImplemented(std::string mssg) : std::runtime_error("NotImplemented["+mssg+"]") { ; }
 };
 
+class IOError : public std::runtime_error
+{
+public:
+    explicit IOError(std::string mssg) : std::runtime_error("IOError["+mssg+"]") { ; }
+};
+
+class APIError : public std::runtime_error
+{
+public:
+    explicit APIError(std::string mssg) : std::runtime_error("UsageError["+mssg+"]") { ; }
+};
+
 }}
 
 #endif

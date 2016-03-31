@@ -13,18 +13,21 @@ osio << config.atoms << endl
 # INITIALIZE OPTIONS
 options = soap.Options()
 options.set('radialbasis.type', 'gaussian')
-options.set('radialbasis.N', 8)
-options.set('radialbasis.Rc', 7.)
+options.set('radialbasis.N', 9)
+options.set('radialbasis.Rc', 4.0)
 options.set('radialbasis.sigma', 0.5)
+options.set('angularbasis.type', 'spherical-harmonic')
 options.set('angularbasis.L', 6)
+options.set('densitygrid.N', 20)
+options.set('densitygrid.dx', 0.1)
 
 # LOAD STRUCTURE
 structure = soap.tools.setup_structure_ase(config.config_file, config.atoms)
-soap.tools.write_xyz('test.xyz', structure)
 
 osio << osio.mg << structure.label << endl
 for atom in structure:
-    osio << atom.name << atom.type << atom.pos << endl
+    osio << atom.name << atom.type << atom.weight << atom.sigma << atom.pos << endl
+    atom.sigma = 0.0
 
 # COMPUTE SPECTRUM
 spectrum = soap.Spectrum(structure, options)
