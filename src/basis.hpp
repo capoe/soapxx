@@ -76,6 +76,7 @@ public:
                 }
         	}
         }
+        _coeff *= weight;
         return;
     }
     void add(BasisExpansion &other) {
@@ -178,8 +179,9 @@ public:
 							 vec dr_center_particle = structure->connect(center->getPos(), (*pit)->getPos());
 							 vec dr_particle_target = dr - dr_center_particle;
 							 double r_particle_target = soap::linalg::abs(dr_particle_target);
-							 double sigma = 0.5;
-							 density_dr += pow(1./(2.*M_PI*sigma*sigma), 1.5)
+							 double sigma = (*pit)->getSigma();
+							 double weight = (*pit)->getWeight();
+							 density_dr += weight*pow(1./(2.*M_PI*sigma*sigma), 1.5)
 								 * exp(-r_particle_target*r_particle_target/(2*sigma*sigma));
 						}
 						int_density_dr += density_dr*dx*dy*dz;

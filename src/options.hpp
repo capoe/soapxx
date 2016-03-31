@@ -14,6 +14,8 @@ public:
 		  _N_recip(8), _L_recip(6), _Rc_recip(5.),
 		  _b1(vec(1,0,0)), _b2(vec(0,1,0)), _b3(vec(0,0,1)),
 		  _center_w0(1.), _center_excludes(boost::python::list()) {
+		// SET DEFAULTS
+		this->set("integration_steps", 15);
 	}
    ~Options() {}
 

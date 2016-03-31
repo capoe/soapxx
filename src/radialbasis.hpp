@@ -50,6 +50,7 @@ protected:
    std::string _type;
    int _N;
    double _Rc;
+   int _integration_steps;
 
    static const double RADZERO = 1e-10;
 };

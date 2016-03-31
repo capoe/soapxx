@@ -52,13 +52,12 @@ void Spectrum::computeAtomic(Particle *center) {
     Structure::particle_it_t pit;
     for (pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
 
-    	// TODO Cut-off check
+    	// TODO Cut-off check && cut-off smoothing (= weight reduction)
     	vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
     	double r = soap::linalg::abs(dr);
     	vec d = dr/r;
     	std::string type_other = (*pit)->getType();
 
-    	// TODO Account for weight
     	BasisExpansion nb_expansion(this->_basis);
     	nb_expansion.computeCoefficients(r, d, (*pit)->getWeight(), (*pit)->getSigma());
     	nbhood_expansion->add(nb_expansion);

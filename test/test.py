@@ -6,6 +6,19 @@ import os
 import numpy as np
 from momo import osio, endl, flush
 
+element_vdw_radius = { 
+'C':1.70,
+'N':1.55,
+'O':1.52,
+'H':1.20
+}
+element_mass = {
+'C':12,
+'N':14,
+'O':16,
+'H':1
+}
+
 ase_config_list = soap.tools.ase_load_all('configs')
 config = ase_config_list[0]
 osio << config.atoms << endl
@@ -16,18 +29,21 @@ options.set('radialbasis.type', 'gaussian')
 options.set('radialbasis.N', 9)
 options.set('radialbasis.Rc', 4.0)
 options.set('radialbasis.sigma', 0.5)
+options.set('radialbasis.integration_steps', 15)
 options.set('angularbasis.type', 'spherical-harmonic')
 options.set('angularbasis.L', 6)
 options.set('densitygrid.N', 20)
-options.set('densitygrid.dx', 0.1)
+options.set('densitygrid.dx', 0.10)
 
 # LOAD STRUCTURE
 structure = soap.tools.setup_structure_ase(config.config_file, config.atoms)
 
 osio << osio.mg << structure.label << endl
+
 for atom in structure:
+    atom.sigma = 0.4*element_vdw_radius[atom.type]
+    atom.weight = 1. #element_mass[atom.type]
     osio << atom.name << atom.type << atom.weight << atom.sigma << atom.pos << endl
-    atom.sigma = 0.0
 
 # COMPUTE SPECTRUM
 spectrum = soap.Spectrum(structure, options)
