@@ -18,10 +18,14 @@ class Structure;
 class Particle
 {
 public:
-    Particle(int id) 
-        : _id(id), _pos(vec(0,0,0)), _name(""), _type_id(-1), _type(""), _mass(.0), _weight(.0), _sigma(.0),
-		  _segment(NULL)
-        { ; }
+    Particle(int id) :
+        _id(id), _pos(vec(0,0,0)), _name(""),
+		_type_id(-1), _type(""), _mass(.0),
+		_weight(.0), _sigma(.0), _segment(NULL) { ; }
+    Particle() :
+    	_id(-1), _pos(vec(0,0,0)), _name(""),
+		_type_id(-1), _type(""), _mass(.0),
+		_weight(.0), _sigma(.0), _segment(NULL) { ; }
    ~Particle() {
 	   ;
     }
@@ -66,6 +70,20 @@ public:
     void setSigma(double sigma) { _sigma = sigma; }
     double &getSigma() { return _sigma; }
     
+    template<class Archive>
+	void serialize(Archive &arch, const unsigned int version) {
+    	arch & _segment;
+    	arch & _id;
+    	arch & _name;
+    	arch & _type_id;
+    	arch & _type;
+    	arch & _pos;
+    	arch & _mass;
+    	arch & _weight;
+    	arch & _sigma;
+		return;
+	}
+
 private:
     Segment *_segment;
     // Book-keeping
@@ -85,6 +103,7 @@ class Segment
 {
 public:
     Segment(int id) : _id(id) { ; }
+    Segment() : _id(-1) { ; }
    ~Segment() {
 	   _particles.clear();
     }
@@ -98,6 +117,13 @@ public:
         return *new_part;
     }
 
+    template<class Archive>
+	void serialize(Archive &arch, const unsigned int version) {
+    	arch & _id;
+    	arch & _particles;
+		return;
+	}
+
 private:
     int _id;
     std::vector<Particle*> _particles;
@@ -110,6 +136,11 @@ public:
 	typedef std::vector<Particle*>::iterator particle_it_t;
 
     Structure(std::string label) : _id(-1), _label(label), _box(NULL) {
+    	matrix box;
+    	box.ZeroMatrix();
+    	this->setBoundary(box);
+    }
+    Structure() : _id(-1), _label("?"), _box(NULL) {
     	matrix box;
     	box.ZeroMatrix();
     	this->setBoundary(box);
@@ -202,6 +233,16 @@ public:
 			box.get(2,0), box.get(2,1), box.get(2,2)));
     	box_np.resize(3,3);
     	return box_np;
+    }
+
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & _id;
+    	arch & _label;
+    	arch & _segments;
+    	arch & _particles;
+    	arch & _box;
+    	return;
     }
 
 private:

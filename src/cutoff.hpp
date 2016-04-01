@@ -41,6 +41,14 @@ public:
         return weight_at_r;
     }
 
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & _type;
+    	arch & _Rc;
+    	arch & _Rc_width;
+    	arch & _center_weight;
+    }
+
 protected:
 
     std::string _type;

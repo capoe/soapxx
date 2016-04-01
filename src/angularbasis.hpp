@@ -57,11 +57,17 @@ public:
     virtual AngularCoefficients computeCoefficients(vec d, double r);
     virtual AngularCoefficients computeCoefficientsAllZero();
 
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & _type;
+    	arch & _L;
+    }
+
 protected:
 
     std::string _type;
     int _L;
-    static const double RADZERO = 1e-10;
+    static constexpr double RADZERO = 1e-10;
 };
 
 

@@ -2,6 +2,11 @@
 #include <boost/math/special_functions/erf.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/numeric/ublas/io.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/serialization/vector.hpp>
 
 #include "base/exceptions.hpp"
 #include "linalg/operations.hpp"
@@ -218,8 +223,8 @@ struct ModifiedSphericalBessel1stKind
         return il;
 	}
 
-	static const double RADZERO = 1e-10;
-	static const double SPHZERO = 1e-4;
+	static constexpr double RADZERO = 1e-10;
+	static constexpr double SPHZERO = 1e-4;
 };
 
 
@@ -438,4 +443,6 @@ void RadialBasisFactory::registerAll(void) {
 }
 
 }
+
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::RadialBasisGaussian);
 

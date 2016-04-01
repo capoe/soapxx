@@ -84,6 +84,12 @@ public:
 	}
 	static void registerPython();
 
+	template<class Archive>
+	void serialize(Archive &arch, const unsigned int version) {
+		arch & _key_value_map;
+		return;
+	}
+
 private:
 	// REAL SPACE
 	int _N_real;

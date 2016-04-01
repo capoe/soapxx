@@ -2,6 +2,10 @@
 #define _SOAP_SPECTRUM_HPP
 
 #include <assert.h>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/map.hpp>
+#include <boost/serialization/complex.hpp>
+#include <boost/serialization/base_object.hpp>
 
 #include "base/logger.hpp"
 #include "types.hpp"
@@ -24,6 +28,12 @@ public:
 		_basis(basis) {
 		_expansion_reduced = new BasisExpansion(_basis);
 	}
+	AtomicSpectrum() :
+		_center(NULL),
+		_center_pos(vec(0,0,0)),
+		_center_type("?"),
+		_basis(NULL),
+		_expansion_reduced(NULL) { ; }
     ~AtomicSpectrum() {
         iterator it;
         for (it = this->begin(); it != this->end(); ++it) delete it->second;
@@ -60,6 +70,16 @@ public:
     	}
     }
     Basis *getBasis() { return _basis; }
+
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & _center;
+    	arch & _center_pos;
+    	arch & _center_type;
+    	arch & _basis;
+    	arch & _expansion_reduced;
+    	return;
+    }
 protected:
 	Particle *_center;
 	vec _center_pos;
@@ -100,11 +120,13 @@ public:
 	typedef std::vector<AtomicSpectrum*> atomspec_array_t;
 	typedef std::map<std::string, atomspec_array_t> map_atomspec_array_t;
 
+	Spectrum(std::string archfile);
 	Spectrum(Structure &structure, Options &options);
    ~Spectrum();
 
 	void saveAndClean() { std::cout << "spectrum::save&clean" << std::endl; }
-	void save();
+	void save(std::string archfile);
+	void load(std::string archfile);
 	void clean();
 
 	void compute();
@@ -116,6 +138,17 @@ public:
 	void computeLinear();
 
 	static void registerPython();
+
+	template<class Archive>
+	void serialize(Archive &arch, const unsigned int version) {
+		arch & _options;
+		arch & _structure;
+		arch & _basis;
+
+		arch & _atomspec_array;
+		arch & _map_atomspec_array;
+		return;
+	}
 
 private:
 

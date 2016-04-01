@@ -1,5 +1,7 @@
 #include <fstream>
 #include <boost/format.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
 
 #include "spectrum.hpp"
 
@@ -10,6 +12,11 @@ Spectrum::Spectrum(Structure &structure, Options &options)
 	GLOG() << "Configuring spectrum ..." << std::endl;
 	// CREATE & CONFIGURE BASIS
 	_basis = new Basis(&options);
+}
+
+Spectrum::Spectrum(std::string archfile) :
+	_log(NULL), _options(NULL), _structure(NULL), _basis(NULL) {
+	this->load(archfile);
 }
 
 Spectrum::~Spectrum() {
@@ -175,11 +182,28 @@ void Spectrum::add(AtomicSpectrum *atomspec) {
 	return;
 }
 
+void Spectrum::save(std::string archfile) {
+	std::ofstream ofs(archfile.c_str());
+	boost::archive::binary_oarchive arch(ofs);
+	arch << (*this);
+	return;
+}
+
+void Spectrum::load(std::string archfile) {
+	std::ifstream ifs(archfile.c_str());
+	boost::archive::binary_iarchive arch(ifs);
+	arch >> (*this);
+	return;
+}
+
 void Spectrum::registerPython() {
     using namespace boost::python;
     class_<Spectrum>("Spectrum", init<Structure &, Options &>())
+    	.def(init<std::string>())
 	    .def("compute", &Spectrum::compute)
 	    .def("saveAndClean", &Spectrum::saveAndClean)
+		.def("save", &Spectrum::save)
+		.def("load", &Spectrum::load)
         .def("writeDensityOnGrid", &Spectrum::writeDensityOnGrid);
 }
 

@@ -3,6 +3,8 @@
 
 #include <string>
 #include <boost/numeric/ublas/matrix.hpp>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/export.hpp>
 
 #include "base/exceptions.hpp"
 #include "base/objectfactory.hpp"
@@ -45,6 +47,15 @@ public:
     virtual void computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here);
     virtual RadialCoefficients computeCoefficientsAllZero();
 
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & _type;
+    	arch & _N;
+    	arch & _Rc;
+    	arch & _integration_steps;
+    	arch & _mode;
+    }
+
 protected:
    bool _is_ortho;
    std::string _type;
@@ -53,13 +64,14 @@ protected:
    int _integration_steps;
    std::string _mode; // <- 'equispaced' or 'adaptive'
 
-   static const double RADZERO = 1e-10;
+   static constexpr double RADZERO = 1e-10;
 };
 
 
 struct RadialGaussian
 {
 	RadialGaussian(double r0, double sigma);
+	RadialGaussian() {;}
 	double at(double r);
 	double _r0;
 	double _sigma;
@@ -70,6 +82,15 @@ struct RadialGaussian
 	// Integral S g r^2 dr
 	double _integral_r2_g_dr;
 	double _norm_r2_g_dr;
+
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & _r0;
+    	arch & _sigma;
+    	arch & _alpha;
+    	arch & _norm_r2_g2_dr;
+    	arch & _norm_r2_g_dr;
+    }
 };
 
 class RadialBasisGaussian : public RadialBasis
@@ -96,6 +117,17 @@ public:
     void configure(Options &options);
     RadialCoefficients computeCoefficients(double r);
     void computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here);
+
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & boost::serialization::base_object<RadialBasis>(*this);
+    	arch & _sigma;
+    	arch & _basis;
+    	arch & _Sij;
+    	arch & _Uij;
+    	arch & _Tij;
+    }
+
 protected:
     double _sigma;
     basis_t _basis;
@@ -151,12 +183,9 @@ inline RadialBasis *RadialBasisFactory::create(const std::string &key) {
     }
 }
 
-
-
-
-
-
-
 }
+
+BOOST_CLASS_EXPORT_KEY(soap::RadialBasis);
+BOOST_CLASS_EXPORT_KEY(soap::RadialBasisGaussian);
 
 #endif

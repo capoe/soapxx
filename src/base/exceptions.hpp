@@ -27,7 +27,7 @@ public:
 class APIError : public std::runtime_error
 {
 public:
-    explicit APIError(std::string mssg) : std::runtime_error("UsageError["+mssg+"]") { ; }
+    explicit APIError(std::string mssg) : std::runtime_error("APIError["+mssg+"]") { ; }
 };
 
 }}

@@ -33,17 +33,27 @@ public:
 		_cutoff = CutoffFunctionOutlet().create(_options->get<std::string>("radialcutoff.type"));
 		_cutoff->configure(*options);
 	}
-   ~Basis() {
+	Basis() : _options(NULL), _radbasis(NULL), _angbasis(NULL), _cutoff(NULL) {;}
+	~Basis() {
 		delete _radbasis;
 		_radbasis = NULL;
 		delete _angbasis;
 		_angbasis = NULL;
 		delete _cutoff;
 		_cutoff = NULL;
-   }
-   RadialBasis *getRadBasis() { return _radbasis; }
-   AngularBasis *getAngBasis() { return _angbasis; }
-   CutoffFunction *getCutoff() { return _cutoff; }
+	}
+	RadialBasis *getRadBasis() { return _radbasis; }
+	AngularBasis *getAngBasis() { return _angbasis; }
+	CutoffFunction *getCutoff() { return _cutoff; }
+
+	template<class Archive>
+	void serialize(Archive &arch, const unsigned int version) {
+		arch & _options;
+		arch & _radbasis;
+		arch & _angbasis;
+		arch & _cutoff;
+		return;
+	}
 private:
 	Options *_options;
 	RadialBasis *_radbasis;
@@ -66,6 +76,8 @@ public:
         _angcoeff = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
         _coeff = coeff_zero_t(N,(L+1)*(L+1));
 	}
+	BasisExpansion() :
+		_basis(NULL), _radbasis(NULL), _angbasis(NULL) {;}
     ~BasisExpansion() {
     	_basis = NULL;
     	_radbasis = NULL;
@@ -212,6 +224,14 @@ public:
 	}
     RadialBasis::radcoeff_t &getRadCoeffs() { return _radcoeff; }
     AngularBasis::angcoeff_t &getAngCoeffs() { return _angcoeff; }
+
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & _basis;
+    	arch & _radbasis;
+    	arch & _angbasis;
+    	arch & _coeff;
+    }
 
 private:
     Basis *_basis;
