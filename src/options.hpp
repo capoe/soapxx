@@ -15,7 +15,8 @@ public:
 		  _b1(vec(1,0,0)), _b2(vec(0,1,0)), _b3(vec(0,0,1)),
 		  _center_w0(1.), _center_excludes(boost::python::list()) {
 		// SET DEFAULTS
-		this->set("integration_steps", 15);
+		this->set("radialbasis.integration_steps", 15);
+		this->set("radialbasis.mode", "equispaced");
 	}
    ~Options() {}
 
@@ -63,17 +64,22 @@ public:
 	std::string summarizeOptions() {
 		std::string info = "";
 		info += "Options:\n";
-		info += "o Centers:                  ";
-		info += (boost::format("W0=%1% Excl#=%2%\n") % _center_w0 % boost::python::len(_center_excludes)).str();
-		info += "o Real-space basis:         ";
-		info += (boost::format("N=%1% L=%2% Rc=%3%\n") % _N_real % _L_real % _Rc_real).str();
-		info += "o Reciprocal-space basis:   ";
-		info += (boost::format("N=%1% L=%2% Rc=%3%\n") % _N_recip % _L_recip % _Rc_recip).str();
-		info += "o Reciprocal-space lattice: ";
-		info += (boost::format("b1x=%1% b1y=%2% b1z=%3% ") % _b1.x() % _b1.y() % _b1.z()).str();
-		info += (boost::format("b2x=%1% b2y=%2% b2z=%3% ") % _b2.x() % _b2.y() % _b2.z()).str();
-		info += (boost::format("b3x=%1% b3y=%2% b3z=%3% ") % _b3.x() % _b3.y() % _b3.z()).str();
+//		info += "o Centers:                  ";
+//		info += (boost::format("W0=%1% Excl#=%2%\n") % _center_w0 % boost::python::len(_center_excludes)).str();
+//		info += "o Real-space basis:         ";
+//		info += (boost::format("N=%1% L=%2% Rc=%3%\n") % _N_real % _L_real % _Rc_real).str();
+//		info += "o Reciprocal-space basis:   ";
+//		info += (boost::format("N=%1% L=%2% Rc=%3%\n") % _N_recip % _L_recip % _Rc_recip).str();
+//		info += "o Reciprocal-space lattice: ";
+//		info += (boost::format("b1x=%1% b1y=%2% b1z=%3% ") % _b1.x() % _b1.y() % _b1.z()).str();
+//		info += (boost::format("b2x=%1% b2y=%2% b2z=%3% ") % _b2.x() % _b2.y() % _b2.z()).str();
+//		info += (boost::format("b3x=%1% b3y=%2% b3z=%3% ") % _b3.x() % _b3.y() % _b3.z()).str();
 
+		std::map<std::string, std::string>::iterator it;
+		for (it = _key_value_map.begin(); it != _key_value_map.end(); ) {
+			info += (boost::format(" o %1$-30s : %2$s") % it->first % it->second).str();
+			if (++it != _key_value_map.end()) info += "\n";
+		}
 		return info;
 	}
 	static void registerPython();

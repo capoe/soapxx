@@ -17,6 +17,13 @@ Spectrum::~Spectrum() {
 	_log = NULL;
 	delete _basis;
 	_basis = NULL;
+	atomspec_array_t::iterator it;
+	for (it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
+		delete *it;
+	}
+	_atomspec_array.clear();
+	// AtomicSpectra in type map already deleted above, clear only:
+	_map_atomspec_array.clear();
 }
 
 void Spectrum::compute() {
@@ -24,17 +31,59 @@ void Spectrum::compute() {
     GLOG() << _options->summarizeOptions() << std::endl;
     GLOG() << "Using radial basis of type '" << _basis->getRadBasis()->identify() << "'" << std::endl;
     GLOG() << "Using angular basis of type '" << _basis->getAngBasis()->identify() << "'" << std::endl;
+    GLOG() << "Using cutoff function of type '" << _basis->getCutoff()->identify() << "'" << std::endl;
 
     Structure::particle_it_t pit;
     for (pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
-    	this->computeAtomic(*pit);
-    	// TODO Receive & store atomic spectrum
-    	break;
+    	AtomicSpectrum *atomic_spectrum = this->computeAtomic(*pit);
+    	//atomic_spectrum->getReduced()->writeDensityOnGrid("density.expanded.cube", _options, _structure, *pit, true);
+    	//atomic_spectrum->getReduced()->writeDensityOnGrid("density.explicit.cube", _options, _structure, *pit, false);
+    	this->add(atomic_spectrum);
     }
 }
 
+void Spectrum::writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type) {
+	AtomicSpectrum *atomic_spectrum = NULL;
+	// FIND SPECTRUM
+	if (center_type == "") {
+		// NO TYPE => ACCESS ARRAY
+		// Slot index valid?
+		if (slot_idx < _atomspec_array.size()) {
+			atomic_spectrum = _atomspec_array[slot_idx];
+		}
+		else {
+			throw soap::base::OutOfRange("Spectrum slot index");
+		}
+	}
+	else {
+		// TYPE => ACCESS TYPE MAP
+		map_atomspec_array_t::iterator it = _map_atomspec_array.find(center_type);
+		// Any such type?
+		if (it == _map_atomspec_array.end()) {
+			throw soap::base::OutOfRange("No spectrum of type '" + center_type + "'");
+		}
+		else {
+			// Slot index valid?
+			if (slot_idx < it->second.size()) {
+				atomic_spectrum = it->second[slot_idx];
+			}
+			else {
+				throw soap::base::OutOfRange("Spectrum slot index, type '" + center_type + "'");
+			}
+		}
+	}
+	// WRITE CUBE FILES
+	if (atomic_spectrum) {
+		atomic_spectrum->getExpansion(density_type)->writeDensityOnGrid(
+			"density.expanded.cube", _options, _structure, atomic_spectrum->getCenter(), true);
+		atomic_spectrum->getExpansion(density_type)->writeDensityOnGrid(
+			"density.explicit.cube", _options, _structure, atomic_spectrum->getCenter(), false);
+	}
+	return;
+}
+
 // TODO change to ::computeAtomic(Particle *center, vector<Particle*> &nbhood)
-void Spectrum::computeAtomic(Particle *center) {
+AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
 	GLOG() << "Compute atomic spectrum for particle " << center->getId()
 	    << " (type " << center->getType() << ")" << std::endl;
 
@@ -46,21 +95,31 @@ void Spectrum::computeAtomic(Particle *center) {
 //    BasisCoefficients c_nlm(c_n_zero, c_lm_zero);
 //    c_nlm.linkBasis(_radbasis, _angbasis);
 
-
-    BasisExpansion *nbhood_expansion = new BasisExpansion(this->_basis);
+//    BasisExpansion *nbhood_expansion = new BasisExpansion(this->_basis);
+    AtomicSpectrum *atomic_spectrum = new AtomicSpectrum(center, this->_basis);
 
     Structure::particle_it_t pit;
     for (pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
 
-    	// TODO Cut-off check && cut-off smoothing (= weight reduction)
+    	// FIND DISTANCE & DIRECTION, APPLY CUTOFF
     	vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
     	double r = soap::linalg::abs(dr);
+    	double weight_scale = this->_basis->getCutoff()->calculateWeight(r);
+    	if (weight_scale < 0.) continue;
     	vec d = dr/r;
-    	std::string type_other = (*pit)->getType();
 
+    	// APPLY WEIGHT IF CENTER
+    	if (*pit == center) {
+			weight_scale *= this->_basis->getCutoff()->getCenterWeight();
+		}
+
+    	// COMPUTE EXPANSION & ADD TO SPECTRUM
     	BasisExpansion nb_expansion(this->_basis);
-    	nb_expansion.computeCoefficients(r, d, (*pit)->getWeight(), (*pit)->getSigma());
-    	nbhood_expansion->add(nb_expansion);
+    	nb_expansion.computeCoefficients(r, d, weight_scale*(*pit)->getWeight(), (*pit)->getSigma());
+    	std::string type_other = (*pit)->getType();
+    	atomic_spectrum->add(type_other, nb_expansion);
+
+//    	nbhood_expansion->add(nb_expansion);
 
 
 //        // COMPUTE RADIAL COEFFICIENTS
@@ -93,10 +152,26 @@ void Spectrum::computeAtomic(Particle *center) {
 //    c_nlm.writeDensityOnGrid("density.expanded.cube", _options, _structure, center, true);
 //    c_nlm.writeDensityOnGrid("density.explicit.cube", _options, _structure, center, false);
 
-    nbhood_expansion->writeDensityOnGrid("density.expanded.cube", _options, _structure, center, true);
-    nbhood_expansion->writeDensityOnGrid("density.explicit.cube", _options, _structure, center, false);
+//    nbhood_expansion->writeDensityOnGrid("density.expanded.cube", _options, _structure, center, true);
+//    nbhood_expansion->writeDensityOnGrid("density.explicit.cube", _options, _structure, center, false);
 
-    delete nbhood_expansion;
+
+
+	return atomic_spectrum;
+}
+
+
+void Spectrum::add(AtomicSpectrum *atomspec) {
+	assert(atomspec->getBasis() == _basis &&
+		"Should not append atomic spectrum linked against different basis.");
+	std::string atomspec_type = atomspec->getCenterType();
+	map_atomspec_array_t::iterator it = _map_atomspec_array.find(atomspec_type);
+	if (it == _map_atomspec_array.end()) {
+		_map_atomspec_array[atomspec_type] = atomspec_array_t();
+		it = _map_atomspec_array.find(atomspec_type);
+	}
+	it->second.push_back(atomspec);
+	_atomspec_array.push_back(atomspec);
 	return;
 }
 
@@ -104,7 +179,8 @@ void Spectrum::registerPython() {
     using namespace boost::python;
     class_<Spectrum>("Spectrum", init<Structure &, Options &>())
 	    .def("compute", &Spectrum::compute)
-	    .def("saveAndClean", &Spectrum::saveAndClean);
+	    .def("saveAndClean", &Spectrum::saveAndClean)
+        .def("writeDensityOnGrid", &Spectrum::writeDensityOnGrid);
 }
 
 /* STORAGE, BASIS, COMPUTATION, PARALLELIZATION */

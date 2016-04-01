@@ -18,8 +18,9 @@ namespace ub = boost::numeric::ublas;
 
 void RadialBasis::configure(Options &options) {
     _N = options.get<int>("radialbasis.N");
-    _Rc = options.get<double>("radialbasis.Rc");
+    _Rc = options.get<double>("radialcutoff.Rc");
     _integration_steps = options.get<int>("radialbasis.integration_steps");
+    _mode = options.get<std::string>("radialbasis.mode");
 }
 
 RadialCoefficients RadialBasis::computeCoefficients(double r) {
@@ -51,9 +52,7 @@ void RadialBasisGaussian::configure(Options &options) {
     // CREATE & STORE EQUISPACED RADIAL GAUSSIANS
     this->clear();
 
-    std::string mode = "adaptive";
-    mode = "equispaced";
-    if (mode == "equispaced") {
+    if (_mode == "equispaced") {
 		double dr = _Rc/(_N-1);
 		for (int i = 0; i < _N; ++i) {
 			double r = i*dr;
@@ -62,16 +61,33 @@ void RadialBasisGaussian::configure(Options &options) {
 			_basis.push_back(new_fct);
 		}
     }
-    else if (mode == "adaptive") {
-        double delta = 0.5;
+    else if (_mode == "adaptive") {
+        //double delta = 0.5;
         int L = 6;
         double r = 0.;
         double sigma = 0.;
-        while (r < _Rc) {
-            sigma = sqrt(4./(2*L+1))*(r+delta);
-            basis_fct_t *new_fct = new basis_fct_t(r, sigma);
+        double sigma_0 = 0.5;
+        double sigma_stride_factor = 0.5;
+//        while (r < _Rc) {
+//            sigma = sqrt(4./(2*L+1))*(r+delta);
+//            basis_fct_t *new_fct = new basis_fct_t(r, sigma);
+//			_basis.push_back(new_fct);
+//			r = r + sigma;
+//        }
+        for (int i = 0; i < _N; ++i) {
+        	//sigma = sqrt(4./(2*L+1))*(r+delta);
+        	sigma = sqrt(4./(2*L+1)*r*r + sigma_0*sigma_0);
+        	std::cout << r << " " << sigma << std::endl;
+        	r = r + sigma_stride_factor*sigma;
+        }
+        double scale = 1.; //_Rc/(r-sigma);
+        r = 0;
+        for (int i = 0; i < _N; ++i) {
+        	sigma = sqrt(4./(2*L+1)*r*r + sigma_0*sigma_0);
+        	basis_fct_t *new_fct = new basis_fct_t(scale*r, sigma);
 			_basis.push_back(new_fct);
-			r = r + sigma;
+			std::cout << r << " " << sigma << std::endl;
+			r = r+sigma_stride_factor*sigma;
         }
     }
     else {
@@ -83,6 +99,7 @@ void RadialBasisGaussian::configure(Options &options) {
         GLOG() << (*bit)->_r0 << " (" << (*bit)->_sigma << ") ";
     }
     GLOG() << "}" << std::endl;
+
     // COMPUTE OVERLAP MATRIX s_{ij} = \int g_i(r) g_j(r) r^2 dr
     _Sij = ub::matrix<double>(_N, _N);
     basis_it_t it;
@@ -108,15 +125,6 @@ void RadialBasisGaussian::configure(Options &options) {
 			_Sij(i,j) = s;
     	}
     }
-    // ORTHONORMALIZATION VIA CHOLESKY DECOMPOSITION
-    _Uij = _Sij;
-    soap::linalg::linalg_cholesky_decompose(_Uij);
-    // ZERO UPPER DIAGONAL OF U
-    for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i)
-		for (jt = it+1, j = i+1; jt != _basis.end(); ++jt, ++j)
-			 _Uij(i,j) = 0.0;
-    _Tij = _Uij;
-    soap::linalg::linalg_invert(_Uij, _Tij);
     // REPORT
 	GLOG() << "Radial basis overlap matrix" << std::endl;
 	for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
@@ -125,13 +133,26 @@ void RadialBasisGaussian::configure(Options &options) {
 		}
 		GLOG() << std::endl;
 	}
+
+    // ORTHONORMALIZATION VIA CHOLESKY DECOMPOSITION
+    _Uij = _Sij;
+    soap::linalg::linalg_cholesky_decompose(_Uij);
+    // REPORT
     GLOG() << "Radial basis Cholesky decomposition" << std::endl;
-    for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
+	for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
 		for (jt = _basis.begin(), j = 0; jt != _basis.end(); ++jt, ++j) {
 			 GLOG() << boost::format("%1$+1.4e") % _Uij(i,j) << " " << std::flush;
 		}
 		GLOG() << std::endl;
 	}
+
+    // ZERO UPPER DIAGONAL OF U
+    for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i)
+		for (jt = it+1, j = i+1; jt != _basis.end(); ++jt, ++j)
+			 _Uij(i,j) = 0.0;
+    _Tij = _Uij;
+    soap::linalg::linalg_invert(_Uij, _Tij);
+    // REPORT
     GLOG() << "Radial basis transformation matrix" << std::endl;
 	for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
 		for (jt = _basis.begin(), j = 0; jt != _basis.end(); ++jt, ++j) {

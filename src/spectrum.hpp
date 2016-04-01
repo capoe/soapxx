@@ -1,15 +1,73 @@
 #ifndef _SOAP_SPECTRUM_HPP
 #define _SOAP_SPECTRUM_HPP
-#include "options.hpp"
-#include "structure.hpp"
+
+#include <assert.h>
+
+#include "base/logger.hpp"
 #include "types.hpp"
 #include "globals.hpp"
-#include "radialbasis.hpp"
-#include "angularbasis.hpp"
+#include "options.hpp"
+#include "structure.hpp"
 #include "basis.hpp"
-#include "base/logger.hpp"
+
 
 namespace soap {
+
+
+class AtomicSpectrum : public std::map<std::string, BasisExpansion*>
+{
+public:
+	AtomicSpectrum(Particle *center, Basis *basis) :
+		_center(center),
+		_center_pos(center->getPos()),
+		_center_type(center->getType()),
+		_basis(basis) {
+		_expansion_reduced = new BasisExpansion(_basis);
+	}
+    ~AtomicSpectrum() {
+        iterator it;
+        for (it = this->begin(); it != this->end(); ++it) delete it->second;
+        this->clear();
+        delete _expansion_reduced;
+    }
+    void add(std::string type, BasisExpansion &nb_expansion) {
+    	assert(nb_expansion.getBasis() == _basis &&
+            "Should not sum expansions linked against different bases.");
+    	iterator it = this->find(type);
+    	if (it == this->end()) {
+    		(*this)[type] = new BasisExpansion(_basis);
+    		it = this->find(type);
+    	}
+    	it->second->add(nb_expansion);
+    	_expansion_reduced->add(nb_expansion);
+    	return;
+    }
+    Particle *getCenter() { return _center; }
+    std::string &getCenterType() { return _center_type; }
+    vec &getCenterPos() { return _center_pos; }
+    BasisExpansion *getReduced() { return _expansion_reduced; }
+    BasisExpansion *getExpansion(std::string type) {
+    	if (type == "") {
+    		return _expansion_reduced;
+    	}
+    	iterator it = this->find(type);
+    	if (it == this->end()) {
+    		throw soap::base::OutOfRange("AtomicSpectrum: No such type '" + type + "'");
+    		return NULL;
+    	}
+    	else {
+    		return it->second;
+    	}
+    }
+    Basis *getBasis() { return _basis; }
+protected:
+	Particle *_center;
+	vec _center_pos;
+	std::string _center_type;
+	Basis *_basis;
+	BasisExpansion *_expansion_reduced;
+	//std::map<std::string, BasisExpansion*> _map_type_expansion;
+};
 
 
 class CenterDensity
@@ -39,6 +97,9 @@ class Target
 class Spectrum
 {
 public:
+	typedef std::vector<AtomicSpectrum*> atomspec_array_t;
+	typedef std::map<std::string, atomspec_array_t> map_atomspec_array_t;
+
 	Spectrum(Structure &structure, Options &options);
    ~Spectrum();
 
@@ -47,7 +108,10 @@ public:
 	void clean();
 
 	void compute();
-	void computeAtomic(Particle *center);
+	AtomicSpectrum *computeAtomic(Particle *center);
+	void add(AtomicSpectrum *atomspec);
+	void writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type);
+
 	void computePower();
 	void computeLinear();
 
@@ -59,13 +123,13 @@ private:
 	Options *_options;
     Structure *_structure;
     Basis *_basis;
+
+    atomspec_array_t _atomspec_array;
+    map_atomspec_array_t _map_atomspec_array;
 };
 
 
-class AtomicSpectrum
-{
-	AtomicSpectrum() {}
-};
+
 
 
 

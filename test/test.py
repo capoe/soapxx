@@ -20,20 +20,29 @@ element_mass = {
 }
 
 ase_config_list = soap.tools.ase_load_all('configs')
-config = ase_config_list[0]
+config = ase_config_list[1]
 osio << config.atoms << endl
 
 # INITIALIZE OPTIONS
 options = soap.Options()
 options.set('radialbasis.type', 'gaussian')
+options.set('radialbasis.mode', 'adaptive')
+#options.set('radialbasis.mode', 'equispaced')
 options.set('radialbasis.N', 9)
-options.set('radialbasis.Rc', 4.0)
 options.set('radialbasis.sigma', 0.5)
 options.set('radialbasis.integration_steps', 15)
+#options.set('radialbasis.N', 9)
+options.set('radialcutoff.Rc', 4.)
+options.set('radialcutoff.Rc_width', 0.5)
+options.set('radialcutoff.type', 'shifted-cosine')
+options.set('radialcutoff.center_weight', -7.)
+options.set('radialcutoff.center_weight', 1.)
+
 options.set('angularbasis.type', 'spherical-harmonic')
 options.set('angularbasis.L', 6)
+#options.set('angularbasis.L', 6)
 options.set('densitygrid.N', 20)
-options.set('densitygrid.dx', 0.10)
+options.set('densitygrid.dx', 0.15)
 
 # LOAD STRUCTURE
 structure = soap.tools.setup_structure_ase(config.config_file, config.atoms)
@@ -41,13 +50,16 @@ structure = soap.tools.setup_structure_ase(config.config_file, config.atoms)
 osio << osio.mg << structure.label << endl
 
 for atom in structure:
-    atom.sigma = 0.4*element_vdw_radius[atom.type]
+    atom.sigma = 0.5 # 0.4*element_vdw_radius[atom.type]
     atom.weight = 1. #element_mass[atom.type]
+    #atom.sigma = 0.5*element_vdw_radius[atom.type]
+    #atom.weight = element_mass[atom.type]
     osio << atom.name << atom.type << atom.weight << atom.sigma << atom.pos << endl
 
 # COMPUTE SPECTRUM
 spectrum = soap.Spectrum(structure, options)
 spectrum.compute()
+spectrum.writeDensityOnGrid(1, "C", "")
 
 
 

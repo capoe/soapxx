@@ -15,5 +15,6 @@ BOOST_PYTHON_MODULE(_soapxx)
 
     soap::RadialBasisFactory::registerAll();
     soap::AngularBasisFactory::registerAll();
+    soap::CutoffFunctionFactory::registerAll();
 }
 

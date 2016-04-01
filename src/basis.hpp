@@ -12,6 +12,7 @@
 #include "structure.hpp"
 #include "angularbasis.hpp"
 #include "radialbasis.hpp"
+#include "cutoff.hpp"
 
 namespace soap {
 
@@ -28,19 +29,26 @@ public:
 		// CONFIGURE ANGULAR BASIS
 		_angbasis = AngularBasisOutlet().create(_options->get<std::string>("angularbasis.type"));
 		_angbasis->configure(*options);
+		// CONFIGURE CUTOFF FUNCTION
+		_cutoff = CutoffFunctionOutlet().create(_options->get<std::string>("radialcutoff.type"));
+		_cutoff->configure(*options);
 	}
    ~Basis() {
 		delete _radbasis;
 		_radbasis = NULL;
 		delete _angbasis;
 		_angbasis = NULL;
+		delete _cutoff;
+		_cutoff = NULL;
    }
    RadialBasis *getRadBasis() { return _radbasis; }
    AngularBasis *getAngBasis() { return _angbasis; }
+   CutoffFunction *getCutoff() { return _cutoff; }
 private:
 	Options *_options;
 	RadialBasis *_radbasis;
 	AngularBasis *_angbasis;
+	CutoffFunction *_cutoff;
 };
 
 
@@ -65,6 +73,7 @@ public:
     	_radcoeff.clear();
     	_angcoeff.clear();
     }
+    Basis *getBasis() { return _basis; }
     coeff_t &getCoefficients() { return _coeff; }
     void computeCoefficients(double r, vec d, double weight, double sigma) {
         _radbasis->computeCoefficients(r, sigma, _radcoeff);
