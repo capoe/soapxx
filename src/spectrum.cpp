@@ -89,6 +89,14 @@ void Spectrum::writeDensityOnGrid(int slot_idx, std::string center_type, std::st
 	return;
 }
 
+void Spectrum::computePower() {
+	atomspec_array_t::iterator it;
+	for (it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
+		(*it)->computePower();
+	}
+	return;
+}
+
 // TODO change to ::computeAtomic(Particle *center, vector<Particle*> &nbhood)
 AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
 	GLOG() << "Compute atomic spectrum for particle " << center->getId()
@@ -198,6 +206,7 @@ void Spectrum::registerPython() {
     class_<Spectrum>("Spectrum", init<Structure &, Options &>())
     	.def(init<std::string>())
 	    .def("compute", &Spectrum::compute)
+		.def("computePower", &Spectrum::computePower)
 	    .def("saveAndClean", &Spectrum::saveAndClean)
 		.def("save", &Spectrum::save)
 		.def("load", &Spectrum::load)

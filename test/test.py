@@ -65,12 +65,14 @@ for atom in structure:
 # COMPUTE SPECTRUM
 spectrum = soap.Spectrum(structure, options)
 spectrum.compute()
-spectrum.writeDensityOnGrid(1, "C", "")
+spectrum.computePower()
+spectrum.save("test_serialization/%s.spectrum.arch" % structure.label)
+
+#spectrum.writeDensityOnGrid(1, "C", "")
 #spectrum.writeDensityOnGrid(2, "S", "")
 #spectrum.writeDensityOnGrid(7, "C", "") # line.xyz
 #spectrum.writeDensityOnGrid(3, "C", "") # linedot.xyz
 #spectrum.writeDensityOnGrid(41, "C", "") # C60_pair.xyz
-spectrum.save("test_serialization/%s.spectrum.arch" % structure.label)
 
 osio.okquit()
 

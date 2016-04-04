@@ -9,7 +9,7 @@ from momo import osio, endl, flush
 archfile = 'config_000057.xyz.spectrum.arch'
 
 spectrum = soap.Spectrum(archfile)
-spectrum.writeDensityOnGrid(1, "C", "")
+spectrum.writeDensityOnGrid(1, "C", "H")
 spectrum.save("%s-2" % archfile)
 osio.okquit()
 

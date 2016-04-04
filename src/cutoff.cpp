@@ -11,7 +11,7 @@ void CutoffFunction::configure(Options &options) {
     GLOG() << "Weighting function with "
     	<< "Rc = " << _Rc
     	<< ", _Rc_width = " << _Rc_width
-		<< ", central weigth = " << _center_weight << std::endl;
+		<< ", central weight = " << _center_weight << std::endl;
 }
 
 void CutoffFunctionFactory::registerAll(void) {
