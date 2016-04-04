@@ -81,9 +81,9 @@ void Spectrum::writeDensityOnGrid(int slot_idx, std::string center_type, std::st
 	}
 	// WRITE CUBE FILES
 	if (atomic_spectrum) {
-		atomic_spectrum->getExpansion(density_type)->writeDensityOnGrid(
+		atomic_spectrum->getQnlm(density_type)->writeDensityOnGrid(
 			"density.expanded.cube", _options, _structure, atomic_spectrum->getCenter(), true);
-		atomic_spectrum->getExpansion(density_type)->writeDensityOnGrid(
+		atomic_spectrum->getQnlm(density_type)->writeDensityOnGrid(
 			"density.explicit.cube", _options, _structure, atomic_spectrum->getCenter(), false);
 	}
 	return;
@@ -93,9 +93,6 @@ void Spectrum::writeDensityOnGrid(int slot_idx, std::string center_type, std::st
 AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
 	GLOG() << "Compute atomic spectrum for particle " << center->getId()
 	    << " (type " << center->getType() << ")" << std::endl;
-
-	std::string type_this = center->getType();
-
 
 //    RadialCoefficients c_n_zero = _radbasis->computeCoefficientsAllZero();
 //    AngularCoefficients c_lm_zero = _angbasis->computeCoefficientsAllZero();
@@ -108,11 +105,11 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
     Structure::particle_it_t pit;
     for (pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
 
-    	// FIND DISTANCE & DIRECTION, APPLY CUTOFF
+    	// FIND DISTANCE & DIRECTION, APPLY CUTOFF (= WEIGHT REDUCTION)
     	vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
     	double r = soap::linalg::abs(dr);
     	double weight_scale = this->_basis->getCutoff()->calculateWeight(r);
-    	if (weight_scale < 0.) continue;
+    	if (weight_scale < 0.) continue; // <- Negative cutoff weight means: skip
     	vec d = dr/r;
 
     	// APPLY WEIGHT IF CENTER
@@ -124,7 +121,7 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
     	BasisExpansion nb_expansion(this->_basis);
     	nb_expansion.computeCoefficients(r, d, weight_scale*(*pit)->getWeight(), (*pit)->getSigma());
     	std::string type_other = (*pit)->getType();
-    	atomic_spectrum->add(type_other, nb_expansion);
+    	atomic_spectrum->addQnlm(type_other, nb_expansion);
 
 //    	nbhood_expansion->add(nb_expansion);
 

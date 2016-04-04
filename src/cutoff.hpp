@@ -7,6 +7,7 @@
 
 #include "base/exceptions.hpp"
 #include "base/objectfactory.hpp"
+#include "globals.hpp"
 #include "options.hpp"
 
 namespace soap {

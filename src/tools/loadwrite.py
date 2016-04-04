@@ -20,7 +20,11 @@ def write_xyz(xyz_file, structure):
 def ase_load_all(folder):
     cwd = os.getcwd()
     os.chdir(folder)
-    config_files = sorted(os.listdir('./'))
+    config_listdir = sorted(os.listdir('./'))
+    config_files = []
+    for config_file in config_listdir:
+        if os.path.isfile(config_file):
+            config_files.append(config_file)
     ase_config_list = AseConfigList(config_files)
     os.chdir(cwd)
     return ase_config_list
