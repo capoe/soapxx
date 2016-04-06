@@ -67,8 +67,34 @@ spectrum = soap.Spectrum(structure, options)
 spectrum.compute()
 spectrum.computePower()
 spectrum.save("test_serialization/%s.spectrum.arch" % structure.label)
+spectrum.save("test_invert/%s.spectrum.arch" % structure.label)
 
+spectrum.writeDensity(1, "C", "")
+spectrum.writePowerDensity(1, "C", "g", "c")
 #spectrum.writeDensityOnGrid(1, "C", "")
+#spectrum.writeDensityOnGridInverse(1, "C", "g", "c")
+
+# INVERSION
+basis = spectrum.basis
+center = spectrum.getAtomic(1, "C").getCenter()
+xnkl = spectrum.getAtomic(1, "C").getPower("g", "c").array
+
+ofs = open('density.power.python.coeff', 'w')
+for n in range(basis.N):
+    for k in range(basis.N):
+        for l in range(basis.L+1):
+            x = xnkl[n*basis.N+k,l]
+            ofs.write("%2d %2d %+2d %+1.7e %+1.7e\n" % (n, k, l, x.real, x.imag))
+ofs.close()
+
+pox = soap.PowerExpansion(basis)
+pox.array = xnkl
+ynkl = pox.array
+
+# powex = spectrum.getAtomicSpectrum(1, "C").getPowerExpansion("g", "c")
+#osio << osio.mg << "Atomic spectrum" << endl
+#atomic = soap.AtomicSpectrum()
+
 #spectrum.writeDensityOnGrid(2, "S", "")
 #spectrum.writeDensityOnGrid(7, "C", "") # line.xyz
 #spectrum.writeDensityOnGrid(3, "C", "") # linedot.xyz

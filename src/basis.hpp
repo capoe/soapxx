@@ -28,6 +28,10 @@ public:
 	RadialBasis *getRadBasis() { return _radbasis; }
 	AngularBasis *getAngBasis() { return _angbasis; }
 	CutoffFunction *getCutoff() { return _cutoff; }
+	const int &N() { return _radbasis->N(); }
+	const int &L() { return _angbasis->L(); }
+
+	static void registerPython();
 
 	template<class Archive>
 	void serialize(Archive &arch, const unsigned int version) {
@@ -63,8 +67,14 @@ public:
     void computeCoefficients(double r, vec d, double weight, double sigma);
     void add(BasisExpansion &other) { _coeff = _coeff + other._coeff; }
     void conjugate();
+    void writeDensity(std::string filename, Options *options,
+        	Structure *structure, Particle *center);
     void writeDensityOnGrid(std::string filename, Options *options,
     	Structure *structure, Particle *center, bool fromExpansion);
+
+    void setCoefficientsNumpy(boost::python::object &array);
+    boost::python::object getCoefficientsNumpy();
+    static void registerPython();
 
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {

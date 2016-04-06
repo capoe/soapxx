@@ -1,5 +1,8 @@
-#include "basis.hpp"
 #include <math.h>
+
+#include "linalg/numpy.hpp"
+#include "basis.hpp"
+
 
 namespace soap {
 
@@ -28,6 +31,13 @@ Basis::~Basis() {
 	_angbasis = NULL;
 	delete _cutoff;
 	_cutoff = NULL;
+}
+
+void Basis::registerPython() {
+	using namespace boost::python;
+	class_<Basis, Basis*>("Basis", init<>())
+	    .add_property("N", make_function(&Basis::N, copy_const()))
+		.add_property("L", make_function(&Basis::L, copy_const()));
 }
 
 // ==============
@@ -75,6 +85,42 @@ void BasisExpansion::conjugate() {
 			}
 		}
 	}
+}
+
+void BasisExpansion::writeDensity(
+	std::string filename,
+	Options *options,
+	Structure *structure,
+	Particle *center) {
+	if (_angbasis == NULL || _radbasis == NULL) {
+		throw soap::base::APIError("<BasisExpansion::writeDensityOnGrid> "
+			"Object not linked against basis.");
+	}
+
+	std::ofstream ofs;
+	ofs.open(filename.c_str(), std::ofstream::out);
+	if (!ofs.is_open()) {
+		throw soap::base::IOError("Bad file handle: " + filename);
+	}
+
+	double sum_intensity = 0.0;
+
+	BasisExpansion::coeff_t &coeff = this->getCoefficients();
+	for (int n = 0; n < _radbasis->N(); ++n) {
+		for (int l = 0; l <= _angbasis->L(); ++l) {
+			for (int m = -l; m <= l; ++m) {
+				std::complex<double> c_nlm = coeff(n, l*l+l+m);
+				double c_nlm_real = c_nlm.real();
+				double c_nlm_imag = c_nlm.imag();
+				sum_intensity += c_nlm_real*c_nlm_real + c_nlm_imag*c_nlm_imag;
+				ofs << (boost::format("%1$2d %2$2d %3$+2d %4$+1.7e %5$+1.7e") %
+					n % l %m % c_nlm_real % c_nlm_imag) << std::endl;
+			}
+		}
+	}
+
+	GLOG() << "<BasisExpansion::writeDensity> Summed intensity = " << sum_intensity << std::endl;
+	ofs.close();
 }
 
 void BasisExpansion::writeDensityOnGrid(
@@ -186,6 +232,30 @@ void BasisExpansion::writeDensityOnGrid(
 	ofs.close();
 	GLOG() << " Volume integral = " << int_density_dr << std::endl;
 	return;
+}
+
+void BasisExpansion::setCoefficientsNumpy(boost::python::object &np_array) {
+	soap::linalg::numpy_converter npc("complex128");
+	npc.numpy_to_ublas< std::complex<double> >(np_array, _coeff);
+	int N = _basis->getRadBasis()->N();
+	int L = _basis->getAngBasis()->L();
+	if (_coeff.size1() != N ||
+		_coeff.size2() != (L+1)*(L+1)) {
+		throw soap::base::APIError("<BasisExpansion::setCoefficientsNumpy> Matrix size not consistent with basis.");
+	}
+}
+
+boost::python::object BasisExpansion::getCoefficientsNumpy() {
+    soap::linalg::numpy_converter npc("complex128");
+    return npc.ublas_to_numpy< std::complex<double> >(_coeff);
+}
+
+void BasisExpansion::registerPython() {
+    using namespace boost::python;
+
+    class_<BasisExpansion, BasisExpansion*>("BasisExpansion", init<Basis*>())
+    	.add_property("array", &BasisExpansion::getCoefficientsNumpy, &BasisExpansion::setCoefficientsNumpy)
+    	.def("getArray", &BasisExpansion::getCoefficientsNumpy);
 }
 
 }

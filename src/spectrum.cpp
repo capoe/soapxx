@@ -7,23 +7,30 @@
 
 namespace soap {
 
-Spectrum::Spectrum(Structure &structure, Options &options)
-    : _log(NULL), _options(&options), _structure(&structure) {
+Spectrum::Spectrum(Structure &structure, Options &options) :
+    _log(NULL), _options(&options), _structure(&structure), _own_basis(true) {
 	GLOG() << "Configuring spectrum ..." << std::endl;
 	// CREATE & CONFIGURE BASIS
 	_basis = new Basis(&options);
 }
 
+Spectrum::Spectrum(Structure &structure, Options &options, Basis &basis) :
+	_log(NULL), _options(&options), _structure(&structure), _basis(&basis), _own_basis(false) {
+	;
+}
+
 Spectrum::Spectrum(std::string archfile) :
-	_log(NULL), _options(NULL), _structure(NULL), _basis(NULL) {
+	_log(NULL), _options(NULL), _structure(NULL), _basis(NULL), _own_basis(true) {
 	this->load(archfile);
 }
 
 Spectrum::~Spectrum() {
 	delete _log;
 	_log = NULL;
-	delete _basis;
-	_basis = NULL;
+	if (_own_basis) {
+		delete _basis;
+		_basis = NULL;
+	}
 	atomspec_array_t::iterator it;
 	for (it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
 		delete *it;
@@ -45,11 +52,11 @@ void Spectrum::compute() {
     	AtomicSpectrum *atomic_spectrum = this->computeAtomic(*pit);
     	//atomic_spectrum->getReduced()->writeDensityOnGrid("density.expanded.cube", _options, _structure, *pit, true);
     	//atomic_spectrum->getReduced()->writeDensityOnGrid("density.explicit.cube", _options, _structure, *pit, false);
-    	this->add(atomic_spectrum);
+    	this->addAtomic(atomic_spectrum);
     }
 }
 
-void Spectrum::writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type) {
+AtomicSpectrum *Spectrum::getAtomic(int slot_idx, std::string center_type) {
 	AtomicSpectrum *atomic_spectrum = NULL;
 	// FIND SPECTRUM
 	if (center_type == "") {
@@ -79,12 +86,48 @@ void Spectrum::writeDensityOnGrid(int slot_idx, std::string center_type, std::st
 			}
 		}
 	}
+	return atomic_spectrum;
+}
+
+void Spectrum::writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type) {
+	AtomicSpectrum *atomic_spectrum = this->getAtomic(slot_idx, center_type);
 	// WRITE CUBE FILES
 	if (atomic_spectrum) {
 		atomic_spectrum->getQnlm(density_type)->writeDensityOnGrid(
 			"density.expanded.cube", _options, _structure, atomic_spectrum->getCenter(), true);
 		atomic_spectrum->getQnlm(density_type)->writeDensityOnGrid(
 			"density.explicit.cube", _options, _structure, atomic_spectrum->getCenter(), false);
+	}
+	return;
+}
+
+void Spectrum::writeDensityOnGridInverse(int slot_idx, std::string center_type, std::string type1, std::string type2) {
+	AtomicSpectrum *atomic_spectrum = this->getAtomic(slot_idx, center_type);
+	AtomicSpectrum inverse_atomic_spectrum(atomic_spectrum->getCenter(), atomic_spectrum->getBasis());
+	inverse_atomic_spectrum.invert(atomic_spectrum->getXnklMap(), atomic_spectrum->getXnklGenericCoherent(), type1, type2);
+	inverse_atomic_spectrum.getQnlm("")->writeDensityOnGrid(
+	    "density.inverse.cube", _options, _structure, inverse_atomic_spectrum.getCenter(), true);
+	inverse_atomic_spectrum.getQnlm("")->writeDensity(
+		"density.inverse.coeff", _options, _structure, inverse_atomic_spectrum.getCenter());
+	return;
+}
+
+void Spectrum::writeDensity(int slot_idx, std::string center_type, std::string density_type) {
+	AtomicSpectrum *atomic_spectrum = this->getAtomic(slot_idx, center_type);
+	// WRITE COEFF FILE
+	if (atomic_spectrum) {
+		atomic_spectrum->getQnlm(density_type)->writeDensity(
+			"density.expanded.coeff", _options, _structure, atomic_spectrum->getCenter());
+	}
+	return;
+}
+
+void Spectrum::writePowerDensity(int slot_idx, std::string center_type, std::string type1, std::string type2) {
+	AtomicSpectrum *atomic_spectrum = this->getAtomic(slot_idx, center_type);
+	if (atomic_spectrum) {
+		AtomicSpectrum::type_pair_t types(type1, type2);
+		atomic_spectrum->getXnkl(types)->writeDensity(
+			"density.power.coeff", _options, _structure, atomic_spectrum->getCenter());
 	}
 	return;
 }
@@ -173,7 +216,7 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
 }
 
 
-void Spectrum::add(AtomicSpectrum *atomspec) {
+void Spectrum::addAtomic(AtomicSpectrum *atomspec) {
 	assert(atomspec->getBasis() == _basis &&
 		"Should not append atomic spectrum linked against different basis.");
 	std::string atomspec_type = atomspec->getCenterType();
@@ -204,13 +247,22 @@ void Spectrum::load(std::string archfile) {
 void Spectrum::registerPython() {
     using namespace boost::python;
     class_<Spectrum>("Spectrum", init<Structure &, Options &>())
+    	.def(init<Structure &, Options &, Basis &>())
     	.def(init<std::string>())
 	    .def("compute", &Spectrum::compute)
 		.def("computePower", &Spectrum::computePower)
+		.def("addAtomic", &Spectrum::addAtomic)
+		.def("getAtomic", &Spectrum::getAtomic, return_value_policy<reference_existing_object>())
 	    .def("saveAndClean", &Spectrum::saveAndClean)
 		.def("save", &Spectrum::save)
 		.def("load", &Spectrum::load)
-        .def("writeDensityOnGrid", &Spectrum::writeDensityOnGrid);
+        .def("writeDensityOnGrid", &Spectrum::writeDensityOnGrid)
+		.def("writeDensity", &Spectrum::writeDensity)
+		.def("writePowerDensity", &Spectrum::writePowerDensity)
+		.def("writeDensityOnGridInverse", &Spectrum::writeDensityOnGridInverse)
+		.add_property("options", make_function(&Spectrum::getOptions, ref_existing()))
+		.add_property("basis", make_function(&Spectrum::getBasis, ref_existing()))
+		.add_property("structure", make_function(&Spectrum::getStructure, ref_existing()));
 }
 
 /* STORAGE, BASIS, COMPUTATION, PARALLELIZATION */

@@ -23,8 +23,15 @@ public:
 	PowerExpansion() : _basis(NULL), _L(-1), _N(-1) {;}
     PowerExpansion(Basis *basis);
 
+    Basis *getBasis() { return _basis; }
+    coeff_t &getCoefficients() { return _coeff; }
     void computeCoefficients(BasisExpansion *basex1, BasisExpansion *basex2);
     void add(PowerExpansion *other);
+    void writeDensity(std::string filename, Options *options, Structure *structure, Particle *center);
+
+    void setCoefficientsNumpy(boost::python::object &np_array);
+    boost::python::object getCoefficientsNumpy();
+    static void registerPython();
 
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {

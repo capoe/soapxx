@@ -32,6 +32,9 @@ public:
 	AtomicSpectrum() { this->null(); }
    ~AtomicSpectrum();
     void null();
+    void write(std::ostream &ofs);
+    void invert(map_xnkl_t &map_xnkl, xnkl_t *xnkl_generic_coherent, std::string type1, std::string type2);
+    void invert(xnkl_t *xnkl, std::string type1, std::string type2);
 
     // CENTER & BASIS METHODS
     Particle *getCenter() { return _center; }
@@ -42,11 +45,15 @@ public:
     void addQnlm(std::string type, qnlm_t &nb_expansion);
     qnlm_t *getQnlm(std::string type);
     qnlm_t *getQnlmGeneric() { return _qnlm_generic; }
-    // XNLM METHODS
+    // XNKL METHODS
     void computePower();
+    xnkl_t *getPower(std::string type1, std::string type2);
     xnkl_t *getXnkl(type_pair_t &types);
+    map_xnkl_t &getXnklMap() { return _map_xnkl; }
     xnkl_t *getXnklGenericCoherent() { return _xnkl_generic_coherent; }
     xnkl_t *getXnklGenericIncoherent() { return _xnkl_generic_incoherent; }
+
+    static void registerPython();
 
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {

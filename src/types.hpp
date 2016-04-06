@@ -17,6 +17,7 @@ typedef soap::linalg::matrix matrix;
 typedef boost::python::return_internal_reference<> ref_internal;
 typedef boost::python::return_value_policy<boost::python::reference_existing_object> ref_existing;
 typedef boost::python::return_value_policy<boost::python::copy_non_const_reference> copy_non_const;
+typedef boost::python::return_value_policy<boost::python::copy_const_reference> copy_const;
 
 template<typename target_t, typename source_t>
 inline target_t lexical_cast(const source_t &arg, const std::string &error)

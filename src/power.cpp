@@ -1,4 +1,5 @@
 #include "power.hpp"
+#include "linalg/numpy.hpp"
 
 namespace soap {
 
@@ -30,11 +31,65 @@ void PowerExpansion::computeCoefficients(BasisExpansion *basex1, BasisExpansion 
 	//throw soap::base::APIError("");
 	return;
 }
+
 void PowerExpansion::add(PowerExpansion *other) {
 	assert(other->_basis == _basis &&
 		"Should not sum expansions linked against different bases.");
 	_coeff = _coeff + other->_coeff;
 	return;
+}
+
+void PowerExpansion::setCoefficientsNumpy(boost::python::object &np_array) {
+	soap::linalg::numpy_converter npc("complex128");
+	npc.numpy_to_ublas< std::complex<double> >(np_array, _coeff);
+	if (_coeff.size1() != _N*_N ||
+		_coeff.size2() != _L+1) {
+		throw soap::base::APIError("<PowerExpansion::setCoefficientsNumpy> Matrix size not consistent with basis.");
+	}
+}
+
+boost::python::object PowerExpansion::getCoefficientsNumpy() {
+    soap::linalg::numpy_converter npc("complex128");
+    return npc.ublas_to_numpy< std::complex<double> >(_coeff);
+}
+
+void PowerExpansion::writeDensity(
+	std::string filename,
+	Options *options,
+	Structure *structure,
+	Particle *center) {
+	std::ofstream ofs;
+	ofs.open(filename.c_str(), std::ofstream::out);
+	if (!ofs.is_open()) {
+		throw soap::base::IOError("Bad file handle: " + filename);
+	}
+
+	double sum_intensity = 0.0;
+
+	PowerExpansion::coeff_t &coeff = this->getCoefficients();
+	for (int n = 0; n < _N; ++n) {
+		for (int k = 0; k < _N; ++k) {
+			for (int l = 0; l <= _L; ++l) {
+				std::complex<double> c_nkl = coeff(n*_N+k, l);
+				double c_nkl_real = c_nkl.real();
+				double c_nkl_imag = c_nkl.imag();
+				sum_intensity += c_nkl_real*c_nkl_real + c_nkl_imag*c_nkl_imag;
+				ofs << (boost::format("%1$2d %2$2d %3$+2d %4$+1.7e %5$+1.7e") %
+					n % k % l % c_nkl_real % c_nkl_imag) << std::endl;
+			}
+		}
+	}
+
+	GLOG() << "<PowerExpansion::writeDensity> Summed intensity = " << sum_intensity << std::endl;
+	ofs.close();
+}
+
+void PowerExpansion::registerPython() {
+    using namespace boost::python;
+
+    class_<PowerExpansion, PowerExpansion*>("PowerExpansion", init<Basis*>())
+    	.add_property("array", &PowerExpansion::getCoefficientsNumpy, &PowerExpansion::setCoefficientsNumpy)
+    	.def("getArray", &PowerExpansion::getCoefficientsNumpy);
 }
 
 }

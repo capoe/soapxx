@@ -29,7 +29,12 @@ public:
 
 	Spectrum(std::string archfile);
 	Spectrum(Structure &structure, Options &options);
+	Spectrum(Structure &structure, Options &options, Basis &basis);
    ~Spectrum();
+
+    Structure *getStructure() { return _structure; }
+    Options *getOptions() { return _options; }
+    Basis *getBasis() { return _basis; }
 
 	void saveAndClean() { std::cout << "spectrum::save&clean" << std::endl; }
 	void save(std::string archfile);
@@ -38,8 +43,12 @@ public:
 
 	void compute();
 	AtomicSpectrum *computeAtomic(Particle *center);
-	void add(AtomicSpectrum *atomspec);
+	void addAtomic(AtomicSpectrum *atomspec);
+	AtomicSpectrum *getAtomic(int slot_idx, std::string center_type);
 	void writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type);
+	void writeDensityOnGridInverse(int slot_idx, std::string center_type, std::string type1, std::string type2);
+	void writeDensity(int slot_idx, std::string center_type, std::string density_type);
+	void writePowerDensity(int slot_idx, std::string center_type, std::string type1, std::string type2);
 
 	void computePower();
 	void computeLinear();
@@ -63,6 +72,7 @@ private:
 	Options *_options;
     Structure *_structure;
     Basis *_basis;
+    bool _own_basis;
 
     atomspec_array_t _atomspec_array;
     map_atomspec_array_t _map_atomspec_array;

@@ -44,7 +44,8 @@ void Options::registerPython() {
 	void (Options::*set_double)(std::string, double) = &Options::set;
 	void (Options::*set_string)(std::string, std::string) = &Options::set;
 
-	class_<Options>("Options")
+	class_<Options, Options*>("Options")
+        .def("__str__", &Options::summarizeOptions)
 	    .def("summarizeOptions", &Options::summarizeOptions)
 		.def("configureCenters", &Options::configureCenters)
 		.def("set", set_int)
