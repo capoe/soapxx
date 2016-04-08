@@ -4,10 +4,9 @@ import numpy.linalg
 from momo import osio, endl, flush
 
 
-def compute_X(Q, P, M):
-    # Q is N x (L+1) matrix
-    # M = diag(1,2,2,...)
-    return Q.dot(M.dot(Q.T)) + P.dot(M.dot(P.T))
+def compute_X(Qr):
+    # Q is N x (2*L+1) real-valued matrix
+    return Qr.dot(Qr.T)
 
 def compute_usv(Q):
     U, s, V = np.linalg.svd(Q, full_matrices=True)
@@ -25,15 +24,15 @@ def compute_usv(Q):
     
     return U, S, S_inv, V
 
-def compute_rms_dist(X, Y):
-    D = X-Y
-    return (np.sum(D**2)/(D.shape[0]*D.shape[1]))**0.5
+def compute_rms_dist(X, Y, eps=1e-10):
+    D = (X-Y)**2/(Y*Y+eps*eps)
+    return (np.sum(D)/(D.shape[0]*D.shape[1]))**0.5
 
-def create_random(N, M):
+def create_random(N, M, lower=-0.1, upper=0.1):
     R = np.zeros((N,M))
     for i in range(N):
         for j in range(M):
-            R[i][j] = np.random.uniform(0.,1.)
+            R[i][j] = np.random.uniform(lower, upper)
     return R
 
 def load_X(tabfile):
@@ -64,82 +63,85 @@ def setup_M(L1):
     return M, M_inv
 
 def invert_xnkl_aa_fixed_l(X, Y, N, l, Q_return, P_return):
-    assert X.shape == Y.shape == (N,N)
+    assert X.shape == Y.shape == (N,N)    
+    debug = False
     
     l1 = l+1
+    l21 = 2*l+1
     
-    # Real and imaginary l-expansions
-    Q_n = create_random(N,l1)
-    P_n = create_random(N,l1)
-    P_n[:,0] = 0. # Yl0 is real for all l
-    
-    # Metric to reflect symmetries Y
-    M, M_inv = setup_M(l1)
+    # Real-valued coefficients (associated with real-valued Ylm)
+    Qr_n = create_random(N,l21,-0.1,0.1)
+    if l == 0:
+        pass
+    else:
+        for m in np.arange(-l,l+1):
+            if m != -1:
+                Qr_n[:,l+m] = 0.
+            else:
+                pass
+                #Qr_n[:,l+m] = 1.
 
-    with_P = False
-    if not with_P: P_n[:,:] = 0.
-
-    print "Starting l = %d, Q0+iP0 =" % (l1-1)
-    for i in range(N):
-        print Q_n[i], "+ i*", P_n[i]
+    print "Starting l = %d, Qr_0 =" % l
+    print Qr_n
 
     i = 0
-    max_i = 512
+    max_i = 4096
+    converged = False
+    omega_sor = 0.5
+    tolerance = 1e-12
     while True:
         i += 1
-
+        
         # Compute Q_n
-        U, S, S_inv, V = compute_usv(Q_n)
-        #if i == 1:
-        #    Q_n1 = M_inv.dot(V.T.dot(S_inv.dot(U.T.dot(X)))).T
-        #else:
-        Q_n1 = M_inv.dot(V.T.dot(S_inv.dot(U.T.dot(X-P_n.dot(M.dot(P_n.T)))))).T
-        Q_n = 0.5*(Q_n+Q_n1)
-
-        # Compute P_n
-        if with_P:
-            U, S, S_inv, V = compute_usv(P_n)
-            P_n1 = M_inv.dot(V.T.dot(S_inv.dot(U.T.dot(X-Q_n.dot(M.dot(Q_n.T)))))).T
-            P_n = 0.5*(P_n+P_n1)
-            P_n[:,0] = 0.
+        U, S, S_inv, V = compute_usv(Qr_n)
+        Qr_n1 = V.T.dot(S_inv.dot(U.T.dot(X))).T
+        Qr_n = omega_sor*(Qr_n+Qr_n1)
 
         # Check convergence
-        X_n = compute_X(Q_n, P_n, M)
+        X_n = compute_X(Qr_n)
         drms = compute_rms_dist(X_n, X)
-        if drms < 1e-9:
+        if drms < tolerance:
             print "Converged to precision after %d iterations." % (i)
+            converged = True
             break
         if i >= max_i:
-            print "Maximum iteration number reached, drms = ", drms
+            print "Maximum iteration number reached, drms = %+1.7e" % drms
+            converged = False
             break
 
-        #print Q_n_plus_1.dot(Q_n_plus_1.T)
+    print "Finished l = %d with Qr =" % l
+    print Qr_n
 
-    #print "Q_n \n", Q_n
-    print "Finished with Q+iP ="
-    for i in range(N):
-        print Q_n[i], "+ i*", P_n[i]
-
-    print "X_n \n", compute_X(Q_n, P_n, M)
-    print "X   \n", X
-
-    print "Y_n (should be zero) \n", P_n.dot(M.dot(Q_n.T)) - Q_n.dot(M.dot(P_n.T))
+    if debug: print "X_n =\n", compute_X(Qr_n)
+    if debug: print "X   =\n", X
 
     # Save to Q_return, P_return
     for n in range(N):
         m = 0
-        Q_return[n][l*l+l+m] = Q_n[n][m]
-        P_return[n][l*l+l+m] = P_n[n][m]
-        for m in range(1, l1):
-            Q_return[n][l*l+l+m] = Q_n[n][m]
-            Q_return[n][l*l+l-m] = Q_n[n][m]*(-1)**(m)
-            P_return[n][l*l+l+m] = P_n[n][m]
-            P_return[n][l*l+l-m] = P_n[n][m]*(-1)**(m+1)
+        Q_return[n][l*l+l+m] = Qr_n[n][l+m]
+        P_return[n][l*l+l+m] = 0
+        for m in np.arange(1,l+1):
+            # Real qr m+/-
+            qr_m_ = Qr_n[n][l-m] # l,-m
+            qr_mx = Qr_n[n][l+m] # l,+m
+            # Transform real qr m+/- to complex qc m+/-
+            X__ = 0.5**0.5 * 1.j
+            X_x = 0.5**0.5 * 1.j * (-1.)**(m+1)
+            Xx_ = 0.5**0.5
+            Xxx = 0.5**0.5 * (-1.)**(m)
+            qc_m_ = qr_m_*X__ + qr_mx*Xx_
+            qc_mx = qr_m_*X_x + qr_mx*Xxx
+            # Store
+            Q_return[n][l*l+l-m] = qc_m_.real
+            P_return[n][l*l+l-m] = qc_m_.imag
+            Q_return[n][l*l+l+m] = qc_mx.real
+            P_return[n][l*l+l+m] = qc_mx.imag
                 
-    return Q_return, P_return
+    return Q_return, P_return, converged
 
 def invert_xnkl_aa(xnkl_cmplx, basis, l_smaller=0, l_larger=-1):
     np.set_printoptions(precision=3, linewidth=120, threshold=10000)
+    debug = False
     
     N = basis.N
     L = basis.L
@@ -150,14 +152,8 @@ def invert_xnkl_aa(xnkl_cmplx, basis, l_smaller=0, l_larger=-1):
     assert xnkl_cmplx.shape[0] == N*N and xnkl_cmplx.shape[1] == L+1
     
     # Split xnkl = X+i*Y onto real (X) and imaginary (Y) part, 
-    Xnkl = np.zeros((N*N, L1))
-    Ynkl = np.zeros((N*N, L1))
-    for n in range(N):
-        for k in range(N):
-            for l in range(L1):
-                xy = xnkl_cmplx[n*N+k][l]
-                Xnkl[n*N+k][l] = xy.real
-                Ynkl[n*N+k][l] = xy.imag
+    Xnkl = np.copy(xnkl_cmplx.real)
+    Ynkl = np.copy(xnkl_cmplx.imag)
     
     # Prepare qnlm = Q+i*P with real Q and imaginary P
     qnlm_cmplx = np.zeros((N, L21*L21), dtype='complex128')
@@ -166,20 +162,23 @@ def invert_xnkl_aa(xnkl_cmplx, basis, l_smaller=0, l_larger=-1):
     
     for l in range(L1):
         if l < l_smaller: continue
+        if l == l_larger+1: break
+
+        conv = (2.*l+1.)**0.5/(2.*2.**0.5*np.pi)
         
-        Xnk = Xnkl[:,l]
-        Ynk = Ynkl[:,l]
+        Xnk = Xnkl[:,l]*conv
+        Ynk = Ynkl[:,l]*conv
         Xnk = Xnk.reshape((N,N))
         Ynk = Ynk.reshape((N,N))
         
-        Qnlm, Pnlm = invert_xnkl_aa_fixed_l(Xnk, Ynk, N, l, Qnlm, Pnlm)
+        Qnlm, Pnlm, converged = invert_xnkl_aa_fixed_l(Xnk, Ynk, N, l, Qnlm, Pnlm)
         
-        osio << osio.my << Qnlm << endl
-        raw_input('...')
-        if l == l_larger: break
+        if debug: osio << osio.my << Qnlm+1.j*Pnlm << endl
+        if not converged: osio << osio.mr << "Not converged" << endl
+        raw_input('...')       
     
-    qnlm_complex = Qnlm + np.complex(0,1)*Pnlm
-    print qnlm_complex
+    qnlm_complex = Qnlm + np.complex(0.,1.)*Pnlm
+    if debug: print qnlm_complex
 
     return qnlm_complex
 

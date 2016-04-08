@@ -113,7 +113,7 @@ void BasisExpansion::writeDensity(
 				double c_nlm_real = c_nlm.real();
 				double c_nlm_imag = c_nlm.imag();
 				sum_intensity += c_nlm_real*c_nlm_real + c_nlm_imag*c_nlm_imag;
-				ofs << (boost::format("%1$2d %2$2d %3$+2d %4$+1.7e %5$+1.7e") %
+				ofs << (boost::format("n %1$2d l %2$2d m %3$+2d %4$+1.7e %5$+1.7e") %
 					n % l %m % c_nlm_real % c_nlm_imag) << std::endl;
 			}
 		}
@@ -169,7 +169,7 @@ void BasisExpansion::writeDensityOnGrid(
 			 % (*pit)->getTypeId() % (dr.x()*conv) % (dr.y()*conv) % (dr.z()*conv);
 	}
 
-	GLOG() << "Fill grid " << std::flush;
+	GLOG() << "'" << filename << "': " << "Fill grid " << std::flush;
 	double int_density_dr = 0.0;
 	int ijk = 0;
 	for (int i = -I; i <= I; ++i) {
@@ -255,7 +255,9 @@ void BasisExpansion::registerPython() {
 
     class_<BasisExpansion, BasisExpansion*>("BasisExpansion", init<Basis*>())
     	.add_property("array", &BasisExpansion::getCoefficientsNumpy, &BasisExpansion::setCoefficientsNumpy)
-    	.def("getArray", &BasisExpansion::getCoefficientsNumpy);
+    	.def("getArray", &BasisExpansion::getCoefficientsNumpy)
+    	.def("writeDensity", &BasisExpansion::writeDensity)
+    	.def("writeDensityOnGrid", &BasisExpansion::writeDensityOnGrid);
 }
 
 }

@@ -15,49 +15,54 @@ basis = spectrum.basis
 options = spectrum.options
 osio << osio.mb << options << endl
 
-
-density_type = "C"
+center_id = 1
+center_type = "C"
+density_type = "O"
 
 # TARGET EXTRACTION
-atomic = spectrum.getAtomic(1, "C")
-atomic_center = atomic.getCenter()
-#atomic_xnkl = atomic.getPower("g", "c").array
+atomic = spectrum.getAtomic(center_id, center_type)
+center = atomic.getCenter()
 atomic_xnkl = atomic.getPower(density_type, density_type).array
 
-ofs = open('density.power.python.coeff', 'w')
-for n in range(basis.N):
-    for k in range(basis.N):
-        for l in range(basis.L+1):
-            x = atomic_xnkl[n*basis.N+k,l]
-            ofs.write("%2d %2d %+2d %+1.7e %+1.7e\n" % (n, k, l, x.real, x.imag))
-ofs.close()
+# INVERT XKNL => QNLM
+atomic_inv_qnlm = soap.tools.invert_xnkl_aa(atomic_xnkl, basis, l_smaller=0, l_larger=1)
 
-# INVERSION SPECTRUM
-spectrum_inv = soap.Spectrum(structure, options, basis)
+# CREATE INVERSION EXPANSION
+basisexp = soap.BasisExpansion(basis)
+basisexp.array = atomic_inv_qnlm
 
-# Create empty atomic spectrum, invert given Xnkl
-atomic_inv = soap.AtomicSpectrum(atomic_center, basis)
-spectrum_inv.addAtomic(atomic_inv)
-
-# Find basis expansion Qnlm from Xnkl
-atomic_inv_qnlm = soap.tools.invert_xnkl_aa(atomic_xnkl, basis, l_smaller=2, l_larger=2)
-basx = soap.BasisExpansion(basis)
-basx.array = atomic_inv_qnlm
-
-# Add basis expansion & compute power spectrum
-atomic_inv.addLinear(density_type, basx)
+# CREATE INVERSION ATOMIC SPECTRUM
+atomic_inv = soap.AtomicSpectrum(center, basis)
+atomic_inv.addLinear(density_type, basisexp)
 atomic_inv.computePower()
+atomic_inv_xnkl = atomic_inv.getPower(density_type, density_type).array
+
+dxnkl = atomic_inv_xnkl - atomic_xnkl
+print atomic_xnkl
+raw_input('...')
+print atomic_inv_xnkl
+raw_input('...')
+print dxnkl
+raw_input('...')
 
 # OUTPUT DENSITY
-#spectrum_inv.writeDensity(0, "C", "")
-#spectrum_inv.writePowerDensity(0, "C", "g", "c")
-#spectrum_inv.writeDensityOnGrid(0, "C", "")
+cubefile = 'recon.id-%d_center-%s_type-%s.cube' % (center_id, center_type, density_type)
+coefffile = cubefile[:-5]+'.coeff'
+basisexp.writeDensityOnGrid(cubefile, options, structure, center, True)
+basisexp.writeDensity(coefffile, options, structure, center)
 
-spectrum_inv.writeDensity(0, "C", density_type)
-spectrum_inv.writePowerDensity(0, "C", density_type, density_type)
-spectrum_inv.writeDensityOnGrid(0, "C", density_type)
-
-#basx.array = atomic_xnkl
-#powx = soap.PowerExpansion(basis)
-#powx.array = atomic_xnkl
+qnlm_orig = atomic_inv_qnlm
+for l in range(basis.L+1):
+    qnlm = np.copy(qnlm_orig)
+    for n in range(basis.N):
+        for ll in range(basis.L+1):
+            if ll == l: continue
+            for m in range(-ll,ll+1):
+                qnlm[n,ll*ll+ll+m] = np.complex(0.,0.)
+    #print qnlm
+    basisexp.array = qnlm
+    cubefile = 'recon.id-%d_center-%s_type-%s_l-%d.cube' % (center_id, center_type, density_type, l)
+    coefffile = cubefile[:-5]+'.coeff'
+    #basisexp.writeDensityOnGrid(cubefile, options, structure, center, True)
+    #basisexp.writeDensity(coefffile, options, structure, center)
 
