@@ -22,7 +22,7 @@ element_mass = {
 ase_config_list = soap.tools.ase_load_all('configs')
 for config in ase_config_list:
     print config.config_file
-config = ase_config_list[4]
+config = ase_config_list[1]
 osio << config.atoms << endl
 
 sigma = 0.5
@@ -70,14 +70,14 @@ spectrum.save("test_serialization/%s.spectrum.arch" % structure.label)
 spectrum.save("test_invert/%s.spectrum.arch" % structure.label)
 
 spectrum.writeDensity(1, "C", "")
-spectrum.writePowerDensity(1, "C", "g", "c")
-#spectrum.writeDensityOnGrid(1, "C", "")
+spectrum.writePowerDensity(1, "C", "", "")
+spectrum.writeDensityOnGrid(1, "C", "")
 #spectrum.writeDensityOnGridInverse(1, "C", "g", "c")
 
 # INVERSION
 basis = spectrum.basis
 center = spectrum.getAtomic(1, "C").getCenter()
-xnkl = spectrum.getAtomic(1, "C").getPower("g", "c").array
+xnkl = spectrum.getAtomic(1, "C").getPower("", "").array
 
 ofs = open('density.power.python.coeff', 'w')
 for n in range(basis.N):

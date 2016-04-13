@@ -2,6 +2,7 @@
 from __pyosshell__ 	import *
 from vmdtools import *
 
+VMDEXE = '/home/cp605/packages/install_vmd/vmd/bin/vmd'
 TCL = 'vmdsetup.tcl'
 cube = 'density.expanded.cube'
 
@@ -39,8 +40,7 @@ ofs.write('color Name N iceblue\n')
 #ofs.write('render Tachyon f75\n')
 #ofs.write('exit\n')
 ofs.close()
-
-os.system('/usr/local/bin/vmd -e %s' % TCL)
+os.system('%s -e %s' % (VMDEXE, TCL))
 #os.system('/sw/linux/vmd-1.8.7/lib/vmd/tachyon_LINUXAMD64 -aasamples 12 %s -res %d %d -format TARGA -o %s.tga' % ('z75', res_x, res_y, 'z75'))
 #os.system('/sw/linux/vmd-1.8.7/lib/vmd/tachyon_LINUXAMD64 -aasamples 12 %s -res %d %d -format TARGA -o %s.tga' % ('f75', res_x, res_y, 'f75'))
 #os.system('convert z75.tga z75.png')

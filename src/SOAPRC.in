@@ -1,0 +1,10 @@
+# TEST FOR CSH
+set is_csh = 101
+test "$is_csh" = 101 && goto CSH
+
+# BASH
+export PYTHONPATH="${PYTHONPATH}:@CMAKE_INSTALL_PREFIX@"
+
+# CSH/TCSH
+CSH:
+setenv PYTHONPATH="${PYTHONPATH}:@CMAKE_INSTALL_PREFIX@"
