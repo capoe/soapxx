@@ -191,6 +191,16 @@ AtomicSpectrum::xnkl_t *AtomicSpectrum::getPower(std::string type1, std::string 
     return this->getXnkl(types);
 }
 
+boost::python::list AtomicSpectrum::getTypes() {
+    boost::python::list types;
+    map_qnlm_t::iterator it;
+    for (it = _map_qnlm.begin(); it != _map_qnlm.end(); ++it) {
+        std::string type = it->first;
+        types.append(type);
+    }
+    return types;
+}
+
 void AtomicSpectrum::registerPython() {
     using namespace boost::python;
 
@@ -199,9 +209,11 @@ void AtomicSpectrum::registerPython() {
 
     class_<AtomicSpectrum, AtomicSpectrum*>("AtomicSpectrum", init<>())
         .def(init<Particle*, Basis*>())
+        .add_property("basis", make_function(&AtomicSpectrum::getBasis, ref_existing()))
         .def("addLinear", &AtomicSpectrum::addQnlm)
         .def("getLinear", &AtomicSpectrum::getQnlm, return_value_policy<reference_existing_object>())
         .def("computePower", &AtomicSpectrum::computePower)
+        .def("getTypes", &AtomicSpectrum::getTypes)
         .def("getPower", &AtomicSpectrum::getPower, return_value_policy<reference_existing_object>())
         .def("getCenter", &AtomicSpectrum::getCenter, return_value_policy<reference_existing_object>())
         .def("getCenterType", &AtomicSpectrum::getCenterType, return_value_policy<reference_existing_object>())

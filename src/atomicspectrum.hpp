@@ -53,6 +53,7 @@ public:
     xnkl_t *getXnklGenericCoherent() { return _xnkl_generic_coherent; }
     xnkl_t *getXnklGenericIncoherent() { return _xnkl_generic_incoherent; }
 
+    boost::python::list getTypes();
     static void registerPython();
 
     template<class Archive>
