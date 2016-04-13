@@ -41,22 +41,118 @@ Spectrum::~Spectrum() {
 }
 
 void Spectrum::compute() {
-	GLOG() << "Compute spectrum ..." << std::endl;
+    this->compute(_structure->particles(), _structure->particles());
+}
+
+void Spectrum::compute(Segment *center, Segment *target) {
+    this->compute(center->particles(), target->particles());
+}
+
+void Spectrum::compute(Structure::particle_array_t &centers, Structure::particle_array_t &targets) {
+    GLOG() << "Compute spectrum "
+        << "(centers " << centers.size() << ", targets " << targets.size() << ") ..." << std::endl;
     GLOG() << _options->summarizeOptions() << std::endl;
     GLOG() << "Using radial basis of type '" << _basis->getRadBasis()->identify() << "'" << std::endl;
     GLOG() << "Using angular basis of type '" << _basis->getAngBasis()->identify() << "'" << std::endl;
     GLOG() << "Using cutoff function of type '" << _basis->getCutoff()->identify() << "'" << std::endl;
 
     Structure::particle_it_t pit;
-    for (pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
+    for (pit = centers.begin(); pit != centers.end(); ++pit) {
         // Continue if exclusion defined ...
         if (_options->doExcludeCenter((*pit)->getType())) continue;
         // Compute ...
-    	AtomicSpectrum *atomic_spectrum = this->computeAtomic(*pit);
-    	//atomic_spectrum->getReduced()->writeDensityOnGrid("density.expanded.cube", _options, _structure, *pit, true);
-    	//atomic_spectrum->getReduced()->writeDensityOnGrid("density.explicit.cube", _options, _structure, *pit, false);
-    	this->addAtomic(atomic_spectrum);
+        AtomicSpectrum *atomic_spectrum = this->computeAtomic(*pit, targets);
+        //atomic_spectrum->getReduced()->writeDensityOnGrid("density.expanded.cube", _options, _structure, *pit, true);
+        //atomic_spectrum->getReduced()->writeDensityOnGrid("density.explicit.cube", _options, _structure, *pit, false);
+        this->addAtomic(atomic_spectrum);
     }
+}
+
+void Spectrum::computePower() {
+    atomspec_array_t::iterator it;
+    for (it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
+        (*it)->computePower();
+    }
+    return;
+}
+
+AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
+    return this->computeAtomic(center, _structure->particles());
+}
+
+AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_array_t &targets) {
+    GLOG() << "Compute atomic spectrum for particle " << center->getId()
+        << " (type " << center->getType() << ", targets " << targets.size() << ") ..." << std::endl;
+
+//    RadialCoefficients c_n_zero = _radbasis->computeCoefficientsAllZero();
+//    AngularCoefficients c_lm_zero = _angbasis->computeCoefficientsAllZero();
+//    BasisCoefficients c_nlm(c_n_zero, c_lm_zero);
+//    c_nlm.linkBasis(_radbasis, _angbasis);
+
+//    BasisExpansion *nbhood_expansion = new BasisExpansion(this->_basis);
+    AtomicSpectrum *atomic_spectrum = new AtomicSpectrum(center, this->_basis);
+
+    Structure::particle_it_t pit;
+    for (pit = targets.begin(); pit != targets.end(); ++pit) {
+
+        // CHECK FOR EXCLUSIONS
+        if (_options->doExcludeTarget((*pit)->getType())) continue;
+
+        // FIND DISTANCE & DIRECTION, APPLY CUTOFF (= WEIGHT REDUCTION)
+        vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
+        double r = soap::linalg::abs(dr);
+        double weight_scale = this->_basis->getCutoff()->calculateWeight(r);
+        if (weight_scale < 0.) continue; // <- Negative cutoff weight means: skip
+        vec d = dr/r;
+
+        // APPLY WEIGHT IF CENTER
+        if (*pit == center) {
+            weight_scale *= this->_basis->getCutoff()->getCenterWeight();
+        }
+
+        // COMPUTE EXPANSION & ADD TO SPECTRUM
+        BasisExpansion nb_expansion(this->_basis);
+        nb_expansion.computeCoefficients(r, d, weight_scale*(*pit)->getWeight(), (*pit)->getSigma());
+        std::string type_other = (*pit)->getType();
+        atomic_spectrum->addQnlm(type_other, nb_expansion);
+
+//      nbhood_expansion->add(nb_expansion);
+
+
+//        // COMPUTE RADIAL COEFFICIENTS
+//      RadialCoefficients c_n_pair = _radbasis->computeCoefficients(r);
+//      /*
+//      GLOG() << "Radial coefficients r = " << r << std::endl;
+//        for (int i = 0; i < c_n.size(); ++i) {
+//            GLOG() << c_n[i] << " | ";
+//        }
+//        GLOG() << std::endl;
+//        */
+//
+//        // COMPUTE ANGULAR COEFFICIENTS
+//        AngularCoefficients c_lm_pair = _angbasis->computeCoefficients(d, r);
+//        /*
+//      GLOG() << "Angular coefficients d = " << d << std::endl;
+//      for (int lm = 0; lm < c_lm.size(); ++lm) {
+//          GLOG() << c_lm[lm] << " | ";
+//      }
+//      GLOG() << std::endl;
+//      */
+//
+//        BasisCoefficients c_nlm_pair(c_n_pair, c_lm_pair);
+//        c_nlm.add(c_nlm_pair);
+
+
+    }
+
+
+//    c_nlm.writeDensityOnGrid("density.expanded.cube", _options, _structure, center, true);
+//    c_nlm.writeDensityOnGrid("density.explicit.cube", _options, _structure, center, false);
+
+//    nbhood_expansion->writeDensityOnGrid("density.expanded.cube", _options, _structure, center, true);
+//    nbhood_expansion->writeDensityOnGrid("density.explicit.cube", _options, _structure, center, false);
+
+    return atomic_spectrum;
 }
 
 AtomicSpectrum *Spectrum::getAtomic(int slot_idx, std::string center_type) {
@@ -135,93 +231,6 @@ void Spectrum::writePowerDensity(int slot_idx, std::string center_type, std::str
 	return;
 }
 
-void Spectrum::computePower() {
-	atomspec_array_t::iterator it;
-	for (it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
-		(*it)->computePower();
-	}
-	return;
-}
-
-// TODO change to ::computeAtomic(Particle *center, vector<Particle*> &nbhood)
-AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
-	GLOG() << "Compute atomic spectrum for particle " << center->getId()
-	    << " (type " << center->getType() << ")" << std::endl;
-
-//    RadialCoefficients c_n_zero = _radbasis->computeCoefficientsAllZero();
-//    AngularCoefficients c_lm_zero = _angbasis->computeCoefficientsAllZero();
-//    BasisCoefficients c_nlm(c_n_zero, c_lm_zero);
-//    c_nlm.linkBasis(_radbasis, _angbasis);
-
-//    BasisExpansion *nbhood_expansion = new BasisExpansion(this->_basis);
-    AtomicSpectrum *atomic_spectrum = new AtomicSpectrum(center, this->_basis);
-
-    Structure::particle_it_t pit;
-    for (pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
-
-        // CHECK FOR EXCLUSIONS
-        if (_options->doExcludeTarget((*pit)->getType())) continue;
-
-    	// FIND DISTANCE & DIRECTION, APPLY CUTOFF (= WEIGHT REDUCTION)
-    	vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
-    	double r = soap::linalg::abs(dr);
-    	double weight_scale = this->_basis->getCutoff()->calculateWeight(r);
-    	if (weight_scale < 0.) continue; // <- Negative cutoff weight means: skip
-    	vec d = dr/r;
-
-    	// APPLY WEIGHT IF CENTER
-    	if (*pit == center) {
-			weight_scale *= this->_basis->getCutoff()->getCenterWeight();
-		}
-
-    	// COMPUTE EXPANSION & ADD TO SPECTRUM
-    	BasisExpansion nb_expansion(this->_basis);
-    	nb_expansion.computeCoefficients(r, d, weight_scale*(*pit)->getWeight(), (*pit)->getSigma());
-    	std::string type_other = (*pit)->getType();
-    	atomic_spectrum->addQnlm(type_other, nb_expansion);
-
-//    	nbhood_expansion->add(nb_expansion);
-
-
-//        // COMPUTE RADIAL COEFFICIENTS
-//    	RadialCoefficients c_n_pair = _radbasis->computeCoefficients(r);
-//    	/*
-//    	GLOG() << "Radial coefficients r = " << r << std::endl;
-//        for (int i = 0; i < c_n.size(); ++i) {
-//            GLOG() << c_n[i] << " | ";
-//        }
-//        GLOG() << std::endl;
-//        */
-//
-//        // COMPUTE ANGULAR COEFFICIENTS
-//        AngularCoefficients c_lm_pair = _angbasis->computeCoefficients(d, r);
-//        /*
-//    	GLOG() << "Angular coefficients d = " << d << std::endl;
-//		for (int lm = 0; lm < c_lm.size(); ++lm) {
-//			GLOG() << c_lm[lm] << " | ";
-//		}
-//		GLOG() << std::endl;
-//		*/
-//
-//        BasisCoefficients c_nlm_pair(c_n_pair, c_lm_pair);
-//        c_nlm.add(c_nlm_pair);
-
-
-    }
-
-
-//    c_nlm.writeDensityOnGrid("density.expanded.cube", _options, _structure, center, true);
-//    c_nlm.writeDensityOnGrid("density.explicit.cube", _options, _structure, center, false);
-
-//    nbhood_expansion->writeDensityOnGrid("density.expanded.cube", _options, _structure, center, true);
-//    nbhood_expansion->writeDensityOnGrid("density.explicit.cube", _options, _structure, center, false);
-
-
-
-	return atomic_spectrum;
-}
-
-
 void Spectrum::addAtomic(AtomicSpectrum *atomspec) {
 	assert(atomspec->getBasis() == _basis &&
 		"Should not append atomic spectrum linked against different basis.");
@@ -252,11 +261,17 @@ void Spectrum::load(std::string archfile) {
 
 void Spectrum::registerPython() {
     using namespace boost::python;
+    void (Spectrum::*computeAll)() = &Spectrum::compute;
+    void (Spectrum::*computeSegPair)(Segment*, Segment*) = &Spectrum::compute;
+    void (Spectrum::*computeCentersTargets)(Structure::particle_array_t&, Structure::particle_array_t&) = &Spectrum::compute;
+
     class_<Spectrum>("Spectrum", init<Structure &, Options &>())
     	.def(init<Structure &, Options &, Basis &>())
     	.def(init<std::string>())
     	.def("__iter__", range<return_value_policy<reference_existing_object> >(&Spectrum::beginAtomic, &Spectrum::endAtomic))
-	    .def("compute", &Spectrum::compute)
+	    .def("compute", computeAll)
+	    .def("compute", computeSegPair)
+	    .def("compute", computeCentersTargets)
 		.def("computePower", &Spectrum::computePower)
 		.def("addAtomic", &Spectrum::addAtomic)
 		.def("getAtomic", &Spectrum::getAtomic, return_value_policy<reference_existing_object>())

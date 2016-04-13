@@ -9,3 +9,4 @@ test/back
 *.coeff
 *.cube
 *.arch
+*.back

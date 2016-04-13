@@ -33,7 +33,7 @@ def ase_load_single(config_file, log=None):
     ase_config_list = AseConfigList([config_file], log=log)
     return ase_config_list[0]
 
-def setup_structure_ase(label, ase_config):
+def setup_structure_ase(label, ase_config, top=None):
     # DEFINE SYSTEM
     structure = soap.Structure(label)    
     # DEFINE BOUNDARY
@@ -45,26 +45,42 @@ def setup_structure_ase(label, ase_config):
     else:
         raise NotImplementedError("<setup_structure_ase> Partial periodicity not implemented.")
     structure.box = box    
-    # CREATE SINGLE SEGMENT
-    segment = structure.addSegment()    
-    # CREATE PARTICLES
+    # PARTICLE PROPERTIES
     props = ['id', 'type', 'mass', 'pos']
     ids = [ i+1 for i in range(ase_config.get_number_of_atoms()) ]
     types = ase_config.get_atomic_numbers()
     positions = ase_config.get_positions()
     masses = ase_config.get_masses()
     names = ase_config.get_chemical_symbols()
-    for id, name, typ, pos, mass in zip(ids, names, types, positions, masses):
-        particle = structure.addParticle(segment)
-        particle.pos = pos
-        particle.mass = mass
-        particle.weight = 1.
-        particle.sigma = 0.5
-        particle.name = name
-        particle.type = name
-        particle.type_id = typ
-    return structure
-
+    # DEFAULT TOPOLOGY
+    if top == None:
+        top = [('segment', 1, len(positions))]
+    # VERIFY PARTICLE COUNT
+    atom_count = 0
+    for section in top:
+        atom_count += section[1]*section[2]
+    assert atom_count == len(positions) # Does topology match structure?
+    # PARTITION: CREATE SEGMENTS, PARTICLES
+    atom_idx = 0
+    for section in top:
+        seg_type = section[0]
+        n_segs = section[1]
+        n_atoms = section[2]
+        for i in range(n_segs):
+            segment = structure.addSegment()
+            segment.name = seg_type
+            segment.type = seg_type
+            for j in range(n_atoms):
+                particle = structure.addParticle(segment)
+                particle.pos = positions[atom_idx]
+                particle.mass = masses[atom_idx]
+                particle.weight = 1.
+                particle.sigma = 0.5
+                particle.name = names[atom_idx]
+                particle.type = names[atom_idx]
+                particle.type_id = types[atom_idx]
+                atom_idx += 1
+    return structure 
 
 class AseConfigList(object):
     def __init__(self,

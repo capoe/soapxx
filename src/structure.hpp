@@ -6,6 +6,8 @@
 #include <boost/python/iterator.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <iostream>
+
+#include "base/exceptions.hpp"
 #include "types.hpp"
 #include "boundary.hpp"
 
@@ -49,6 +51,8 @@ public:
     // Sigma
     void setSigma(double sigma) { _sigma = sigma; }
     double &getSigma() { return _sigma; }
+    // Segment
+    Segment *getSegment() { return _segment; }
     
     static void registerPython();
 
@@ -85,24 +89,43 @@ class Segment
 {
 public:
 	typedef std::vector<Particle*> particle_array_t;
+	typedef particle_array_t::iterator particle_it_t;
 
-    Segment(int id) : _id(id) { ; }
-    Segment() : _id(-1) { ; }
+    Segment(int id) : _id(id), _name("?"), _type("?") { ; }
+    Segment() : _id(-1), _name("?"), _type("?") { ; }
    ~Segment() { _particles.clear(); }
 
+    // PARTICLE CONTAINER
     Particle &addParticle(Particle *new_part);
+    particle_array_t &particles() { return _particles; }
+    particle_it_t beginParticles() { return _particles.begin(); }
+    particle_it_t endParticles() { return _particles.end(); }
+
+    // Name
+    void setName(std::string name) { _name = name; }
+    std::string &getName() { return _name; }
+    // Id
+    void setId(int id) { _id = id; }
+    int getId() { return _id; }
+    // Type
+    void setType(std::string type) { _type = type; }
+    std::string &getType() { return _type; }
 
     static void registerPython();
 
     template<class Archive>
 	void serialize(Archive &arch, const unsigned int version) {
     	arch & _id;
+    	arch & _name;
+    	arch & _type;
     	arch & _particles;
 		return;
 	}
 
 private:
     int _id;
+    std::string _name;
+    std::string _type;
     particle_array_t _particles;
 };
 
@@ -120,9 +143,17 @@ public:
    ~Structure();
     void null();
 
+    // PARTICLE CONTAINER
     particle_array_t &particles() { return _particles; }
     particle_it_t beginParticles() { return _particles.begin(); }
     particle_it_t endParticles() { return _particles.end(); }
+
+    // SEGMENT CONTAINER
+    segment_array_t &segments() { return _segments; }
+    segment_it_t beginSegments() { return _segments.begin(); }
+    segment_it_t endSegments() { return _segments.end(); }
+
+    Segment *getSegment(int id) { if (id > _segments.size()) throw soap::base::OutOfRange("getSegment"); return _segments[id-1]; }
 
     std::string &getLabel() { return _label; }
     void setLabel(std::string label) { _label = label; }

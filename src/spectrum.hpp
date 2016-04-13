@@ -46,7 +46,10 @@ public:
 	void clean();
 
 	void compute();
+	void compute(Segment *centers, Segment *targets);
+	void compute(Structure::particle_array_t &sources, Structure::particle_array_t &targets);
 	AtomicSpectrum *computeAtomic(Particle *center);
+	AtomicSpectrum *computeAtomic(Particle *center, Structure::particle_array_t &targets);
 	void addAtomic(AtomicSpectrum *atomspec);
 	AtomicSpectrum *getAtomic(int slot_idx, std::string center_type);
 	void writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type);

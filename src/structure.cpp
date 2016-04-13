@@ -47,7 +47,11 @@ Particle &Segment::addParticle(Particle *new_part) {
 
 void Segment::registerPython() {
 	using namespace boost::python;
-	class_<Segment>("Segment", init<int>())
+	class_<Segment, Segment*>("Segment", init<int>())
+        .add_property("id", &Segment::getId, &Segment::setId)
+	    .add_property("name", make_function(&Segment::getName, copy_non_const()), &Segment::setName)
+	    .add_property("type", make_function(&Segment::getType, copy_non_const()), &Segment::setType)
+	    .add_property("particles", range<return_value_policy<reference_existing_object> >(&Segment::beginParticles, &Segment::endParticles))
 	    .def("addParticle", &Segment::addParticle, return_value_policy<reference_existing_object>());
 }
 
@@ -154,14 +158,18 @@ void Structure::registerPython() {
 	using namespace boost::python;
 	class_<Structure>("Structure", init<std::string>())
 	   .def("addSegment", &Structure::addSegment, return_value_policy<reference_existing_object>())
+	   .def("getSegment", &Structure::getSegment, return_value_policy<reference_existing_object>())
 	   .def("addParticle", &Structure::addParticle, return_value_policy<reference_existing_object>())
 	   .def("__iter__", range<return_value_policy<reference_existing_object> >(&Structure::beginParticles, &Structure::endParticles))
 	   .add_property("particles", range<return_value_policy<reference_existing_object> >(&Structure::beginParticles, &Structure::endParticles))
+	   .add_property("segments", range<return_value_policy<reference_existing_object> >(&Structure::beginSegments, &Structure::endSegments))
 	   .def("connect", &Structure::connectNumeric)
 	   .add_property("box", &Structure::getBoundaryNumeric, &Structure::setBoundaryNumeric)
 	   .add_property("label", make_function(&Structure::getLabel, copy_non_const()), &Structure::setLabel);
 	class_<particle_array_t>("ParticleContainer")
 	   .def(vector_indexing_suite<particle_array_t>());
+	class_<segment_array_t>("SegmentContainer")
+	    .def(vector_indexing_suite<segment_array_t>());
 }
 
 } /* CLOSE NAMESPACE */
