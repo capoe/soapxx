@@ -1,0 +1,11 @@
+apply
+build
+soap
+Makefile
+test/old
+test/back
+*~
+*.pyc
+*.coeff
+*.cube
+*.arch
