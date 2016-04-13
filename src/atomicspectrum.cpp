@@ -176,7 +176,7 @@ void AtomicSpectrum::write(std::ostream &ofs) {
 AtomicSpectrum::xnkl_t *AtomicSpectrum::getXnkl(type_pair_t &types) {
     map_xnkl_t::iterator it = _map_xnkl.find(types);
     if (it == _map_xnkl.end()) {
-        if (types.first == "g" and types.second == "c") {
+        if (types.first == "" and types.second == "") {
             return _xnkl_generic_coherent;
         }
         else {

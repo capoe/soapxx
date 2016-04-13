@@ -12,6 +12,7 @@ class Options
 {
 public:
 	typedef std::map<std::string, std::string> map_options_t;
+	typedef std::map<std::string, bool> map_exclude_t;
 
 	// CONSTRUCT & DESTRUCT
 	Options();
@@ -28,6 +29,12 @@ public:
 	void configureCenters(boost::python::list center_excludes) { _center_excludes = center_excludes; }
 	std::string summarizeOptions();
 
+	// EXCLUSIONS TODO Move this to a distinct class
+	void excludeCenters(boost::python::list &types);
+	void excludeTargets(boost::python::list &types);
+	bool doExcludeCenter(std::string &type);
+	bool doExcludeTarget(std::string &type);
+
 	// PYTHON
 	static void registerPython();
 
@@ -35,12 +42,17 @@ public:
 	template<class Archive>
 	void serialize(Archive &arch, const unsigned int version) {
 		arch & _key_value_map;
+		arch & _exclude_center;
+		arch & _exclude_target;
 		return;
 	}
 
 private:
 	boost::python::list _center_excludes;
 	map_options_t _key_value_map;
+
+	map_exclude_t _exclude_center;
+	map_exclude_t _exclude_target;
 };
 
 }

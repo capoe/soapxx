@@ -25,6 +25,7 @@ class Spectrum
 {
 public:
 	typedef std::vector<AtomicSpectrum*> atomspec_array_t;
+	typedef std::vector<AtomicSpectrum*>::iterator atomic_it_t;
 	typedef std::map<std::string, atomspec_array_t> map_atomspec_array_t;
 
 	Spectrum(std::string archfile);
@@ -35,6 +36,9 @@ public:
     Structure *getStructure() { return _structure; }
     Options *getOptions() { return _options; }
     Basis *getBasis() { return _basis; }
+
+    atomic_it_t beginAtomic() { return _atomspec_array.begin(); }
+    atomic_it_t endAtomic() { return _atomspec_array.end(); }
 
 	void saveAndClean() { std::cout << "spectrum::save&clean" << std::endl; }
 	void save(std::string archfile);

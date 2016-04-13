@@ -27,10 +27,12 @@ else (*plog)()
 class LogBuffer : public std::stringbuf {
 
 public:
-	LogBuffer() : std::stringbuf(),
+	LogBuffer() : std::stringbuf(), _silent(false),
                 _errorPreface("ERROR "), _warnPreface("WARNING "),
                 _infoPreface(""), _dbgPreface("DEBUG "),
                 _writePreface(true) {}
+
+    void silence() { _silent = true; }
         
         // sets the log level (needed for output)
 	void setLogLevel(TLogLevel LogLevel) { _LogLevel = LogLevel; }
@@ -82,6 +84,7 @@ private:
   // Multithreading
   bool _maverick;
   bool _writePreface;
+  bool _silent;
   
   std::string _timePreface;
   std::string _errorPreface;
@@ -92,6 +95,7 @@ private:
 
 protected:
 	virtual int sync() {
+            if (_silent) return 0;
             
             std::ostringstream _message;
 
@@ -177,6 +181,10 @@ public:
 	}
         
         void setReportLevel( TLogLevel ReportLevel ) { _ReportLevel = ReportLevel; }
+        void silence() {
+            _silent = true;
+            dynamic_cast<LogBuffer*>(rdbuf())->silence();
+        }
         void setMultithreading( bool maverick ) { 
             _maverick = maverick;
             dynamic_cast<LogBuffer *>( rdbuf() )->setMultithreading( _maverick );
@@ -203,6 +211,7 @@ private:
     
     // if true, only a single processor job is executed
     bool      _maverick;
+    bool      _silent;
     
     std::string Messages() {
         return dynamic_cast<LogBuffer *>( rdbuf() )->Messages();

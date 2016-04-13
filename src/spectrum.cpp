@@ -49,6 +49,9 @@ void Spectrum::compute() {
 
     Structure::particle_it_t pit;
     for (pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
+        // Continue if exclusion defined ...
+        if (_options->doExcludeCenter((*pit)->getType())) continue;
+        // Compute ...
     	AtomicSpectrum *atomic_spectrum = this->computeAtomic(*pit);
     	//atomic_spectrum->getReduced()->writeDensityOnGrid("density.expanded.cube", _options, _structure, *pit, true);
     	//atomic_spectrum->getReduced()->writeDensityOnGrid("density.explicit.cube", _options, _structure, *pit, false);
@@ -156,6 +159,9 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
     Structure::particle_it_t pit;
     for (pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
 
+        // CHECK FOR EXCLUSIONS
+        if (_options->doExcludeTarget((*pit)->getType())) continue;
+
     	// FIND DISTANCE & DIRECTION, APPLY CUTOFF (= WEIGHT REDUCTION)
     	vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
     	double r = soap::linalg::abs(dr);
@@ -249,6 +255,7 @@ void Spectrum::registerPython() {
     class_<Spectrum>("Spectrum", init<Structure &, Options &>())
     	.def(init<Structure &, Options &, Basis &>())
     	.def(init<std::string>())
+    	.def("__iter__", range<return_value_policy<reference_existing_object> >(&Spectrum::beginAtomic, &Spectrum::endAtomic))
 	    .def("compute", &Spectrum::compute)
 		.def("computePower", &Spectrum::computePower)
 		.def("addAtomic", &Spectrum::addAtomic)
@@ -263,6 +270,8 @@ void Spectrum::registerPython() {
 		.add_property("options", make_function(&Spectrum::getOptions, ref_existing()))
 		.add_property("basis", make_function(&Spectrum::getBasis, ref_existing()))
 		.add_property("structure", make_function(&Spectrum::getStructure, ref_existing()));
+    class_<atomspec_array_t>("AtomicSpectrumContainer")
+           .def(vector_indexing_suite<atomspec_array_t>());
 }
 
 /* STORAGE, BASIS, COMPUTATION, PARALLELIZATION */

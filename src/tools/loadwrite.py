@@ -17,7 +17,7 @@ def write_xyz(xyz_file, structure):
     ofs.close()
     return    
 
-def ase_load_all(folder):
+def ase_load_all(folder, log=None):
     cwd = os.getcwd()
     os.chdir(folder)
     config_listdir = sorted(os.listdir('./'))
@@ -25,9 +25,13 @@ def ase_load_all(folder):
     for config_file in config_listdir:
         if os.path.isfile(config_file):
             config_files.append(config_file)
-    ase_config_list = AseConfigList(config_files)
+    ase_config_list = AseConfigList(config_files, log=log)
     os.chdir(cwd)
     return ase_config_list
+
+def ase_load_single(config_file, log=None):
+    ase_config_list = AseConfigList([config_file], log=log)
+    return ase_config_list[0]
 
 def setup_structure_ase(label, ase_config):
     # DEFINE SYSTEM
@@ -102,6 +106,8 @@ class AseConfigList(object):
         return self.configs[idx]
     def __iter__(self):
         return self.configs.__iter__()
+    def __len__(self):
+        return len(self.configs)
 
 class AseConfig(object):
     def __init__(self,

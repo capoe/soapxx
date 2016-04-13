@@ -38,6 +38,32 @@ std::string Options::summarizeOptions() {
 	return info;
 }
 
+void Options::excludeCenters(boost::python::list &types) {
+    for (int i = 0; i < boost::python::len(types); ++i) {
+        std::string type = boost::python::extract<std::string>(types[i]);
+        _exclude_center[type] = true;
+    }
+    return;
+}
+
+void Options::excludeTargets(boost::python::list &types) {
+    for (int i = 0; i < boost::python::len(types); ++i) {
+        std::string type = boost::python::extract<std::string>(types[i]);
+        _exclude_target[type] = true;
+    }
+    return;
+}
+
+bool Options::doExcludeCenter(std::string &type) {
+    map_exclude_t::iterator it = _exclude_center.find(type);
+    return (it == _exclude_center.end()) ? false : true;
+}
+
+bool Options::doExcludeTarget(std::string &type) {
+    map_exclude_t::iterator it = _exclude_target.find(type);
+    return (it == _exclude_target.end()) ? false : true;
+}
+
 void Options::registerPython() {
 	using namespace boost::python;
 	void (Options::*set_int)(std::string, int) = &Options::set;
@@ -47,7 +73,8 @@ void Options::registerPython() {
 	class_<Options, Options*>("Options")
         .def("__str__", &Options::summarizeOptions)
 	    .def("summarizeOptions", &Options::summarizeOptions)
-		.def("configureCenters", &Options::configureCenters)
+		.def("excludeCenters", &Options::excludeCenters)
+		.def("excludeTargets", &Options::excludeTargets)
 		.def("set", set_int)
 		.def("set", set_double)
 		.def("set", set_string);

@@ -75,7 +75,7 @@ def invert_xnkl_aa_fixed_l(X, Y, N, l, Q_return, P_return):
         pass
     else:
         for m in np.arange(-l,l+1):
-            if m != -1:
+            if m != 0:
                 Qr_n[:,l+m] = 0.
             else:
                 pass
@@ -162,7 +162,7 @@ def invert_xnkl_aa(xnkl_cmplx, basis, l_smaller=0, l_larger=-1):
     
     for l in range(L1):
         if l < l_smaller: continue
-        if l == l_larger+1: break
+        if l and l == l_larger+1: break
 
         conv = (2.*l+1.)**0.5/(2.*2.**0.5*np.pi)
         

@@ -7,6 +7,8 @@ namespace soap {
 
 extern Logger GLOG;
 
+void GLOG_SILENCE();
+
 namespace constants {
 
 const double ANGSTROM_TO_BOHR = 1./0.52917721067;
