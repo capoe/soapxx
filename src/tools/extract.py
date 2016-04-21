@@ -8,6 +8,10 @@ class Xnklab(object):
         self.S = len(types_global)
         self.N = atomic.basis.N
         self.L = atomic.basis.L
+        
+        self.dim_linear_xnklab = (self.S*self.S+self.S)/2*(self.N*self.N*(self.L+1))
+        self.dim_linear_xnkl = self.N*self.N*(self.L+1)
+        
         S = self.S
         N = self.N
         L = self.L
@@ -35,8 +39,8 @@ class Xnklab(object):
         #print "DONE"
         return
     def reduce(self):
-        dim_linear_xnklab = (self.S*self.S+self.S)/2*(self.N*self.N*(self.L+1))
-        dim_linear_xnkl = self.N*self.N*(self.L+1)
+        dim_linear_xnklab = self.dim_linear_xnklab
+        dim_linear_xnkl = self.dim_linear_xnkl
         self.X_linear = np.zeros((dim_linear_xnklab))
         for sa in range(self.S):
             for sb in range(sa,self.S):
@@ -70,3 +74,5 @@ def extract_xnklab(atomic, types, types_pairs):
             b = types[j]
             xnklab = xnklab + atomic.getPower(t1,t2).array
     return xnklab
+    
+

@@ -1,4 +1,4 @@
-#include "operations.hpp"
+#include "../operations.hpp"
 #include <boost/numeric/ublas/matrix_proxy.hpp>
 #include <gsl/gsl_linalg.h>
 #include <gsl/gsl_errno.h>

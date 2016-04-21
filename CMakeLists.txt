@@ -1,11 +1,17 @@
 # CONFIGURE CMAKE
 message("CMake version: ${CMAKE_VERSION}")
 cmake_minimum_required(VERSION 2.8.3)
+
+# PROJECT OPTIONS
+project(soapxx)
 set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR})
 set(LOCAL_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/soap)
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # BUILD OPTIONS
+enable_language(CXX)
+#set(CMAKE_CXX_COMPILER "/usr/local/shared/intel/compilers_and_libraries_2016.0.109/linux/bin/intel64/icc")
+message("C++ compiler: " ${CMAKE_CXX_COMPILER} " " ${CMAKE_CXX_COMPILER_ID})
 option(BUILD_SHARED_LIBS "Build shared libs" ON)
 if(${CMAKE_VERSION} VERSION_GREATER 3.1)
     message("Setting C++ standard 11 (CMake version > 3.1)")
@@ -34,9 +40,6 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(MPI REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
-
-find_package(GSL REQUIRED)
-include_directories(${GSL_INCLUDE_DIRS})
 
 set(SOAPXX_LINK_LIBRARIES ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${MPI_LIBRARIES} ${GSL_LIBRARIES})
 
