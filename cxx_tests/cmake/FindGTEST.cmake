@@ -1,0 +1,11 @@
+if(DEFINED ENV{GTEST_ROOT})
+    set(GTEST_ROOT "$ENV{GTEST_ROOT}")
+    message("-- GTEST_ROOT is set: ${GTEST_ROOT}")
+else()
+    message(FATAL_ERROR "-- Note: GTEST_ROOT not set.")
+endif()
+message("-- GTEST_ROOT is set: ${GTEST_ROOT}")
+set(GTEST_LIBRARIES "${GTEST_ROOT}/lib/libgtest_main.a" "${GTEST_ROOT}/lib/libgtest.a")
+set(GTEST_INCLUDE_DIRS "${GTEST_ROOT}/include")
+include_directories(${GTEST_INCLUDE_DIRS})
+

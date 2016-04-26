@@ -3,9 +3,9 @@ message("CMake version: ${CMAKE_VERSION}")
 cmake_minimum_required(VERSION 2.8.3)
 
 # PROJECT OPTIONS
-project(soapxx)
+project(soapxx_tests)
 set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR})
-set(LOCAL_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/soap)
+set(LOCAL_INSTALL_DIR ${CMAKE_INSTALL_PREFIX}/soap_tests)
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # BUILD OPTIONS
@@ -22,8 +22,8 @@ else(${CMAKE_VERSION} VERSION_GREATER 3.1)
 endif(${CMAKE_VERSION} VERSION_GREATER 3.1)
 
 # LOCAL PACKAGES
-# ...
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+find_package(SOAP REQUIRED)
+find_package(GTEST REQUIRED)
 
 # FIND PACKAGES
 find_package(PythonLibs)
@@ -42,7 +42,6 @@ include_directories(${Boost_INCLUDE_DIRS})
 find_package(MPI REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
 
-set(SOAPXX_LINK_LIBRARIES ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${MPI_LIBRARIES} ${GSL_LIBRARIES})
 
 # SUMMARIZE INCLUDES & LIBS
 get_property(local_dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
@@ -58,5 +57,5 @@ foreach(lib ${local_dirs})
 endforeach()
 
 # SUBDIRECTORIES
-add_subdirectory(src/soap)
+add_subdirectory(src)
 
