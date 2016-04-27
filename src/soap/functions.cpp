@@ -140,7 +140,9 @@ std::vector<std::complex<double> > GradSphericalYlm::eval(int l, int m, vec &r) 
     // TODO WHAT IF RADIUS IS ZERO?
     double R = soap::linalg::abs(r);
     if (R < RADZERO) {
-        throw soap::base::NotImplemented("<GradSphericalYlm::eval> R < RADZERO");
+        // This should have been checked before
+        // All gradients set to zero
+        throw soap::base::APIError("<GradSphericalYlm::eval> R < RADZERO");
     }
     vec d = r / R;
     double x = r.getX();

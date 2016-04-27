@@ -33,7 +33,14 @@ public:
 	const int &N() { return _N; }
 
     virtual void configure(Options &options);
-    virtual void computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here);
+    virtual void computeCoefficients(
+        vec d,
+        double r,
+        double particle_sigma,
+        radcoeff_t &Gnl,
+        radcoeff_t *dGnl_dx,
+        radcoeff_t *dGnl_dy,
+        radcoeff_t *dGnl_dz);
 
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
@@ -68,7 +75,14 @@ public:
     }
     void clear();
     void configure(Options &options);
-    void computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here);
+    void computeCoefficients(
+        vec d,
+        double r,
+        double particle_sigma,
+        radcoeff_t &Gnl,
+        radcoeff_t *dGnl_dx,
+        radcoeff_t *dGnl_dy,
+        radcoeff_t *dGnl_dz);
 
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {

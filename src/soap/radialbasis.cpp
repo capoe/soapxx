@@ -28,7 +28,14 @@ void RadialBasis::configure(Options &options) {
     _mode = options.get<std::string>("radialbasis.mode");
 }
 
-void RadialBasis::computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here) {
+void RadialBasis::computeCoefficients(
+        vec d,
+        double r,
+        double particle_sigma,
+        radcoeff_t &Gnl,
+        radcoeff_t *dGnl_dx,
+        radcoeff_t *dGnl_dy,
+        radcoeff_t *dGnl_dz) {
 	throw soap::base::NotImplemented("RadialBasis::computeCoefficients");
 	return;
 }
@@ -171,7 +178,21 @@ void RadialBasisGaussian::configure(Options &options) {
 	}
 }
 
-void RadialBasisGaussian::computeCoefficients(double r, double particle_sigma, radcoeff_t &save_here) {
+void RadialBasisGaussian::computeCoefficients(
+        vec d,
+        double r,
+        double particle_sigma,
+        radcoeff_t &Gnl,
+        radcoeff_t *dGnl_dx,
+        radcoeff_t *dGnl_dy,
+        radcoeff_t *dGnl_dz) {
+
+    bool gradients = false;
+    if (dGnl_dx) {
+        assert(dGnl_dy != NULL && dGnl_dz != NULL);
+        gradients = true;
+    }
+
 	// Delta-type expansion =>
 	// Second (l) dimension of <save_here> and <particle_sigma> ignored here
 	if (particle_sigma < RadialBasis::RADZERO) {
@@ -179,22 +200,13 @@ void RadialBasisGaussian::computeCoefficients(double r, double particle_sigma, r
 		int n = 0;
 		for (it = _basis.begin(), n = 0; it != _basis.end(); ++it, ++n) {
 			double gn_at_r = (*it)->at(r);
-			for (int l = 0; l != save_here.size2(); ++l) {
-				save_here(n, l) = gn_at_r;
+			for (int l = 0; l != Gnl.size2(); ++l) {
+			    Gnl(n, l) = gn_at_r;
 			}
 		}
-		save_here = ub::prod(_Tij, save_here);
+		Gnl = ub::prod(_Tij, Gnl);
 	}
 	else {
-//		std::cout << "sigma > 0." << std::endl;
-
-//		int degree_sph_in = save_here.size2();
-//		std::vector<double> sph_il = ModifiedSphericalBessel1stKind::eval(degree_sph_in, 1e-4);
-//		for (int l = 0; l != save_here.size2(); ++l) {
-//			std::cout << "l=" << l << " il=" << sph_il[l] << std::endl;
-//		}
-//
-//		throw soap::base::NotImplemented("...");
 
 		// Particle properties
 		double ai = 1./(2*particle_sigma*particle_sigma);
@@ -223,58 +235,11 @@ void RadialBasisGaussian::computeCoefficients(double r, double particle_sigma, r
 				exp(-ai*ri*ri) *
 				exp(-ak*rk*rk*(1-ak/beta_ik));
 
-//			// DELTA APPROXIMATION
-//			std::cout << "r " << r;
-//			std::cout << " beta_ik " << beta_ik;
-//			std::cout << " rho_ik " << rho_ik;
-//			std::cout << std::endl;
-//			double bessel_arg_ik = 2*ai*ri*rho_ik;
-//			int degree_sph = save_here.size2(); // <- L+1
-//			std::vector<double> sph_il = ModifiedSphericalBessel1stKind::eval(degree_sph, bessel_arg_ik);
-//            for (int l = 0; l != degree_sph; ++l) {
-//            	save_here(k, l) = prefac*sph_il[l];
-//            }
-//            std::cout << std::endl;
-//            std::cout << "DELTA" << std::endl;
-//            std::cout << "k = " << k;
-//			for (int l = 0; l != save_here.size2(); ++l) {
-//				std::cout << " " << save_here(k, l);
-//			}
-//			std::cout << std::endl;
-
-
 			// NUMERICAL INTEGRATION
 			// ZERO COEFFS
-			for (int l = 0; l != save_here.size2(); ++l) {
-				save_here(k, l) = 0.0;
+			for (int l = 0; l != Gnl.size2(); ++l) {
+			    Gnl(k, l) = 0.0;
 			}
-
-//			// INTEGRATE
-//			double delta_r = 0.01;
-//			double r_min = 0.0;
-//			double r_max = 10.;
-//			int steps = int((r_max-r_min)/delta_r)+1;
-//			std::cout << "r " << r;
-//			std::cout << " steps " << steps;
-//			std::cout << " beta_ik " << beta_ik;
-//			std::cout << " rho_ik " << rho_ik;
-//			std::cout << std::endl;
-//
-//			for (int s = 0; s <= steps; ++s) {
-//				// Current radius
-//				double r_step = r_min + s*delta_r;
-//				// Calculate ModSphBessels
-//				double arg = 2*ai*ri*r_step;
-//				std::vector<double> sph_il = ModifiedSphericalBessel1stKind::eval(save_here.size2(), arg);
-//				// Add increments
-//				for (int l = 0; l != save_here.size2(); ++l) {
-//					save_here(k,l) +=
-//						prefac*
-//						delta_r*r_step*r_step*
-//						sph_il[l]*
-//						exp(-beta_ik*(r_step-rho_ik)*(r_step-rho_ik))*norm_r2_g_dr_rad_ik;
-//				}
-//			}
 
 			// SIMPSON'S RULE
 			double r_min = rho_ik - 4*sigma_ik;
@@ -290,15 +255,19 @@ void RadialBasisGaussian::computeCoefficients(double r, double particle_sigma, r
 
 			// Compute samples for all l's
 			// For each l, store integrand at r_sample
-			ub::matrix<double> integrand_l_at_r = ub::zero_matrix<double>(save_here.size2(), n_sample);
+			ub::matrix<double> integrand_l_at_r = ub::zero_matrix<double>(Gnl.size2(), n_sample);
+			// TODO ub::matrix<double> grad_integrand_l_at_r = ...
+			// TODO Apply prefactor later (after integration)
+			// TODO gamma_kl = prefactor*integral_kl
+			// TODO grad_gamma_kl = -2*ai*ri*gamma_kl + prefactor*grad_integral_kl
 			for (int s = 0; s < n_sample; ++s) {
 				// f0 f1 f2 f3 ....  f-3 f-2 f-1
 				// |-----||----||----||-------|
 				double r_sample = r_min - delta_r_sample + s*delta_r_sample;
 				// ... Generate Bessels
-				std::vector<double> sph_il = ModifiedSphericalBessel1stKind::eval(save_here.size2(), 2*ai*ri*r_sample);
+				std::vector<double> sph_il = ModifiedSphericalBessel1stKind::eval(Gnl.size2(), 2*ai*ri*r_sample);
 				// ... Compute & store integrands
-				for (int l = 0; l != save_here.size2(); ++l) {
+				for (int l = 0; l != Gnl.size2(); ++l) {
 					integrand_l_at_r(l, s) =
 					    prefac*
 						r_sample*r_sample*
@@ -308,8 +277,8 @@ void RadialBasisGaussian::computeCoefficients(double r, double particle_sigma, r
 			}
 			// Apply Simpson's rule
 			for (int s = 0; s < n_steps; ++s) {
-				for (int l = 0; l != save_here.size2(); ++l) {
-					save_here(k,l) +=
+				for (int l = 0; l != Gnl.size2(); ++l) {
+				    Gnl(k,l) +=
 						delta_r_step/6.*(
 							integrand_l_at_r(l, 2*s)+
 							4*integrand_l_at_r(l, 2*s+1)+
@@ -318,16 +287,8 @@ void RadialBasisGaussian::computeCoefficients(double r, double particle_sigma, r
 				}
 			}
 
-//			std::cout << "NUMERICAL" << std::endl;
-//			std::cout << "k = " << k;
-//			for (int l = 0; l != save_here.size2(); ++l) {
-//				std::cout << " " << save_here(k, l);
-//			}
-//			std::cout << std::endl;
-
-
 		}
-		save_here = ub::prod(_Tij, save_here);
+		Gnl = ub::prod(_Tij, Gnl);
 	}
     return;
 }

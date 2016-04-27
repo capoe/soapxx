@@ -47,12 +47,17 @@ void Basis::registerPython() {
 BasisExpansion::BasisExpansion(Basis *basis) :
 	_basis(basis),
 	_radbasis(basis->getRadBasis()),
-	_angbasis(basis->getAngBasis()) {
-	int L = _angbasis->L();
-	int N = _radbasis->N();
-	_radcoeff = RadialBasis::radcoeff_zero_t(N,L+1);
-	_angcoeff = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
-	_coeff = coeff_zero_t(N,(L+1)*(L+1));
+	_angbasis(basis->getAngBasis()),
+	_has_coeff(false),
+	_has_coeff_grad(false) {
+    int L = _angbasis->L();
+    int N = _radbasis->N();
+    _has_coeff = true;
+    if (_has_coeff) {
+        _radcoeff = RadialBasis::radcoeff_zero_t(N,L+1);
+        _angcoeff = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
+        _coeff = coeff_zero_t(N,(L+1)*(L+1));
+    }
 }
 
 BasisExpansion::~BasisExpansion() {
@@ -63,17 +68,90 @@ BasisExpansion::~BasisExpansion() {
 	_angcoeff.clear();
 }
 
-void BasisExpansion::computeCoefficients(double r, vec d, double weight, double sigma) {
-	_radbasis->computeCoefficients(r, sigma, _radcoeff);
-	_angbasis->computeCoefficients(d, r, _angcoeff);
-	for (int n = 0; n != _radbasis->N(); ++n) {
-		for (int l = 0; l != _angbasis->L()+1; ++l) {
-			for (int m = -l; m != l+1; ++m) {
-				_coeff(n, l*l+l+m) = _radcoeff(n,l)*_angcoeff(l*l+l+m);
-			}
-		}
-	}
-	_coeff *= weight;
+void BasisExpansion::computeCoefficients(double r, vec d) {
+    // Corresponds to: weight=weight_scale=1, sigma=0, gradients=false
+    _radbasis->computeCoefficients(d, r, 0., _radcoeff, NULL, NULL, NULL);
+    _angbasis->computeCoefficients(d, r, 0., _angcoeff, NULL, NULL, NULL);
+    for (int n = 0; n != _radbasis->N(); ++n) {
+        for (int l = 0; l != _angbasis->L()+1; ++l) {
+            for (int m = -l; m != l+1; ++m) {
+                _coeff(n, l*l+l+m) = _radcoeff(n,l)*_angcoeff(l*l+l+m);
+            }
+        }
+    }
+    return;
+}
+
+void BasisExpansion::computeCoefficients(double r, vec d, double weight, double weight_scale, double sigma, bool gradients) {
+    // SETUP STORAGE
+    int L = _angbasis->L();
+    int N = _radbasis->N();
+    if (!_has_coeff) {
+        // Should have already been done in constructor ::BasisExpansion(Basis *basis)
+        _has_coeff = true;
+        _radcoeff = RadialBasis::radcoeff_zero_t(N,L+1);
+        _angcoeff = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
+        _coeff = coeff_zero_t(N,(L+1)*(L+1));
+    }
+    if (gradients) {
+        _has_coeff_grad = true;
+        _radcoeff_grad_x = RadialBasis::radcoeff_zero_t(N,L+1);
+        _radcoeff_grad_y = RadialBasis::radcoeff_zero_t(N,L+1);
+        _radcoeff_grad_z = RadialBasis::radcoeff_zero_t(N,L+1);
+        _angcoeff_grad_x = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
+        _angcoeff_grad_y = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
+        _angcoeff_grad_z = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
+        _coeff_grad_x = coeff_zero_t(N,(L+1)*(L+1));
+        _coeff_grad_y = coeff_zero_t(N,(L+1)*(L+1));
+        _coeff_grad_z = coeff_zero_t(N,(L+1)*(L+1));
+    }
+    // COMPUTE
+    if (_has_coeff && !_has_coeff_grad) {
+        _radbasis->computeCoefficients(d, r, sigma, _radcoeff, NULL, NULL, NULL);
+        _angbasis->computeCoefficients(d, r, sigma, _angcoeff, NULL, NULL, NULL);
+    }
+    else if (_has_coeff && _has_coeff_grad) {
+        std::cout << "GRAD" << std::endl;
+        _radbasis->computeCoefficients(d, r, sigma, _radcoeff, &_radcoeff_grad_x, &_radcoeff_grad_y, &_radcoeff_grad_z);
+        _angbasis->computeCoefficients(d, r, sigma, _angcoeff, &_angcoeff_grad_x, &_angcoeff_grad_y, &_angcoeff_grad_z);
+        _weight_scale_grad = _basis->getCutoff()->calculateGradientWeight(r, d);
+    }
+    // MERGE
+    if (_has_coeff) {
+        for (int n = 0; n != _radbasis->N(); ++n) {
+            for (int l = 0; l != _angbasis->L()+1; ++l) {
+                for (int m = -l; m != l+1; ++m) {
+                    _coeff(n, l*l+l+m) = _radcoeff(n,l)*_angcoeff(l*l+l+m);
+                }
+            }
+        }
+        _coeff *= weight*weight_scale;
+    }
+    if (_has_coeff_grad) {
+        for (int n = 0; n != _radbasis->N(); ++n) {
+            for (int l = 0; l != _angbasis->L()+1; ++l) {
+                for (int m = -l; m != l+1; ++m) {
+                    int lm = l*l+l+m;
+                    _coeff_grad_x(n, lm) = weight*(
+                          weight_scale*_radcoeff(n,l)*_angcoeff_grad_x(lm)
+                        + weight_scale*_radcoeff_grad_x(n,l)*_angcoeff(lm)
+                        + _weight_scale_grad.getX()*_radcoeff(n,l)*_angcoeff(lm)
+                    );
+                    _coeff_grad_y(n, lm) = weight*(
+                          weight_scale*_radcoeff(n,l)*_angcoeff_grad_y(lm)
+                        + weight_scale*_radcoeff_grad_y(n,l)*_angcoeff(lm)
+                        + _weight_scale_grad.getY()*_radcoeff(n,l)*_angcoeff(lm)
+                    );
+                    _coeff_grad_z(n, lm) = weight*(
+                          weight_scale*_radcoeff(n,l)*_angcoeff_grad_z(lm)
+                        + weight_scale*_radcoeff_grad_z(n,l)*_angcoeff(lm)
+                        + _weight_scale_grad.getZ()*_radcoeff(n,l)*_angcoeff(lm)
+                    );
+                } // m
+            } // l
+        } // n
+    }
+
 	return;
 }
 
@@ -187,7 +265,8 @@ void BasisExpansion::writeDensityOnGrid(
 				// DENSITY BASED ON EXPANSION
 				if (fromExpansion) {
 					BasisExpansion density_exp_dr(_basis);
-					density_exp_dr.computeCoefficients(r, d, 1., 0.);
+					//density_exp_dr.computeCoefficients(r, d, 1., 1., 0., false);
+					density_exp_dr.computeCoefficients(r, d);
 					density_exp_dr.conjugate();
 
 					BasisExpansion::coeff_t &c_nlm_dr = density_exp_dr.getCoefficients();

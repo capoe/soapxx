@@ -8,6 +8,7 @@
 #include "soap/base/exceptions.hpp"
 #include "soap/base/objectfactory.hpp"
 #include "soap/options.hpp"
+#include "soap/functions.hpp"
 
 namespace soap {
 
@@ -26,7 +27,14 @@ public:
 	std::string &identify() { return _type; }
 	const int &L() { return _L; }
     virtual void configure(Options &options);
-    virtual void computeCoefficients(vec d, double r, angcoeff_t &save_here);
+    virtual void computeCoefficients(
+        vec d,
+        double r,
+        double sigma,
+        angcoeff_t &Ylm,
+        angcoeff_t *dYlm_dx,
+        angcoeff_t *dYlm_dy,
+        angcoeff_t *dYlm_dz);
 
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {

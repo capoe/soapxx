@@ -56,7 +56,7 @@ public:
 	typedef ub::zero_matrix< std::complex<double> > coeff_zero_t;
 
 	BasisExpansion(Basis *basis);
-	BasisExpansion() : _basis(NULL), _radbasis(NULL), _angbasis(NULL) {;}
+	BasisExpansion() : _basis(NULL), _radbasis(NULL), _angbasis(NULL), _has_coeff(false), _has_coeff_grad(false) {;}
     ~BasisExpansion();
 
     Basis *getBasis() { return _basis; }
@@ -64,7 +64,10 @@ public:
     RadialBasis::radcoeff_t &getRadCoeffs() { return _radcoeff; }
 	AngularBasis::angcoeff_t &getAngCoeffs() { return _angcoeff; }
 
-    void computeCoefficients(double r, vec d, double weight, double sigma);
+	void computeCoefficients(double r, vec d);
+    void computeCoefficients(double r, vec d, double weight, double weight_scale, double sigma, bool gradients);
+    bool hasCoefficients() { return _has_coeff; }
+    bool hasCoefficientsGrad() { return _has_coeff_grad; }
     void add(BasisExpansion &other) { _coeff = _coeff + other._coeff; }
     void conjugate();
     void writeDensity(std::string filename, Options *options,
@@ -81,7 +84,14 @@ public:
     	arch & _basis;
     	arch & _radbasis;
     	arch & _angbasis;
+
+    	arch & _has_coeff;
     	arch & _coeff;
+
+    	arch & _has_coeff_grad;
+    	arch & _coeff_grad_x;
+    	arch & _coeff_grad_y;
+    	arch & _coeff_grad_z;
     }
 
 private:
@@ -89,9 +99,22 @@ private:
 	RadialBasis *_radbasis;
 	AngularBasis *_angbasis;
 
+	bool _has_coeff;
 	RadialBasis::radcoeff_t _radcoeff; // access via (n,l)
 	AngularBasis::angcoeff_t _angcoeff; // access via (l*l+l+m)
 	coeff_t _coeff; // access via (n, l*l+l+m)
+
+	bool _has_coeff_grad;
+	vec _weight_scale_grad;
+	RadialBasis::radcoeff_t _radcoeff_grad_x;
+	RadialBasis::radcoeff_t _radcoeff_grad_y;
+	RadialBasis::radcoeff_t _radcoeff_grad_z;
+	AngularBasis::angcoeff_t _angcoeff_grad_x;
+	AngularBasis::angcoeff_t _angcoeff_grad_y;
+	AngularBasis::angcoeff_t _angcoeff_grad_z;
+	coeff_t _coeff_grad_x;
+	coeff_t _coeff_grad_y;
+	coeff_t _coeff_grad_z;
 };
 
 }

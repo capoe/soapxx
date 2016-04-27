@@ -28,19 +28,9 @@ public:
         _center_weight(-1.) {;}
     virtual ~CutoffFunction() {;}
     virtual void configure(Options &options);
-    virtual double calculateWeight(double r) {
-        double weight_at_r = 1.;
-        if (r > _Rc) {
-            weight_at_r = -1.;
-        }
-        else if (r <= _Rc - _Rc_width) {
-            weight_at_r = 1.;
-        }
-        else {
-            weight_at_r = 0.5*(1+cos(M_PI*(r-_Rc+_Rc_width)/_Rc_width));
-        }
-        return weight_at_r;
-    }
+    virtual bool isWithinCutoff(double r);
+    virtual double calculateWeight(double r);
+    virtual vec calculateGradientWeight(double r, vec d);
 
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
@@ -51,11 +41,13 @@ public:
     }
 
 protected:
-
     std::string _type;
     double _Rc;
     double _Rc_width;
     double _center_weight;
+
+public:
+    static constexpr double WEIGHT_ZERO = 1e-10;
 };
 
 

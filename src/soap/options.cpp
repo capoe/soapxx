@@ -7,6 +7,7 @@ Options::Options() :
 	_center_excludes(boost::python::list()) {
 
 	// Set defaults
+    this->set("spectrum.gradients", false);
 	this->set("radialbasis.type", "gaussian");
 	this->set("radialbasis.mode", "equispaced");
 	this->set("radialbasis.N", 9);
@@ -69,6 +70,7 @@ void Options::registerPython() {
 	void (Options::*set_int)(std::string, int) = &Options::set;
 	void (Options::*set_double)(std::string, double) = &Options::set;
 	void (Options::*set_string)(std::string, std::string) = &Options::set;
+	//void (Options::*set_bool)(std::string, bool) = &Options::set;
 
 	class_<Options, Options*>("Options")
         .def("__str__", &Options::summarizeOptions)
