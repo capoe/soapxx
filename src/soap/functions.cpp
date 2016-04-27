@@ -86,21 +86,26 @@ void ModifiedSphericalBessel1stKind::evaluate(double r, bool differentiate) {
     _in = ModifiedSphericalBessel1stKind::eval(_degree, r);
 
     if (differentiate) {
+        _din.resize(_degree+1, 0.);
         if (r < RADZERO) {
-            _din.push_back(0.0);
-            _din.push_back(1./3.);
-            for (int n = 1; n <= _degree; ++n) {
-                _din.push_back(0.);
-            }
+            _din[1] = 1./3.;
+            //_din.push_back(0.0);
+            //_din.push_back(1./3.);
+            //for (int n = 2; n <= _degree; ++n) {
+            //    _din.push_back(0.);
+            //}
         }
         else {
-            _din.push_back( _in[1] );
+            _din[0] = _in[1];
             for (int n = 1; n <= _degree; ++n) {
-                _din.push_back( _in[n-1] - (n+1.)/r*_in[n] );
+                _din[n] = _in[n-1] - (n+1.)/r*_in[n];
             }
+            //_din.push_back( _in[1] );
+            //for (int n = 1; n <= _degree; ++n) {
+            //    _din.push_back( _in[n-1] - (n+1.)/r*_in[n] );
+            //}
         }
     }
-
     return;
 }
 

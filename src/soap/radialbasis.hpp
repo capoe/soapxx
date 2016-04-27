@@ -114,6 +114,15 @@ public:
 	}
 };
 
+void compute_integrals_il_expik_r2_dr(
+    double ai,
+    double ri,
+    double beta_ik,
+    double rho_ik,
+    int L_plus_1,
+    int n_steps,
+    std::vector<double> *integrals,
+    std::vector<double> *integrals_derivative);
 
 class RadialBasisFactory 
     : public soap::base::ObjectFactory<std::string, RadialBasis>

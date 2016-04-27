@@ -10,6 +10,8 @@ class TestCutoffShiftedCosine : public ::testing::Test
 public:
     soap::Options _options;
     soap::CutoffFunction *_cutoff;
+    std::string _constructor_stdout;
+    std::string _constructor_stdout_ref;
    
     virtual void SetUp() {
         _options.set("radialcutoff.type", "shifted-cosine");
@@ -19,7 +21,10 @@ public:
         
         soap::CutoffFunctionFactory::registerAll();
         _cutoff = soap::CutoffFunctionOutlet().create(_options.get<std::string>("radialcutoff.type"));
+        ::testing::internal::CaptureStdout();
 	    _cutoff->configure(_options);
+        _constructor_stdout = ::testing::internal::GetCapturedStdout();
+        _constructor_stdout_ref = "Weighting function with Rc = 4, _Rc_width = 0.5, central weight = 1\n";
     }
 
     virtual void TearDown() {
@@ -33,6 +38,8 @@ TEST_F(TestCutoffShiftedCosine, Constructor) {
     EXPECT_DOUBLE_EQ(_cutoff->getCenterWeight(), 1.);
     EXPECT_DOUBLE_EQ(_cutoff->getCutoffWidth(), 0.5);
     EXPECT_DOUBLE_EQ(_cutoff->getCutoff(), 4.);
+
+    EXPECT_EQ(_constructor_stdout, _constructor_stdout_ref);
 }
 
 TEST_F(TestCutoffShiftedCosine, Weight) {

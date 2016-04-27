@@ -110,11 +110,12 @@ void RadialBasisGaussian::configure(Options &options) {
     	throw std::runtime_error("Not implemented.");
     }
     // SUMMARIZE
-    GLOG() << "Created " << _N << " radial Gaussians at r = { ";
+    GLOG() << "Created " << _N << " radial Gaussians at:" << std::endl;
     for (basis_it_t bit = _basis.begin(); bit != _basis.end(); ++bit) {
-        GLOG() << (*bit)->_r0 << " (" << (*bit)->_sigma << ") ";
+        GLOG() << boost::format(" r = %1$+1.7e") % (*bit)->_r0
+            << boost::format(" (sigma = %1$+1.7e") % (*bit)->_sigma << ") "
+            << std::endl;
     }
-    GLOG() << "}" << std::endl;
 
     // COMPUTE OVERLAP MATRIX s_{ij} = \int g_i(r) g_j(r) r^2 dr
     _Sij = ub::matrix<double>(_N, _N);
@@ -178,6 +179,105 @@ void RadialBasisGaussian::configure(Options &options) {
 	}
 }
 
+
+// For each l: integral S r^2 dr i_l(2*ai*ri*r) exp(-beta_ik*(r-rho_ik)^2)
+void compute_integrals_il_expik_r2_dr(
+        double ai,
+        double ri,
+        double beta_ik,
+        double rho_ik,
+        int L_plus_1,
+        int n_steps,
+        std::vector<double> *integrals,
+        std::vector<double> *integrals_derivative) {
+
+    bool gradients = (integrals_derivative != NULL) ? true : false;
+
+    // Sanity checks
+    assert(integrals->size() == L_plus_1);
+    if (gradients) assert(integrals->size() == L_plus_1);
+
+    // Sample coordinates along r-axis
+    double sigma_ik = sqrt(0.5/beta_ik);
+    double r_min = rho_ik - 4*sigma_ik;
+    double r_max = rho_ik + 4*sigma_ik;
+    if (r_min < 0.) {
+        r_max -= r_min;
+        r_min = 0.;
+    }
+    double delta_r_step = (r_max-r_min)/(n_steps-1);
+    int n_sample = 2*n_steps+1;
+    double delta_r_sample = 0.5*delta_r_step;
+
+    ModifiedSphericalBessel1stKind mosbest(L_plus_1-1);
+
+    if (gradients) {
+        // Compute samples for all l's ...
+        ub::matrix<double> integrand_l_at_r = ub::zero_matrix<double>(L_plus_1, n_sample);
+        ub::matrix<double> integrand_derivative_l_at_r = ub::zero_matrix<double>(L_plus_1, n_sample);
+        for (int s = 0; s < n_sample; ++s) {
+            double r_sample = r_min - delta_r_sample + s*delta_r_sample;
+            double exp_ik = exp(-beta_ik*(r_sample-rho_ik)*(r_sample-rho_ik));
+            mosbest.evaluate(2*ai*ri*r_sample, gradients);
+            for (int l = 0; l != L_plus_1; ++l) {
+                integrand_l_at_r(l,s) =
+                    r_sample*r_sample*
+                    mosbest._in[l]*
+                    exp_ik;
+                integrand_derivative_l_at_r(l,s) =
+                    2*ai*r_sample*r_sample*r_sample*
+                    mosbest._din[l]*
+                    exp_ik;
+            }
+        }
+        // ... integrate (à la Simpson)
+        std::vector<double> &ints = *integrals;
+        std::vector<double> &ints_deriv = *integrals_derivative;
+        for (int s = 0; s < n_steps; ++s) {
+            for (int l = 0; l != L_plus_1; ++l) {
+                ints[l] += delta_r_step/6.*(
+                    integrand_l_at_r(l, 2*s)+
+                    4*integrand_l_at_r(l, 2*s+1)+
+                    integrand_l_at_r(l, 2*s+2)
+                );
+                ints_deriv[l] += delta_r_step/6.*(
+                    integrand_derivative_l_at_r(l, 2*s)+
+                    4*integrand_derivative_l_at_r(l, 2*s+1)+
+                    integrand_derivative_l_at_r(l, 2*s+2)
+                );
+            }
+        }
+    }
+    else {
+        // Compute samples ...
+        ub::matrix<double> integrand_l_at_r = ub::zero_matrix<double>(L_plus_1, n_sample);
+        for (int s = 0; s < n_sample; ++s) {
+            double r_sample = r_min - delta_r_sample + s*delta_r_sample;
+            double exp_ik = exp(-beta_ik*(r_sample-rho_ik)*(r_sample-rho_ik));
+            mosbest.evaluate(2*ai*ri*r_sample, gradients);
+            for (int l = 0; l != L_plus_1; ++l) {
+                integrand_l_at_r(l,s) =
+                    r_sample*r_sample*
+                    mosbest._in[l]*
+                    exp_ik;
+            }
+        }
+        // ... integrate (à la Simpson)
+        std::vector<double> &ints = *integrals;
+        for (int s = 0; s < n_steps; ++s) {
+            for (int l = 0; l != L_plus_1; ++l) {
+                ints[l] += delta_r_step/6.*(
+                    integrand_l_at_r(l, 2*s)+
+                    4*integrand_l_at_r(l, 2*s+1)+
+                    integrand_l_at_r(l, 2*s+2)
+                );
+            }
+        }
+    }
+
+    return;
+}
+
 void RadialBasisGaussian::computeCoefficients(
         vec d,
         double r,
@@ -196,6 +296,9 @@ void RadialBasisGaussian::computeCoefficients(
 	// Delta-type expansion =>
 	// Second (l) dimension of <save_here> and <particle_sigma> ignored here
 	if (particle_sigma < RadialBasis::RADZERO) {
+	    if (gradients) {
+            throw soap::base::NotImplemented("<RadialBasisGaussian::computeCoefficients> Gradients when sigma=0.");
+        }
 		basis_it_t it;
 		int n = 0;
 		for (it = _basis.begin(), n = 0; it != _basis.end(); ++it, ++n) {
@@ -207,7 +310,6 @@ void RadialBasisGaussian::computeCoefficients(
 		Gnl = ub::prod(_Tij, Gnl);
 	}
 	else {
-
 		// Particle properties
 		double ai = 1./(2*particle_sigma*particle_sigma);
 		double ri = r;
@@ -217,78 +319,65 @@ void RadialBasisGaussian::computeCoefficients(
 		int k = 0;
 		basis_it_t it;
 		for (it = _basis.begin(), k = 0; it != _basis.end(); ++it, ++k) {
-			// Radial Gaussian properties
+			// Prefactor (r-independent)
 			double ak = (*it)->_alpha;
 			double rk = (*it)->_r0;
 			double norm_r2_g2_dr_rad_k = (*it)->_norm_r2_g2_dr;
-			// Combined properties
 			double beta_ik = ai+ak;
 			double rho_ik = ak*rk/beta_ik;
-
-			double sigma_ik = sqrt(0.5/beta_ik);
-			RadialGaussian gik_rad(rho_ik, sigma_ik);
-			double norm_r2_g_dr_rad_ik = gik_rad._norm_r2_g_dr;
-
 			double prefac =
 			    4*M_PI *
-				norm_r2_g2_dr_rad_k*norm_g_dV_sph_i/norm_r2_g_dr_rad_ik *
+				norm_r2_g2_dr_rad_k*norm_g_dV_sph_i *
 				exp(-ai*ri*ri) *
 				exp(-ak*rk*rk*(1-ak/beta_ik));
 
-			// NUMERICAL INTEGRATION
-			// ZERO COEFFS
+			// Zero coeffs (to be safe ...)
 			for (int l = 0; l != Gnl.size2(); ++l) {
 			    Gnl(k, l) = 0.0;
 			}
-
-			// SIMPSON'S RULE
-			double r_min = rho_ik - 4*sigma_ik;
-			double r_max = rho_ik + 4*sigma_ik;
-			if (r_min < 0.) {
-				r_max -= r_min;
-				r_min = 0.;
-			}
-			int n_steps = this->_integration_steps;
-			double delta_r_step = (r_max-r_min)/(n_steps-1);
-			int n_sample = 2*n_steps+1;
-			double delta_r_sample = 0.5*delta_r_step;
-
-			// Compute samples for all l's
-			// For each l, store integrand at r_sample
-			ub::matrix<double> integrand_l_at_r = ub::zero_matrix<double>(Gnl.size2(), n_sample);
-			// TODO ub::matrix<double> grad_integrand_l_at_r = ...
-			// TODO Apply prefactor later (after integration)
-			// TODO gamma_kl = prefactor*integral_kl
-			// TODO grad_gamma_kl = -2*ai*ri*gamma_kl + prefactor*grad_integral_kl
-			for (int s = 0; s < n_sample; ++s) {
-				// f0 f1 f2 f3 ....  f-3 f-2 f-1
-				// |-----||----||----||-------|
-				double r_sample = r_min - delta_r_sample + s*delta_r_sample;
-				// ... Generate Bessels
-				std::vector<double> sph_il = ModifiedSphericalBessel1stKind::eval(Gnl.size2(), 2*ai*ri*r_sample);
-				// ... Compute & store integrands
-				for (int l = 0; l != Gnl.size2(); ++l) {
-					integrand_l_at_r(l, s) =
-					    prefac*
-						r_sample*r_sample*
-						sph_il[l]*
-						exp(-beta_ik*(r_sample-rho_ik)*(r_sample-rho_ik))*norm_r2_g_dr_rad_ik;
-				}
-			}
-			// Apply Simpson's rule
-			for (int s = 0; s < n_steps; ++s) {
-				for (int l = 0; l != Gnl.size2(); ++l) {
-				    Gnl(k,l) +=
-						delta_r_step/6.*(
-							integrand_l_at_r(l, 2*s)+
-							4*integrand_l_at_r(l, 2*s+1)+
-							integrand_l_at_r(l, 2*s+2)
-						);
-				}
+			if (gradients) {
+			    for (int l = 0; l != Gnl.size2(); ++l) {
+			        (*dGnl_dx)(k,l) = 0.0;
+			        (*dGnl_dy)(k,l) = 0.0;
+			        (*dGnl_dz)(k,l) = 0.0;
+			    }
 			}
 
+			// Compute integrals S r^2 dr i_l(2*ai*ri*r) exp(-beta_ik*(r-rho_ik)^2)
+			// and (derivative) S 2*ai*r^3 dr i_l(2*ai*ri*r) exp(-beta_ik*(r-rho_ik)^2)
+			if (gradients) {
+			    std::vector<double> integrals;
+                integrals.resize(Gnl.size2(), 0.);
+                std::vector<double> integrals_derivative;
+			    integrals_derivative.resize(Gnl.size2(), 0.);
+			    compute_integrals_il_expik_r2_dr(
+                    ai, ri, beta_ik, rho_ik, Gnl.size2(), _integration_steps,
+                    &integrals, &integrals_derivative);
+                for (int l = 0; l != Gnl.size2(); ++l) {
+                    Gnl(k, l) = prefac*integrals[l];
+                    double dgkl = -4*M_PI*2*ai*ri*Gnl(k,l) + prefac*integrals_derivative[l];
+                    (*dGnl_dx)(k,l) = dgkl*d.getX();
+                    (*dGnl_dy)(k,l) = dgkl*d.getY();
+                    (*dGnl_dz)(k,l) = dgkl*d.getZ();
+                }
+			}
+			else {
+			    std::vector<double> integrals;
+                integrals.resize(Gnl.size2(), 0.);
+                compute_integrals_il_expik_r2_dr(
+                    ai, ri, beta_ik, rho_ik, Gnl.size2(), _integration_steps,
+                    &integrals, NULL);
+                for (int l = 0; l != Gnl.size2(); ++l) {
+                    Gnl(k, l) = prefac*integrals[l];
+                }
+			}
 		}
 		Gnl = ub::prod(_Tij, Gnl);
+		if (gradients) {
+		    (*dGnl_dx) = ub::prod(_Tij, *dGnl_dx);
+		    (*dGnl_dy) = ub::prod(_Tij, *dGnl_dy);
+		    (*dGnl_dz) = ub::prod(_Tij, *dGnl_dz);
+		}
 	}
     return;
 }
