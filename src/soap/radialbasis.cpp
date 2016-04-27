@@ -355,7 +355,7 @@ void RadialBasisGaussian::computeCoefficients(
                     &integrals, &integrals_derivative);
                 for (int l = 0; l != Gnl.size2(); ++l) {
                     Gnl(k, l) = prefac*integrals[l];
-                    double dgkl = -4*M_PI*2*ai*ri*Gnl(k,l) + prefac*integrals_derivative[l];
+                    double dgkl = -2.*ai*ri*Gnl(k,l) + prefac*integrals_derivative[l];
                     (*dGnl_dx)(k,l) = dgkl*d.getX();
                     (*dGnl_dy)(k,l) = dgkl*d.getY();
                     (*dGnl_dz)(k,l) = dgkl*d.getZ();
