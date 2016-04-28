@@ -372,6 +372,14 @@ void RadialBasisGaussian::computeCoefficients(
                 }
 			}
 		}
+
+//		for (int k = 0; k < (*dGnl_dx).size1(); ++k) {
+//		    for (int l = 0; l < (*dGnl_dx).size2(); ++l) {
+//		        std::cout << boost::format("%1$+1.7f %2$d %3$d %4$+1.7e %5$+1.7e %6$+1.7e %7$+1.7e")
+//		            % r % k % l % Gnl(k,l) % (*dGnl_dx)(k,l) % (*dGnl_dy)(k,l) % (*dGnl_dz)(k,l) << std::endl;
+//		    }
+//		}
+
 		Gnl = ub::prod(_Tij, Gnl);
 		if (gradients) {
 		    (*dGnl_dx) = ub::prod(_Tij, *dGnl_dx);

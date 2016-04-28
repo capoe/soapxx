@@ -96,15 +96,9 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
         vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
         double r = soap::linalg::abs(dr);
         if (! this->_basis->getCutoff()->isWithinCutoff(r)) continue;
-
-        //double weight_scale = this->_basis->getCutoff()->calculateWeight(r);
-        //if (weight_scale <= CutoffFunction::WEIGHT_ZERO) continue;
         vec d = dr/r;
 
         // APPLY WEIGHT IF CENTER
-        //if (*pit == center) {
-        //    weight_scale *= this->_basis->getCutoff()->getCenterWeight();
-        //}
         double weight0 = (*pit)->getWeight();
         double weight_scale = _basis->getCutoff()->calculateWeight(r);
         if (*pit == center) {

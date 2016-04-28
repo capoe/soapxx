@@ -115,7 +115,19 @@ TEST_F(TestRadialBasisGaussian, Constructor) {
     }
 }
 
-TEST_F(TestRadialBasisGaussian, computeCoefficientsGradients) {
+TEST_F(TestRadialBasisGaussian, computeCoefficientsGradients) {    
+    
+    // PARAMETERS: SETUP
+    double sigma = 0.5;
+    soap::vec d(0.,1.,0.);
+    double dr = 0.5;
+    double N_r_samples = 10;    
+    std::vector< std::pair<int,int> > kl_list { 
+        std::pair<int,int>{0,1}, 
+        std::pair<int,int>{3,0}, 
+        std::pair<int,int>{7,2} };
+    
+    // OUTPUT: SETUP
     int N = _radbasis->N();
     int L = _options.get<int>("angularbasis.L");
 
@@ -123,14 +135,28 @@ TEST_F(TestRadialBasisGaussian, computeCoefficientsGradients) {
     soap::RadialBasis::radcoeff_t dGnl_dx = soap::RadialBasis::radcoeff_zero_t(N,L+1);
     soap::RadialBasis::radcoeff_t dGnl_dy = soap::RadialBasis::radcoeff_zero_t(N,L+1);
     soap::RadialBasis::radcoeff_t dGnl_dz = soap::RadialBasis::radcoeff_zero_t(N,L+1);
-
-    /*
-    double sigma = 0.5;
-    soap::vec d(0.,1.,0.);
-    double r = 0.;
-    _radbasis->computeCoefficients(d, r, sigma, Gnl, dGnl_dx, dGnl_dy, dGnl_dz);
-    */
-
+    
+    // GENERATE
+    ::testing::internal::CaptureStdout();
+    for (int i = 0; i < N_r_samples; ++i) {
+        double ri = i*dr;
+        _radbasis->computeCoefficients(d, ri, sigma, Gnl, &dGnl_dx, &dGnl_dy, &dGnl_dz);        
+        
+        for (auto kl = kl_list.begin(); kl != kl_list.end(); ++kl) {
+            int k = (*kl).first;
+            int l = (*kl).second;
+            std::cout << boost::format("ri=%1$+1.7f k=%2$d l=%3$d %4$+1.7e %5$+1.7e %6$+1.7e %7$+1.7e ")
+                % ri % k % l % Gnl(k,l) % (dGnl_dx)(k,l) % (dGnl_dy)(k,l) % (dGnl_dz)(k,l) << std::flush;
+        }
+    }
+    
+    // VERIFY
+    std::string capture = ::testing::internal::GetCapturedStdout();
+    std::string capture_ref = "ri=+0.0000000 k=0 l=1 +0.0000000e+00 +0.0000000e+00 +1.1290706e+00 +0.0000000e+00 ri=+0.0000000 k=3 l=0 -1.6766282e-02 +0.0000000e+00 +0.0000000e+00 +0.0000000e+00 ri=+0.0000000 k=7 l=2 +0.0000000e+00 +0.0000000e+00 +0.0000000e+00 +0.0000000e+00 ri=+0.5000000 k=0 l=1 +4.1923545e-01 +0.0000000e+00 +3.3923961e-01 +0.0000000e+00 ri=+0.5000000 k=3 l=0 -2.0307498e-02 +0.0000000e+00 -2.1938577e-02 +0.0000000e+00 ri=+0.5000000 k=7 l=2 -7.4463158e-04 +0.0000000e+00 -1.6976156e-03 +0.0000000e+00 ri=+1.0000000 k=0 l=1 +3.4758879e-01 +0.0000000e+00 -4.5906064e-01 +0.0000000e+00 ri=+1.0000000 k=3 l=0 -5.1773726e-03 +0.0000000e+00 +1.5179894e-01 +0.0000000e+00 ri=+1.0000000 k=7 l=2 +6.5109983e-04 +0.0000000e+00 +6.7094414e-03 +0.0000000e+00 ri=+1.5000000 k=0 l=1 +1.2525628e-01 +0.0000000e+00 -3.3883494e-01 +0.0000000e+00 ri=+1.5000000 k=3 l=0 +1.4783849e-01 +0.0000000e+00 +3.8395021e-01 +0.0000000e+00 ri=+1.5000000 k=7 l=2 -3.2864325e-04 +0.0000000e+00 -1.5007935e-02 +0.0000000e+00 ri=+2.0000000 k=0 l=1 +2.4105014e-02 +0.0000000e+00 -9.3139826e-02 +0.0000000e+00 ri=+2.0000000 k=3 l=0 +2.6779871e-01 +0.0000000e+00 +2.5715774e-02 +0.0000000e+00 ri=+2.0000000 k=7 l=2 -4.9915564e-03 +0.0000000e+00 +1.3169613e-02 +0.0000000e+00 ri=+2.5000000 k=0 l=1 +2.6681970e-03 +0.0000000e+00 -1.3156527e-02 +0.0000000e+00 ri=+2.5000000 k=3 l=0 +1.8943025e-01 +0.0000000e+00 -2.6538685e-01 +0.0000000e+00 ri=+2.5000000 k=7 l=2 +1.2764517e-02 +0.0000000e+00 +3.4633567e-02 +0.0000000e+00 ri=+3.0000000 k=0 l=1 +1.7508377e-04 +0.0000000e+00 -1.0436941e-03 +0.0000000e+00 ri=+3.0000000 k=3 l=0 +6.9423484e-02 +0.0000000e+00 -1.7936480e-01 +0.0000000e+00 ri=+3.0000000 k=7 l=2 +6.0499578e-03 +0.0000000e+00 -6.2962003e-02 +0.0000000e+00 ri=+3.5000000 k=0 l=1 +6.8898763e-06 +0.0000000e+00 -4.8086339e-05 +0.0000000e+00 ri=+3.5000000 k=3 l=0 +1.4506579e-02 +0.0000000e+00 -5.3395498e-02 +0.0000000e+00 ri=+3.5000000 k=7 l=2 -2.4447509e-02 +0.0000000e+00 -2.6584282e-02 +0.0000000e+00 ri=+4.0000000 k=0 l=1 +1.6269418e-07 +0.0000000e+00 -1.3031468e-06 +0.0000000e+00 ri=+4.0000000 k=3 l=0 +1.7204100e-03 +0.0000000e+00 -8.3897684e-03 +0.0000000e+00 ri=+4.0000000 k=7 l=2 -1.4173474e-02 +0.0000000e+00 +4.6853015e-02 +0.0000000e+00 ri=+4.5000000 k=0 l=1 +2.2638085e-09 +0.0000000e+00 -2.0617355e-08 +0.0000000e+00 ri=+4.5000000 k=3 l=0 +1.0674873e-04 +0.0000000e+00 -6.7033707e-04 +0.0000000e+00 ri=+4.5000000 k=7 l=2 +1.5068192e-03 +0.0000000e+00 +9.9520461e-03 +0.0000000e+00 ";
+    EXPECT_EQ(capture, capture_ref);
+    
+    // GENERATE REFERENCE
+    //std::cout << capture << std::endl;
 }
 
 TEST_F(TestRadialBasisGaussian, NumericalIntegrationBessel) {
