@@ -62,8 +62,6 @@ void Spectrum::compute(Structure::particle_array_t &centers, Structure::particle
         if (_options->doExcludeCenter((*pit)->getType())) continue;
         // Compute ...
         AtomicSpectrum *atomic_spectrum = this->computeAtomic(*pit, targets);
-        //atomic_spectrum->getReduced()->writeDensityOnGrid("density.expanded.cube", _options, _structure, *pit, true);
-        //atomic_spectrum->getReduced()->writeDensityOnGrid("density.explicit.cube", _options, _structure, *pit, false);
         this->addAtomic(atomic_spectrum);
     }
 }
@@ -74,6 +72,12 @@ void Spectrum::computePower() {
         (*it)->computePower();
     }
     return;
+}
+
+void Spectrum::computePowerGradients() {
+    for (auto it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
+        (*it)->computePowerGradients();
+    }
 }
 
 AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
@@ -92,25 +96,25 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
         // CHECK FOR EXCLUSIONS
         if (_options->doExcludeTarget((*pit)->getType())) continue;
 
-        // FIND DISTANCE & DIRECTION, APPLY CUTOFF (= WEIGHT REDUCTION)
+        // FIND DISTANCE & DIRECTION, CHECK CUTOFF
         vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
         double r = soap::linalg::abs(dr);
         if (! this->_basis->getCutoff()->isWithinCutoff(r)) continue;
-        vec d = dr/r;
+        vec d = (r > 0.) ? dr/r : vec(0.,0.,1.);
 
-        // APPLY WEIGHT IF CENTER
+        // APPLY CUTOFF (= WEIGHT REDUCTION)
+        bool is_center = (*pit == center);
         double weight0 = (*pit)->getWeight();
         double weight_scale = _basis->getCutoff()->calculateWeight(r);
-        if (*pit == center) {
+        if (is_center) {
             weight0 *= _basis->getCutoff()->getCenterWeight();
         }
 
         // COMPUTE EXPANSION & ADD TO SPECTRUM
-        bool gradients = _options->get<bool>("spectrum.gradients");
-        BasisExpansion nb_expansion(this->_basis);
-        nb_expansion.computeCoefficients(r, d, weight0, weight_scale, (*pit)->getSigma(), gradients);
-        std::string type_other = (*pit)->getType();
-        atomic_spectrum->addQnlm(type_other, nb_expansion);
+        bool gradients = (is_center) ? false : _options->get<bool>("spectrum.gradients");
+        BasisExpansion *nb_expansion = new BasisExpansion(this->_basis); // <- kept by AtomicSpectrum
+        nb_expansion->computeCoefficients(r, d, weight0, weight_scale, (*pit)->getSigma(), gradients);
+        atomic_spectrum->addQnlmNeighbour(*pit, nb_expansion);
     }
 
     return atomic_spectrum;
@@ -234,6 +238,7 @@ void Spectrum::registerPython() {
 	    .def("compute", computeSegPair)
 	    .def("compute", computeCentersTargets)
 		.def("computePower", &Spectrum::computePower)
+		.def("computePowerGradients", &Spectrum::computePowerGradients)
 		.def("addAtomic", &Spectrum::addAtomic)
 		.def("getAtomic", &Spectrum::getAtomic, return_value_policy<reference_existing_object>())
 	    .def("saveAndClean", &Spectrum::saveAndClean)

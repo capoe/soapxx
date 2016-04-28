@@ -30,6 +30,13 @@ public:
     explicit APIError(std::string mssg) : std::runtime_error("APIError["+mssg+"]") { ; }
 };
 
+class SanityCheckFailed : public std::runtime_error
+{
+public:
+    explicit SanityCheckFailed(std::string mssg) : std::runtime_error("SanityCheckFailed["+mssg+"]") { ; }
+};
+
+
 }}
 
 #endif

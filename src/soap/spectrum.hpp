@@ -58,6 +58,7 @@ public:
 	void writePowerDensity(int slot_idx, std::string center_type, std::string type1, std::string type2);
 
 	void computePower();
+	void computePowerGradients();
 	void computeLinear();
 
 	static void registerPython();

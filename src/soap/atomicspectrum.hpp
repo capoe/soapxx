@@ -22,11 +22,20 @@ namespace soap {
 class AtomicSpectrum : public std::map<std::string, BasisExpansion*>
 {
 public:
+    // EXPANSION TYPES
 	typedef BasisExpansion qnlm_t;
 	typedef PowerExpansion xnkl_t;
+	typedef std::pair<std::string, std::string> type_pair_t;
+
+	// CONTAINERS FOR STORING SCALAR FIELDS
 	typedef std::map<std::string, qnlm_t*> map_qnlm_t; // <- key: center type, e.g. 'C'
 	typedef std::map<std::pair<std::string, std::string>, xnkl_t*> map_xnkl_t; // <- key: type string pair, e.g. ('C','H')
-	typedef std::pair<std::string, std::string> type_pair_t;
+
+	// CONTAINERS FOR STORING GRADIENTS
+	typedef std::map<int, std::pair<std::string,qnlm_t*> > map_pid_qnlm_t; // <- id=>(type;qnlm)
+	typedef std::map<int, map_xnkl_t> map_pid_xnkl_t; // <- id=>type=>xnkl
+	typedef std::map<int, xnkl_t*> map_pid_xnkl_gc_t; // <- id=>xnkl_generic_coherent
+
 
 	AtomicSpectrum(Particle *center, Basis *basis);
 	AtomicSpectrum() { this->null(); }
@@ -43,10 +52,12 @@ public:
 	Basis *getBasis() { return _basis; }
 	// QNLM METHODS
     void addQnlm(std::string type, qnlm_t &nb_expansion);
+    void addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion);
     qnlm_t *getQnlm(std::string type);
     qnlm_t *getQnlmGeneric() { return _qnlm_generic; }
     // XNKL METHODS
     void computePower();
+    void computePowerGradients();
     xnkl_t *getPower(std::string type1, std::string type2);
     xnkl_t *getXnkl(type_pair_t &types);
     map_xnkl_t &getXnklMap() { return _map_xnkl; }
@@ -70,6 +81,10 @@ public:
     	arch & _map_xnkl;
     	arch & _xnkl_generic_coherent;
     	arch & _xnkl_generic_incoherent;
+    	// PID-resolved
+    	arch & _map_pid_qnlm;
+    	arch & _map_pid_xnkl;
+    	arch & _map_pid_xnkl_gc;
     	return;
     }
 protected:
@@ -78,13 +93,20 @@ protected:
 	vec _center_pos;
 	std::string _center_type;
 	Basis *_basis;
+
 	// DENSITY EXPANSION
 	map_qnlm_t _map_qnlm;
 	qnlm_t *_qnlm_generic;
+
 	// POWER DENSITY EXPANSION
 	map_xnkl_t _map_xnkl;
 	xnkl_t *_xnkl_generic_coherent;
 	xnkl_t *_xnkl_generic_incoherent;
+
+	// PID-RESOLVED (GRADIENTS)
+	map_pid_qnlm_t _map_pid_qnlm; // <- for gradients wrt position of neighbour with global id
+	map_pid_xnkl_t _map_pid_xnkl;
+	map_pid_xnkl_gc_t _map_pid_xnkl_gc;
 };
 
 

@@ -48,16 +48,15 @@ BasisExpansion::BasisExpansion(Basis *basis) :
 	_basis(basis),
 	_radbasis(basis->getRadBasis()),
 	_angbasis(basis->getAngBasis()),
-	_has_coeff(false),
-	_has_coeff_grad(false) {
+	_has_scalars(false),
+	_has_gradients(false) {
     int L = _angbasis->L();
     int N = _radbasis->N();
-    _has_coeff = true;
-    if (_has_coeff) {
-        _radcoeff = RadialBasis::radcoeff_zero_t(N,L+1);
-        _angcoeff = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
-        _coeff = coeff_zero_t(N,(L+1)*(L+1));
-    }
+    // ZERO SCALAR-FIELD CONTAINERS
+    _has_scalars = true;
+    _radcoeff = RadialBasis::radcoeff_zero_t(N,L+1);
+    _angcoeff = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
+    _coeff = coeff_zero_t(N,(L+1)*(L+1));
 }
 
 BasisExpansion::~BasisExpansion() {
@@ -86,15 +85,15 @@ void BasisExpansion::computeCoefficients(double r, vec d, double weight, double 
     // SETUP STORAGE
     int L = _angbasis->L();
     int N = _radbasis->N();
-    if (!_has_coeff) {
+    if (!_has_scalars) {
         // Should have already been done in constructor ::BasisExpansion(Basis *basis)
-        _has_coeff = true;
+        _has_scalars = true;
         _radcoeff = RadialBasis::radcoeff_zero_t(N,L+1);
         _angcoeff = AngularBasis::angcoeff_zero_t((L+1)*(L+1));
         _coeff = coeff_zero_t(N,(L+1)*(L+1));
     }
     if (gradients) {
-        _has_coeff_grad = true;
+        _has_gradients = true;
         _radcoeff_grad_x = RadialBasis::radcoeff_zero_t(N,L+1);
         _radcoeff_grad_y = RadialBasis::radcoeff_zero_t(N,L+1);
         _radcoeff_grad_z = RadialBasis::radcoeff_zero_t(N,L+1);
@@ -106,18 +105,18 @@ void BasisExpansion::computeCoefficients(double r, vec d, double weight, double 
         _coeff_grad_z = coeff_zero_t(N,(L+1)*(L+1));
     }
     // COMPUTE
-    if (_has_coeff && !_has_coeff_grad) {
+    if (_has_scalars && !_has_gradients) {
         _radbasis->computeCoefficients(d, r, sigma, _radcoeff, NULL, NULL, NULL);
         _angbasis->computeCoefficients(d, r, sigma, _angcoeff, NULL, NULL, NULL);
     }
-    else if (_has_coeff && _has_coeff_grad) {
+    else if (_has_scalars && _has_gradients) {
         std::cout << "GRAD" << std::endl;
         _radbasis->computeCoefficients(d, r, sigma, _radcoeff, &_radcoeff_grad_x, &_radcoeff_grad_y, &_radcoeff_grad_z);
         _angbasis->computeCoefficients(d, r, sigma, _angcoeff, &_angcoeff_grad_x, &_angcoeff_grad_y, &_angcoeff_grad_z);
         _weight_scale_grad = _basis->getCutoff()->calculateGradientWeight(r, d);
     }
     // MERGE
-    if (_has_coeff) {
+    if (_has_scalars) {
         for (int n = 0; n != _radbasis->N(); ++n) {
             for (int l = 0; l != _angbasis->L()+1; ++l) {
                 for (int m = -l; m != l+1; ++m) {
@@ -127,7 +126,7 @@ void BasisExpansion::computeCoefficients(double r, vec d, double weight, double 
         }
         _coeff *= weight*weight_scale;
     }
-    if (_has_coeff_grad) {
+    if (_has_gradients) {
         for (int n = 0; n != _radbasis->N(); ++n) {
             for (int l = 0; l != _angbasis->L()+1; ++l) {
                 for (int m = -l; m != l+1; ++m) {
@@ -151,6 +150,16 @@ void BasisExpansion::computeCoefficients(double r, vec d, double weight, double 
             } // l
         } // n
     }
+
+    // CLEAR INTERMEDIATE STORAGE (NOT REQUIRED LATER)
+    _radcoeff.clear();
+    _angcoeff.clear();
+    _radcoeff_grad_x.clear();
+    _radcoeff_grad_y.clear();
+    _radcoeff_grad_z.clear();
+    _angcoeff_grad_x.clear();
+    _angcoeff_grad_y.clear();
+    _angcoeff_grad_z.clear();
 
 	return;
 }

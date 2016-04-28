@@ -56,18 +56,21 @@ public:
 	typedef ub::zero_matrix< std::complex<double> > coeff_zero_t;
 
 	BasisExpansion(Basis *basis);
-	BasisExpansion() : _basis(NULL), _radbasis(NULL), _angbasis(NULL), _has_coeff(false), _has_coeff_grad(false) {;}
+	BasisExpansion() : _basis(NULL), _radbasis(NULL), _angbasis(NULL), _has_scalars(false), _has_gradients(false) {;}
     ~BasisExpansion();
 
     Basis *getBasis() { return _basis; }
     coeff_t &getCoefficients() { return _coeff; }
+    coeff_t &getCoefficientsGradX() { return _coeff_grad_x; }
+    coeff_t &getCoefficientsGradY() { return _coeff_grad_y; }
+    coeff_t &getCoefficientsGradZ() { return _coeff_grad_z; }
     RadialBasis::radcoeff_t &getRadCoeffs() { return _radcoeff; }
 	AngularBasis::angcoeff_t &getAngCoeffs() { return _angcoeff; }
 
 	void computeCoefficients(double r, vec d);
     void computeCoefficients(double r, vec d, double weight, double weight_scale, double sigma, bool gradients);
-    bool hasCoefficients() { return _has_coeff; }
-    bool hasCoefficientsGrad() { return _has_coeff_grad; }
+    bool hasScalars() { return _has_scalars; }
+    bool hasGradients() { return _has_gradients; }
     void add(BasisExpansion &other) { _coeff = _coeff + other._coeff; }
     void conjugate();
     void writeDensity(std::string filename, Options *options,
@@ -85,10 +88,10 @@ public:
     	arch & _radbasis;
     	arch & _angbasis;
 
-    	arch & _has_coeff;
+    	arch & _has_scalars;
     	arch & _coeff;
 
-    	arch & _has_coeff_grad;
+    	arch & _has_gradients;
     	arch & _coeff_grad_x;
     	arch & _coeff_grad_y;
     	arch & _coeff_grad_z;
@@ -99,12 +102,12 @@ private:
 	RadialBasis *_radbasis;
 	AngularBasis *_angbasis;
 
-	bool _has_coeff;
+	bool _has_scalars;
 	RadialBasis::radcoeff_t _radcoeff; // access via (n,l)
 	AngularBasis::angcoeff_t _angcoeff; // access via (l*l+l+m)
 	coeff_t _coeff; // access via (n, l*l+l+m)
 
-	bool _has_coeff_grad;
+	bool _has_gradients;
 	vec _weight_scale_grad;
 	RadialBasis::radcoeff_t _radcoeff_grad_x;
 	RadialBasis::radcoeff_t _radcoeff_grad_y;

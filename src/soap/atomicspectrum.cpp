@@ -17,16 +17,21 @@ AtomicSpectrum::AtomicSpectrum(Particle *center, Basis *basis) {
 }
 
 AtomicSpectrum::~AtomicSpectrum() {
-    // Clean Qnlm's
-    for (map_qnlm_t::iterator it = _map_qnlm.begin(); it != _map_qnlm.end(); ++it) delete it->second;
+    // CLEAN QNLM'S
+    // ... Summed density expansions
+    for (auto it = _map_qnlm.begin(); it != _map_qnlm.end(); ++it) delete it->second;
     _map_qnlm.clear();
+    // ... Generic density
     if (_qnlm_generic) {
         delete _qnlm_generic;
         _qnlm_generic = NULL;
     }
-    // Clean Xnkl's
-    for (map_xnkl_t::iterator it = _map_xnkl.begin(); it != _map_xnkl.end(); ++it) delete it->second;
+    // CLEAN XNKL'S
+    // ... Scalar spectra
+    for (auto it = _map_xnkl.begin(); it != _map_xnkl.end(); ++it) delete it->second;
     _map_xnkl.clear();
+
+    // ... Generic power spectra
     if (_xnkl_generic_coherent) {
         delete _xnkl_generic_coherent;
         _xnkl_generic_coherent = NULL;
@@ -34,6 +39,22 @@ AtomicSpectrum::~AtomicSpectrum() {
     if (_xnkl_generic_incoherent) {
         delete _xnkl_generic_incoherent;
         _xnkl_generic_incoherent = NULL;
+    }
+    // CLEAN PID-RESOLVED GRADIENTS
+    // ... Neighbour density expansions with gradients
+    for (auto it = _map_pid_qnlm.begin(); it != _map_pid_qnlm.end(); ++it) delete it->second.second;
+    _map_pid_qnlm.clear();
+    // ... Xnkl gradients
+    for (auto it = _map_pid_xnkl.begin(); it != _map_pid_xnkl.end(); ++it) {
+        for (auto jt = (*it).second.begin(); jt != (*it).second.end(); ++jt) {
+            delete (*jt).second;
+        }
+        (*it).second.clear();
+    }
+    _map_pid_xnkl.clear();
+    // ... Gradients (generic-coherent)
+    for (auto it = _map_pid_xnkl_gc.begin(); it != _map_pid_xnkl_gc.end(); ++it) {
+        delete it->second;
     }
 }
 
@@ -111,6 +132,25 @@ void AtomicSpectrum::addQnlm(std::string type, qnlm_t &nb_expansion) {
     return;
 }
 
+void AtomicSpectrum::addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion) {
+    std::string type = nb->getType();
+    int id = nb->getId();
+    this->addQnlm(type, *nb_expansion);
+
+    if (nb == this->getCenter()) {
+        delete nb_expansion; // <- gradients should be zero, do not store
+        std::cout << "DO NOT STORE" << std::endl;
+    }
+    else {
+        auto it = _map_pid_qnlm.find(id);
+        if (it != _map_pid_qnlm.end()) {
+            throw soap::base::SanityCheckFailed("<AtomicSpectrum::addQnlm> Already have entry for pid.");
+        }
+        _map_pid_qnlm[id] = std::pair<std::string,qnlm_t*>(type, nb_expansion);
+    }
+    return;
+}
+
 AtomicSpectrum::qnlm_t *AtomicSpectrum::getQnlm(std::string type) {
     if (type == "") {
         return _qnlm_generic;
@@ -124,7 +164,70 @@ AtomicSpectrum::qnlm_t *AtomicSpectrum::getQnlm(std::string type) {
     }
 }
 
+void AtomicSpectrum::computePowerGradients() {
+    GLOG() << "CID " << _center->getId() << ": " << std::endl;
+    for (auto it1 = _map_pid_qnlm.begin(); it1 != _map_pid_qnlm.end(); ++it1) {
+        // Derivatives are taken with respect to the coordinates of this neighbour particle
+        int pi_id = it1->first;
+        std::string pi_type = it1->second.first;
+        qnlm_t *pi_qnlm = it1->second.second;
+        // Check and prepare storage in map
+        auto it = _map_pid_xnkl.find(pi_id);
+        if (it != _map_pid_xnkl.end()) {
+            soap::base::SanityCheckFailed("<AtomicSpectrum::computePowerGradients> Already have entry for pid.");
+        }
+        _map_pid_xnkl[pi_id] = map_xnkl_t();
+        map_xnkl_t &xnkl_map = _map_pid_xnkl[pi_id];
+        // Compute for all type pairs
+        GLOG() << "    NID " << pi_id << " " << std::flush;
+        for (auto it2 = _map_qnlm.begin(); it2 != _map_qnlm.end(); ++it2) {
+            std::string type_other = it2->first;
+            qnlm_t *sum_qnlm_type_other = it2->second;
+            if (pi_type == type_other) {
+                // Type 1 == type 2
+                GLOG() << pi_type << "=" << type_other << " " << std::flush;
+                PowerExpansion *powex = new PowerExpansion(_basis);
+                powex->computeCoefficientsGradients(pi_qnlm, sum_qnlm_type_other, true);
+                // Store ...
+                type_pair_t types(pi_type, type_other);
+                auto it = xnkl_map.find(types);
+                assert(it == xnkl_map.end());
+                xnkl_map[types] = powex;
+            }
+            else {
+                // Type 1 != type 2
+                GLOG() << pi_type << ":" << type_other << " " << std::flush;
+                PowerExpansion *powex_12 = new PowerExpansion(_basis);
+                powex_12->computeCoefficientsGradients(pi_qnlm, sum_qnlm_type_other, false);
+                GLOG() << type_other << ":" << pi_type << " " << std::flush;
+                PowerExpansion *powex_21 = new PowerExpansion(_basis);
+                powex_21->computeCoefficientsGradients(sum_qnlm_type_other, pi_qnlm, false);
+                // Store ...
+                type_pair_t types_12(pi_type, type_other);
+                type_pair_t types_21(type_other, pi_type);
+                auto it12 = xnkl_map.find(types_12);
+                auto it21 = xnkl_map.find(types_21);
+                assert(it12 == xnkl_map.end() && it21 == xnkl_map.end());
+                xnkl_map[types_12] = powex_12;
+                xnkl_map[types_21] = powex_21;
+            }
+        }
+        if (_qnlm_generic) {
+            auto it = _map_pid_xnkl_gc.find(pi_id);
+            if (it != _map_pid_xnkl_gc.end()) assert(false && "Already have Xnkl_gc gradients for pid.");
+            GLOG() << "*:* " << std::flush;
+            PowerExpansion *powex = new PowerExpansion(_basis);
+            powex->computeCoefficientsGradients(pi_qnlm, _qnlm_generic, true);
+            _map_pid_xnkl_gc[pi_id] = powex;
+        }
+        GLOG() << std::endl;
+    }
+    return;
+}
+
 void AtomicSpectrum::computePower() {
+    // TODO Calling this function more than once with the same object
+    // TODO causes memory leaks => check for existing _map_xnkl entries
     // Specific (i.e., type-dependent)
     map_qnlm_t::iterator it1;
     map_qnlm_t::iterator it2;

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <boost/format.hpp>
 #include <gtest/gtest.h>
@@ -113,6 +114,35 @@ TEST_F(TestCutoffShiftedCosine, GradientWeight) {
 
         double abs_grad = soap::linalg::abs(grad);
         std::cout << r << " " << abs_grad << std::endl;
+    }
+    */
+    
+    /*
+    // MANUAL TESTING
+    int N = 100;
+    double dx = 0.05;
+    
+    std::string logfile = "tmp_cutoff";
+    std::ofstream ofs;
+    ofs.open(logfile.c_str(), std::ofstream::out);
+    if (!ofs.is_open()) {
+        throw std::runtime_error("Bad file handle: " + logfile);
+    }
+    
+    for (int i = 0; i < N; ++i) {
+        soap::vec d(1.,0.,0.);
+        double r = i*dx;
+        
+        double w = _cutoff->calculateWeight(r);
+        soap::vec w_grad = _cutoff->calculateGradientWeight(r, d);        
+        
+        ofs << boost::format("%1$+1.4f %2$+1.7e %3$+1.7e %4$+1.7e %5$+1.7e") 
+            % r % w
+            % w_grad.getX()
+            % w_grad.getY()
+            % w_grad.getZ()
+             << std::endl;
+        
     }
     */
 }
