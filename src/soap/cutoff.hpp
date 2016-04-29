@@ -50,6 +50,21 @@ public:
     static constexpr double WEIGHT_ZERO = 1e-10;
 };
 
+class CutoffFunctionHeaviside : public CutoffFunction
+{
+public:
+    CutoffFunctionHeaviside() { _type = "heaviside"; _Rc = -1; }
+    void configure(Options &options);
+    bool isWithinCutoff(double r);
+    double calculateWeight(double r);
+    virtual vec calculateGradientWeight(double r, vec d);
+
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<CutoffFunction>(*this);
+    }
+};
+
 
 class CutoffFunctionFactory
     : public soap::base::ObjectFactory<std::string, CutoffFunction>

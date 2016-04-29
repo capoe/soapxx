@@ -26,6 +26,7 @@ public:
     void set(std::string key, std::string value) { _key_value_map[key] = value; }
     void set(std::string key, int value) { this->set(key, boost::lexical_cast<std::string>(value)); }
     void set(std::string key, double value) { this->set(key, boost::lexical_cast<std::string>(value)); }
+    bool hasKey(std::string key) { return (_key_value_map.find(key) == _key_value_map.end()) ? false : true; }
     //void set(std::string key, bool value) { this->set(key, boost::lexical_cast<std::string>(value)); }
 	void configureCenters(boost::python::list center_excludes) { _center_excludes = center_excludes; }
 	std::string summarizeOptions();

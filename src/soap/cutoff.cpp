@@ -35,10 +35,7 @@ double CutoffFunction::calculateWeight(double r) {
 
 vec CutoffFunction::calculateGradientWeight(double r, vec d) {
     vec grad_weight(0.,0.,0.);
-    if (r > _Rc) {
-        ;
-    }
-    else if (r <= _Rc - _Rc_width) {
+    if (r > _Rc || r <= _Rc - _Rc_width) {
         ;
     }
     else {
@@ -49,8 +46,35 @@ vec CutoffFunction::calculateGradientWeight(double r, vec d) {
     return grad_weight;
 }
 
+void CutoffFunctionHeaviside::configure(Options &options) {
+    _Rc = options.get<double>("radialcutoff.Rc");
+    _Rc_width = options.get<double>("radialcutoff.Rc_width");
+    _center_weight = options.get<double>("radialcutoff.center_weight");
+
+    // To harmonize with adaptive Gaussian basis sets, increase cutoff:
+    if (options.hasKey("radialcutoff.Rc_heaviside")) {
+        _Rc = options.get<double>("radialcutoff.Rc_heaviside"); // <- Set by RadialBasisGaussian::configure
+    }
+
+    GLOG() << "Weighting function with "
+        << "Rc = " << _Rc << ", central weight = " << _center_weight << std::endl;
+}
+
+bool CutoffFunctionHeaviside::isWithinCutoff(double r) {
+    return (r <= _Rc);
+}
+
+double CutoffFunctionHeaviside::calculateWeight(double r) {
+    return (r > _Rc) ? -1.e-10 : 1.;
+}
+
+vec CutoffFunctionHeaviside::calculateGradientWeight(double r, vec d) {
+    return vec(0.,0.,0.);
+}
+
 void CutoffFunctionFactory::registerAll(void) {
 	CutoffFunctionOutlet().Register<CutoffFunction>("shifted-cosine");
+	CutoffFunctionOutlet().Register<CutoffFunctionHeaviside>("heaviside");
 }
 
 

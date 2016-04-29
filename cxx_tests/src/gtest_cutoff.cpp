@@ -147,5 +147,51 @@ TEST_F(TestCutoffShiftedCosine, GradientWeight) {
     */
 }
 
+class TestCutoffHeaviside : public ::testing::Test
+{
+public:
+    soap::Options _options;
+    soap::CutoffFunction *_cutoff;
+    std::string _constructor_stdout;
+    std::string _constructor_stdout_ref;
+   
+    virtual void SetUp() {
+        _options.set("radialcutoff.type", "heaviside");
+	    _options.set("radialcutoff.Rc", 4.);
+	    _options.set("radialcutoff.Rc_width", 0.5);
+	    _options.set("radialcutoff.center_weight", 1.);
+        
+        soap::CutoffFunctionFactory::registerAll();
+        _cutoff = soap::CutoffFunctionOutlet().create(_options.get<std::string>("radialcutoff.type"));
+        ::testing::internal::CaptureStdout();
+	    _cutoff->configure(_options);
+        _constructor_stdout = ::testing::internal::GetCapturedStdout();
+        _constructor_stdout_ref = "Weighting function with Rc = 4, central weight = 1\n";
+    }
+
+    virtual void TearDown() {
+        delete _cutoff;
+        _cutoff = NULL;
+    }
+};
+
+TEST_F(TestCutoffHeaviside, Constructor) {
+    EXPECT_EQ(_cutoff->identify(), "heaviside");
+    EXPECT_DOUBLE_EQ(_cutoff->getCenterWeight(), 1.);
+    EXPECT_DOUBLE_EQ(_cutoff->getCutoffWidth(), 0.5);
+    EXPECT_DOUBLE_EQ(_cutoff->getCutoff(), 4.);
+    EXPECT_EQ(_constructor_stdout, _constructor_stdout_ref);
+}
+
+TEST_F(TestCutoffHeaviside, Weight) {
+    EXPECT_DOUBLE_EQ(_cutoff->calculateWeight(1.), 1.);
+    EXPECT_DOUBLE_EQ(_cutoff->calculateWeight(3.999), 1.);
+    EXPECT_DOUBLE_EQ(_cutoff->calculateWeight(4.), 1.);
+    EXPECT_DOUBLE_EQ(_cutoff->calculateWeight(4.0001), -1e-10);
+}
+
+
+
+
 
 

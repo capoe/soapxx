@@ -103,6 +103,7 @@ void RadialBasisGaussian::configure(Options &options) {
         }
         _Rc = r - sigma_stride_factor*sigma;
         options.set("radialcutoff.Rc", _Rc);
+        options.set("radialcutoff.Rc_heaviside", _Rc+1.5*sigma);
         GLOG() << "Adjusted radial cutoff to " << _Rc
         	<< " based on sigma_0 = " << sigma_0 << ", L = " << L << ", stride = " << sigma_stride_factor << std::endl;
     }
