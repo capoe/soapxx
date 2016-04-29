@@ -25,6 +25,9 @@ public:
 
     Basis *getBasis() { return _basis; }
     coeff_t &getCoefficients() { return _coeff; }
+    coeff_t &getCoefficientsGradX() { return _coeff_grad_x; }
+    coeff_t &getCoefficientsGradY() { return _coeff_grad_y; }
+    coeff_t &getCoefficientsGradZ() { return _coeff_grad_z; }
     void computeCoefficients(BasisExpansion *basex1, BasisExpansion *basex2);
     void computeCoefficientsGradients(BasisExpansion *dqnlm, BasisExpansion *qnlm, bool same_types);
     void add(PowerExpansion *other);

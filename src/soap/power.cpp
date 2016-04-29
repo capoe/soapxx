@@ -74,16 +74,16 @@ void PowerExpansion::computeCoefficientsGradients(BasisExpansion *basex1, BasisE
                     std::complex<double> c_nkl_dz = 0.0;
                     for (int m = -l; m <= l; ++m) {
                         int lm = l*l+l+m;
-                        c_nkl_dx = dqnlm_dx(n,lm)*std::conj(qnlm(k,lm))
+                        c_nkl_dx += dqnlm_dx(n,lm)*std::conj(qnlm(k,lm))
                                  + qnlm(n,lm)*std::conj(dqnlm_dx(k,lm));
-                        c_nkl_dy = dqnlm_dy(n,lm)*std::conj(qnlm(k,lm))
+                        c_nkl_dy += dqnlm_dy(n,lm)*std::conj(qnlm(k,lm))
                                  + qnlm(n,lm)*std::conj(dqnlm_dy(k,lm));
-                        c_nkl_dz = dqnlm_dz(n,lm)*std::conj(qnlm(k,lm))
+                        c_nkl_dz += dqnlm_dz(n,lm)*std::conj(qnlm(k,lm))
                                  + qnlm(n,lm)*std::conj(dqnlm_dz(k,lm));
                     }
                     _coeff_grad_x(n*_N+k, l) = 2.*sqrt(2.)*M_PI/sqrt(2.*l+1)*c_nkl_dx; // Normalization = sqrt(8\pi^2/(2l+1))
                     _coeff_grad_y(n*_N+k, l) = 2.*sqrt(2.)*M_PI/sqrt(2.*l+1)*c_nkl_dy;
-                    _coeff_grad_y(n*_N+k, l) = 2.*sqrt(2.)*M_PI/sqrt(2.*l+1)*c_nkl_dz;
+                    _coeff_grad_z(n*_N+k, l) = 2.*sqrt(2.)*M_PI/sqrt(2.*l+1)*c_nkl_dz;
                 }
             }
         }
@@ -97,22 +97,22 @@ void PowerExpansion::computeCoefficientsGradients(BasisExpansion *basex1, BasisE
                     if (grad_first) {
                         for (int m = -l; m <= l; ++m) {
                             int lm = l*l+l+m;
-                            c_nkl_dx = dqnlm_dx(n,lm)*std::conj(qnlm(k,lm));
-                            c_nkl_dy = dqnlm_dy(n,lm)*std::conj(qnlm(k,lm));
-                            c_nkl_dz = dqnlm_dz(n,lm)*std::conj(qnlm(k,lm));
+                            c_nkl_dx += dqnlm_dx(n,lm)*std::conj(qnlm(k,lm));
+                            c_nkl_dy += dqnlm_dy(n,lm)*std::conj(qnlm(k,lm));
+                            c_nkl_dz += dqnlm_dz(n,lm)*std::conj(qnlm(k,lm));
                         }
                     }
                     else {
                         for (int m = -l; m <= l; ++m) {
                             int lm = l*l+l+m;
-                            c_nkl_dx = qnlm(n,lm)*std::conj(dqnlm_dx(k,lm));
-                            c_nkl_dy = qnlm(n,lm)*std::conj(dqnlm_dy(k,lm));
-                            c_nkl_dz = qnlm(n,lm)*std::conj(dqnlm_dz(k,lm));
+                            c_nkl_dx += qnlm(n,lm)*std::conj(dqnlm_dx(k,lm));
+                            c_nkl_dy += qnlm(n,lm)*std::conj(dqnlm_dy(k,lm));
+                            c_nkl_dz += qnlm(n,lm)*std::conj(dqnlm_dz(k,lm));
                         }
                     }
                     _coeff_grad_x(n*_N+k, l) = 2.*sqrt(2.)*M_PI/sqrt(2.*l+1)*c_nkl_dx; // Normalization = sqrt(8\pi^2/(2l+1))
                     _coeff_grad_y(n*_N+k, l) = 2.*sqrt(2.)*M_PI/sqrt(2.*l+1)*c_nkl_dy;
-                    _coeff_grad_y(n*_N+k, l) = 2.*sqrt(2.)*M_PI/sqrt(2.*l+1)*c_nkl_dz;
+                    _coeff_grad_z(n*_N+k, l) = 2.*sqrt(2.)*M_PI/sqrt(2.*l+1)*c_nkl_dz;
                 }
             }
         }
@@ -122,8 +122,8 @@ void PowerExpansion::computeCoefficientsGradients(BasisExpansion *basex1, BasisE
 
 void PowerExpansion::computeCoefficients(BasisExpansion *basex1, BasisExpansion *basex2) {
     if (!_basis) throw soap::base::APIError("PowerExpansion::computeCoefficients, basis not initialised.");
-    assert(basex1->hasGradients() == false); // <- Not a requirement, just to check this function is used in the intended manner
-    assert(basex2->hasGradients() == false);
+    //assert(basex1->hasGradients() == false); // <- Not a requirement, just to check this function is used in the intended manner
+    //assert(basex2->hasGradients() == false);
 
     BasisExpansion::coeff_t &coeff1 = basex1->getCoefficients();
     BasisExpansion::coeff_t &coeff2 = basex2->getCoefficients();
