@@ -163,6 +163,7 @@ void Structure::registerPython() {
 	   .def("__iter__", range<return_value_policy<reference_existing_object> >(&Structure::beginParticles, &Structure::endParticles))
 	   .add_property("particles", range<return_value_policy<reference_existing_object> >(&Structure::beginParticles, &Structure::endParticles))
 	   .add_property("segments", range<return_value_policy<reference_existing_object> >(&Structure::beginSegments, &Structure::endSegments))
+       .add_property("n_particles", &Structure::getNumberOfParticles)
 	   .def("connect", &Structure::connectNumeric)
 	   .add_property("box", &Structure::getBoundaryNumeric, &Structure::setBoundaryNumeric)
 	   .add_property("label", make_function(&Structure::getLabel, copy_non_const()), &Structure::setLabel);

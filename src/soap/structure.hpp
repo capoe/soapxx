@@ -147,6 +147,7 @@ public:
     particle_array_t &particles() { return _particles; }
     particle_it_t beginParticles() { return _particles.begin(); }
     particle_it_t endParticles() { return _particles.end(); }
+    int getNumberOfParticles() { return _particles.size(); }
 
     // SEGMENT CONTAINER
     segment_array_t &segments() { return _segments; }

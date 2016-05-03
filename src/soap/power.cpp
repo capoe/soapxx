@@ -3,6 +3,8 @@
 
 namespace soap {
 
+const std::string PowerExpansion::_numpy_t = "complex128";
+
 PowerExpansion::PowerExpansion(Basis *basis) :
     _basis(basis),
     _L(basis->getAngBasis()->L()),
@@ -69,9 +71,9 @@ void PowerExpansion::computeCoefficientsGradients(BasisExpansion *basex1, BasisE
         for (int n = 0; n < _N; ++n) {
             for (int k = 0; k < _N; ++k) {
                 for (int l = 0; l < (_L+1); ++l) {
-                    std::complex<double> c_nkl_dx = 0.0;
-                    std::complex<double> c_nkl_dy = 0.0;
-                    std::complex<double> c_nkl_dz = 0.0;
+                    dtype_t c_nkl_dx = 0.0;
+                    dtype_t c_nkl_dy = 0.0;
+                    dtype_t c_nkl_dz = 0.0;
                     for (int m = -l; m <= l; ++m) {
                         int lm = l*l+l+m;
                         c_nkl_dx += dqnlm_dx(n,lm)*std::conj(qnlm(k,lm))
@@ -91,9 +93,9 @@ void PowerExpansion::computeCoefficientsGradients(BasisExpansion *basex1, BasisE
         for (int n = 0; n < _N; ++n) {
             for (int k = 0; k < _N; ++k) {
                 for (int l = 0; l < (_L+1); ++l) {
-                    std::complex<double> c_nkl_dx = 0.0;
-                    std::complex<double> c_nkl_dy = 0.0;
-                    std::complex<double> c_nkl_dz = 0.0;
+                    dtype_t c_nkl_dx = 0.0;
+                    dtype_t c_nkl_dy = 0.0;
+                    dtype_t c_nkl_dz = 0.0;
                     if (grad_first) {
                         for (int m = -l; m <= l; ++m) {
                             int lm = l*l+l+m;
@@ -131,7 +133,7 @@ void PowerExpansion::computeCoefficients(BasisExpansion *basex1, BasisExpansion 
         for (int k = 0; k < _N; ++k) {
             for (int l = 0; l < (_L+1); ++l) {
                 //std::cout << n << " " << k << " " << l << " : " << std::flush;
-                std::complex<double> c_nkl = 0.0;
+                dtype_t c_nkl = 0.0;
                 for (int m = -l; m <= l; ++m) {
                     //std::cout << m << " " << std::flush;
                     c_nkl += coeff1(n, l*l+l+m)*std::conj(coeff2(k, l*l+l+m));
@@ -153,8 +155,8 @@ void PowerExpansion::add(PowerExpansion *other) {
 }
 
 void PowerExpansion::setCoefficientsNumpy(boost::python::object &np_array) {
-    soap::linalg::numpy_converter npc("complex128");
-    npc.numpy_to_ublas< std::complex<double> >(np_array, _coeff);
+    soap::linalg::numpy_converter npc(_numpy_t.c_str());
+    npc.numpy_to_ublas< dtype_t >(np_array, _coeff);
     if (_coeff.size1() != _N*_N ||
         _coeff.size2() != _L+1) {
         throw soap::base::APIError("<PowerExpansion::setCoefficientsNumpy> Matrix size not consistent with basis.");
@@ -162,9 +164,26 @@ void PowerExpansion::setCoefficientsNumpy(boost::python::object &np_array) {
 }
 
 boost::python::object PowerExpansion::getCoefficientsNumpy() {
-    soap::linalg::numpy_converter npc("complex128");
-    return npc.ublas_to_numpy< std::complex<double> >(_coeff);
+    soap::linalg::numpy_converter npc(_numpy_t.c_str());
+    return npc.ublas_to_numpy< dtype_t >(_coeff);
 }
+
+boost::python::object PowerExpansion::getCoefficientsGradXNumpy() {
+    soap::linalg::numpy_converter npc(_numpy_t.c_str());
+    return npc.ublas_to_numpy< dtype_t >(_coeff_grad_x);
+}
+
+boost::python::object PowerExpansion::getCoefficientsGradYNumpy() {
+    soap::linalg::numpy_converter npc(_numpy_t.c_str());
+    return npc.ublas_to_numpy< dtype_t >(_coeff_grad_y);
+}
+
+boost::python::object PowerExpansion::getCoefficientsGradZNumpy() {
+    soap::linalg::numpy_converter npc(_numpy_t.c_str());
+    return npc.ublas_to_numpy< dtype_t >(_coeff_grad_z);
+}
+
+
 
 void PowerExpansion::writeDensity(
     std::string filename,
@@ -183,7 +202,7 @@ void PowerExpansion::writeDensity(
     for (int n = 0; n < _N; ++n) {
         for (int k = 0; k < _N; ++k) {
             for (int l = 0; l <= _L; ++l) {
-                std::complex<double> c_nkl = coeff(n*_N+k, l);
+                dtype_t c_nkl = coeff(n*_N+k, l);
                 double c_nkl_real = c_nkl.real();
                 double c_nkl_imag = c_nkl.imag();
                 sum_intensity += c_nkl_real*c_nkl_real + c_nkl_imag*c_nkl_imag;
@@ -202,7 +221,10 @@ void PowerExpansion::registerPython() {
 
     class_<PowerExpansion, PowerExpansion*>("PowerExpansion", init<Basis*>())
         .add_property("array", &PowerExpansion::getCoefficientsNumpy, &PowerExpansion::setCoefficientsNumpy)
-        .def("getArray", &PowerExpansion::getCoefficientsNumpy);
+        .def("getArray", &PowerExpansion::getCoefficientsNumpy)
+        .def("getArrayGradX", &PowerExpansion::getCoefficientsGradXNumpy)
+        .def("getArrayGradY", &PowerExpansion::getCoefficientsGradYNumpy)
+        .def("getArrayGradZ", &PowerExpansion::getCoefficientsGradZNumpy);
 }
 
 }

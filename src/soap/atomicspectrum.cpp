@@ -98,10 +98,10 @@ void AtomicSpectrum::invert(map_xnkl_t &map_xnkl, xnkl_t *xnkl_generic_coherent,
     int k = 0;
     int l = 0;
     int m = 0;
-    qnlm(n, l*l+l+m) = cmplx(sqrt(xnkl(n*N+k, l).real()), 0.);
-    for (k = 1; k < N; ++k) {
-        qnlm(k, l*l+l+m) = cmplx(xnkl(n*N+k, l).real()/qnlm(0, l*l+l+m).real(), 0.);
-    }
+//    qnlm(n, l*l+l+m) = cmplx(sqrt(xnkl(n*N+k, l).real()), 0.);
+//    for (k = 1; k < N; ++k) {
+//        qnlm(k, l*l+l+m) = cmplx(xnkl(n*N+k, l).real()/qnlm(0, l*l+l+m).real(), 0.);
+//    }
 
 //    // FILL Qn00's USING Xnn0's
 //    for (int n = 0; n < N; ++n) {
@@ -139,7 +139,7 @@ void AtomicSpectrum::addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion) {
 
     if (nb == this->getCenter()) {
         delete nb_expansion; // <- gradients should be zero, do not store
-        std::cout << "DO NOT STORE" << std::endl;
+        //std::cout << "DO NOT STORE" << std::endl;
     }
     else {
         auto it = _map_pid_qnlm.find(id);
@@ -304,6 +304,14 @@ boost::python::list AtomicSpectrum::getTypes() {
     return types;
 }
 
+boost::python::list AtomicSpectrum::getNeighbourPids() {
+    boost::python::list pids;
+    for (auto it = _map_pid_xnkl_gc.begin(); it != _map_pid_xnkl_gc.end(); ++it) {
+        pids.append(it->first);
+    }
+    return pids;
+}
+
 void AtomicSpectrum::registerPython() {
     using namespace boost::python;
 
@@ -317,7 +325,9 @@ void AtomicSpectrum::registerPython() {
         .def("getLinear", &AtomicSpectrum::getQnlm, return_value_policy<reference_existing_object>())
         .def("computePower", &AtomicSpectrum::computePower)
         .def("getTypes", &AtomicSpectrum::getTypes)
+        .def("getNeighbourPids", &AtomicSpectrum::getNeighbourPids)
         .def("getPower", &AtomicSpectrum::getPower, return_value_policy<reference_existing_object>())
+        .def("getPowerGradGeneric", &AtomicSpectrum::getPowerGradGeneric, return_value_policy<reference_existing_object>())
         .def("getCenter", &AtomicSpectrum::getCenter, return_value_policy<reference_existing_object>())
         .def("getCenterType", &AtomicSpectrum::getCenterType, return_value_policy<reference_existing_object>())
         .def("getCenterPos", &AtomicSpectrum::getCenterPos, return_value_policy<reference_existing_object>());

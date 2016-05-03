@@ -17,8 +17,12 @@ namespace ub = boost::numeric::ublas;
 class PowerExpansion
 {
 public:
-	typedef ub::matrix< std::complex<double> > coeff_t;
-	typedef ub::zero_matrix< std::complex<double> > coeff_zero_t;
+    typedef std::complex<double> dtype_t;
+	typedef ub::matrix< dtype_t > coeff_t;
+	typedef ub::zero_matrix< dtype_t > coeff_zero_t;
+
+	static const std::string _numpy_t;
+    static constexpr double IMAG_EPSILON = 1e-15;
 
 	PowerExpansion() : _basis(NULL), _L(-1), _N(-1), _has_scalars(false), _has_gradients(false) {;}
     PowerExpansion(Basis *basis);
@@ -35,6 +39,9 @@ public:
 
     void setCoefficientsNumpy(boost::python::object &np_array);
     boost::python::object getCoefficientsNumpy();
+    boost::python::object getCoefficientsGradXNumpy();
+    boost::python::object getCoefficientsGradYNumpy();
+    boost::python::object getCoefficientsGradZNumpy();
     static void registerPython();
 
     template<class Archive>

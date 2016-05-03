@@ -36,6 +36,7 @@ Basis::~Basis() {
 void Basis::registerPython() {
 	using namespace boost::python;
 	class_<Basis, Basis*>("Basis", init<>())
+	    .def(init<Options*>())
 	    .add_property("N", make_function(&Basis::N, copy_const()))
 		.add_property("L", make_function(&Basis::L, copy_const()));
 }
@@ -110,7 +111,7 @@ void BasisExpansion::computeCoefficients(double r, vec d, double weight, double 
         _angbasis->computeCoefficients(d, r, sigma, _angcoeff, NULL, NULL, NULL);
     }
     else if (_has_scalars && _has_gradients) {
-        std::cout << "GRAD" << std::endl;
+        //std::cout << "GRAD" << std::endl;
         _radbasis->computeCoefficients(d, r, sigma, _radcoeff, &_radcoeff_grad_x, &_radcoeff_grad_y, &_radcoeff_grad_z);
         _angbasis->computeCoefficients(d, r, sigma, _angcoeff, &_angcoeff_grad_x, &_angcoeff_grad_y, &_angcoeff_grad_z);
         _weight_scale_grad = _basis->getCutoff()->calculateGradientWeight(r, d);

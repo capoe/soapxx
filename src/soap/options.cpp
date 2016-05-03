@@ -70,6 +70,7 @@ void Options::registerPython() {
 	void (Options::*set_int)(std::string, int) = &Options::set;
 	void (Options::*set_double)(std::string, double) = &Options::set;
 	void (Options::*set_string)(std::string, std::string) = &Options::set;
+	std::string (Options::*get_string)(std::string) = &Options::get;
 	//void (Options::*set_bool)(std::string, bool) = &Options::set;
 
 	class_<Options, Options*>("Options")
@@ -79,7 +80,8 @@ void Options::registerPython() {
 		.def("excludeTargets", &Options::excludeTargets)
 		.def("set", set_int)
 		.def("set", set_double)
-		.def("set", set_string);
+		.def("set", set_string)
+		.def("get", get_string);
 }
 
 } /* Close namespaces */
