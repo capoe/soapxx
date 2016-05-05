@@ -7,18 +7,20 @@ import numpy as np
 import logging
 
 from momo import osio, endl, flush
-from kernel import KernelPotential, restore_positions, apply_force_step, perturb_positions
+from kernel import KernelPotential, restore_positions, apply_force_step, apply_force_norm_step, perturb_positions, random_positions
 
 logging.basicConfig(
     format='[%(asctime)s] %(message)s', 
     datefmt='%I:%M:%S', 
-    level=logging.DEBUG)
-verbose = True
+    level=logging.ERROR)
+verbose = False
 
 
 exclude_center_pids = [2,3]
 exclude_perturb_pids = [1]
 constrain_pids = []
+perturb_initial = False
+random_initial = True
 
 
 
@@ -28,11 +30,11 @@ options.excludeTargets([])
 options.excludeCenterIds(exclude_center_pids)
 options.excludeTargetIds([])
 options.set('radialbasis.type', 'gaussian')
-options.set('radialbasis.mode', 'adaptive')
+options.set('radialbasis.mode', 'adaptive') # equispaced or adaptive
 options.set('radialbasis.N', 9) # 9
-options.set('radialbasis.sigma', 0.5) # 0.9
+options.set('radialbasis.sigma', 1.5) # 0.9
 options.set('radialbasis.integration_steps', 15)
-options.set('radialcutoff.Rc', 6.8)
+options.set('radialcutoff.Rc', 4.)
 options.set('radialcutoff.Rc_width', 0.5)
 options.set('radialcutoff.type', 'heaviside')
 options.set('radialcutoff.center_weight', 1.)
@@ -61,7 +63,7 @@ for p in positions_0: print p
 # SETUP KERNEL
 soap.silence()
 kernelpot = KernelPotential(options)
-kernelpot.acquire(structure, 1.)
+kernelpot.acquire(structure, -1.)
 
 #positions = [ 
 #    np.array([0.,   0.,  0.]),
@@ -72,15 +74,27 @@ kernelpot.acquire(structure, 1.)
 #restore_positions(structure, positions_0)
 
 # PERTURB POSITIONS
-positions_0_pert = perturb_positions(structure, exclude_pid=exclude_perturb_pids)
-print "Positions after initial perturbation"
-for p in positions_0_pert: print p
+if perturb_initial:
+    positions_0_pert = perturb_positions(structure, exclude_pid=exclude_perturb_pids)    
+    print "Positions after initial perturbation"
+    for p in positions_0_pert: print p
+    
+if random_initial:
+    positions_0_pert = random_positions(structure)
+    print "Positions after initial randomization"
+    for p in positions_0_pert: print p
 
 raw_input('...')
 
 acquire_restore_every_nth = -1
 
 ofs = open('log.xyz', 'w')
+
+# Write first frame
+ofs.write('%d\n\n' % structure.n_particles)
+for p in structure.particles:
+    r = p.pos
+    ofs.write('%s %+1.7f %+1.7f %+1.7f\n' % (p.type, r[0], r[1], r[2]))
 
 # Energy (int)
 e_in = kernelpot.computeEnergy(structure)

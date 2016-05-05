@@ -1,6 +1,6 @@
 apply
 build
-soap
+./soap
 Makefile
 test/old
 test/back

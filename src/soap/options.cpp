@@ -43,6 +43,7 @@ void Options::excludeCenters(boost::python::list &types) {
     for (int i = 0; i < boost::python::len(types); ++i) {
         std::string type = boost::python::extract<std::string>(types[i]);
         _exclude_center[type] = true;
+        _exclude_center_list.append(type);
     }
     return;
 }
@@ -51,18 +52,47 @@ void Options::excludeTargets(boost::python::list &types) {
     for (int i = 0; i < boost::python::len(types); ++i) {
         std::string type = boost::python::extract<std::string>(types[i]);
         _exclude_target[type] = true;
+        _exclude_target_list.append(type);
     }
     return;
 }
 
 bool Options::doExcludeCenter(std::string &type) {
-    map_exclude_t::iterator it = _exclude_center.find(type);
+    auto it = _exclude_center.find(type);
     return (it == _exclude_center.end()) ? false : true;
 }
 
 bool Options::doExcludeTarget(std::string &type) {
-    map_exclude_t::iterator it = _exclude_target.find(type);
+    auto it = _exclude_target.find(type);
     return (it == _exclude_target.end()) ? false : true;
+}
+
+void Options::excludeCenterIds(boost::python::list &types) {
+    for (int i = 0; i < boost::python::len(types); ++i) {
+        int pid = boost::python::extract<int>(types[i]);
+        _exclude_center_id[pid] = true;
+        _exclude_center_id_list.append(pid);
+    }
+    return;
+}
+
+void Options::excludeTargetIds(boost::python::list &types) {
+    for (int i = 0; i < boost::python::len(types); ++i) {
+        int pid = boost::python::extract<int>(types[i]);
+        _exclude_target_id[pid] = true;
+        _exclude_target_id_list.append(pid);
+    }
+    return;
+}
+
+bool Options::doExcludeCenterId(int pid) {
+    auto it = _exclude_center_id.find(pid);
+    return (it == _exclude_center_id.end()) ? false : true;
+}
+
+bool Options::doExcludeTargetId(int pid) {
+    auto it = _exclude_target_id.find(pid);
+    return (it == _exclude_target_id.end()) ? false : true;
 }
 
 void Options::registerPython() {
@@ -74,10 +104,16 @@ void Options::registerPython() {
 	//void (Options::*set_bool)(std::string, bool) = &Options::set;
 
 	class_<Options, Options*>("Options")
+	    .add_property("exclude_center_list", &Options::getExcludeCenterList)
+	    .add_property("exclude_target_list", &Options::getExcludeTargetList)
+	    .add_property("exclude_center_id_list", &Options::getExcludeCenterIdList)
+	    .add_property("exclude_target_id_list", &Options::getExcludeTargetIdList)
         .def("__str__", &Options::summarizeOptions)
 	    .def("summarizeOptions", &Options::summarizeOptions)
 		.def("excludeCenters", &Options::excludeCenters)
 		.def("excludeTargets", &Options::excludeTargets)
+		.def("excludeCenterIds", &Options::excludeCenterIds)
+		.def("excludeTargetIds", &Options::excludeTargetIds)
 		.def("set", set_int)
 		.def("set", set_double)
 		.def("set", set_string)

@@ -59,7 +59,8 @@ void Spectrum::compute(Structure::particle_array_t &centers, Structure::particle
     Structure::particle_it_t pit;
     for (pit = centers.begin(); pit != centers.end(); ++pit) {
         // Continue if exclusion defined ...
-        if (_options->doExcludeCenter((*pit)->getType())) continue;
+        if (_options->doExcludeCenter((*pit)->getType()) ||
+            _options->doExcludeCenterId((*pit)->getId())) continue;
         // Compute ...
         AtomicSpectrum *atomic_spectrum = this->computeAtomic(*pit, targets);
         this->addAtomic(atomic_spectrum);
@@ -94,7 +95,8 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
     for (pit = targets.begin(); pit != targets.end(); ++pit) {
 
         // CHECK FOR EXCLUSIONS
-        if (_options->doExcludeTarget((*pit)->getType())) continue;
+        if (_options->doExcludeTarget((*pit)->getType()) ||
+            _options->doExcludeTargetId((*pit)->getId())) continue;
 
         // FIND DISTANCE & DIRECTION, CHECK CUTOFF
         vec dr = _structure->connect(center->getPos(), (*pit)->getPos());

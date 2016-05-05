@@ -147,7 +147,7 @@ class KernelPotential:
         logging.info("Compute energy from %d atomic environments ..." % n_acqu)
         for n in range(n_acqu):
             X = IX_acqu[n]
-            print "X_MAG", np.dot(X,X)
+            #print "X_MAG", np.dot(X,X)
             ic = self.kernelfct.compute(self.IX, X)
             energy += self.alpha.dot(ic)
             #print "Projection", ic            
@@ -207,6 +207,15 @@ def perturb_positions(structure, exclude_pid=[]):
         dz = np.random.uniform(-1.,1.)
         part.pos = part.pos + 0.1*np.array([dx,dy,dz])
     return [ part.pos for part in structure ]
+    
+def random_positions(structure, exclude_pid=[]):
+    for part in structure:
+        if part.id in exclude_pid: continue
+        dx = np.random.uniform(-1.,1.)
+        dy = np.random.uniform(-1.,1.)
+        dz = np.random.uniform(-1.,1.)
+        part.pos = np.array([dx,dy,dz])
+    return [ part.pos for part in structure ]
 
 def apply_force_step(structure, forces, scale, constrain_particles=[]):
     max_step = 0.05
@@ -216,7 +225,24 @@ def apply_force_step(structure, forces, scale, constrain_particles=[]):
         if df > max_f: max_f = df
     if max_f > max_step: scale = scale*max_step/max_f
     else: pass
-    print "Scale =", scale
+    #print "Scale =", scale
+    idx = -1
+    for part in structure:
+        idx += 1
+        if part.id in constrain_particles: 
+            print "Skip force step, pid =", part.id
+            continue
+        #if np.random.uniform(0.,1.) > 0.5: continue
+        part.pos = part.pos + scale*forces[idx]
+    return [ part.pos for part in structure ]
+
+def apply_force_norm_step(structure, forces, scale, constrain_particles=[]):
+    min_step = 0.5
+    max_f = 0.0
+    for f in forces:
+        df = np.dot(f,f)**0.5
+        if df > max_f: max_f = df
+    scale = min_step/max_f
     idx = -1
     for part in structure:
         idx += 1
