@@ -47,15 +47,25 @@ public:
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & _basis;
+
         arch & _N;
         arch & _L;
+        arch & _with_sqrt_2l_1_norm;
+
+        arch & _has_scalars;
         arch & _coeff;
+
+        arch & _has_gradients;
+        arch & _coeff_grad_x;
+        arch & _coeff_grad_y;
+        arch & _coeff_grad_z;
     }
 
 private:
     Basis *_basis;
     int _N;
     int _L;
+    bool _with_sqrt_2l_1_norm;
 
     bool _has_scalars;
 	coeff_t _coeff; // access via (N*n+k, l) with shape (N*N, L+1)

@@ -134,7 +134,7 @@ class KernelPotential:
         #print self.IX
         logging.info("Acquired %d environments." % n_acqu)
         return
-    def computeEnergy(self, structure):
+    def computeEnergy(self, structure, return_prj_mat=False):
         logging.info("Start energy ...")
         energy = 0.0
         spectrum = soap.Spectrum(structure, self.options, self.basis)
@@ -145,13 +145,18 @@ class KernelPotential:
         n_acqu = IX_acqu.shape[0]
         dim_acqu = IX_acqu.shape[1]
         logging.info("Compute energy from %d atomic environments ..." % n_acqu)
+        projection_matrix = []
         for n in range(n_acqu):
             X = IX_acqu[n]
             #print "X_MAG", np.dot(X,X)
             ic = self.kernelfct.compute(self.IX, X)
             energy += self.alpha.dot(ic)
-            #print "Projection", ic            
-        return energy            
+            #print "Projection", ic
+            projection_matrix.append(ic)
+        if return_prj_mat:
+            return energy, projection_matrix
+        else:
+            return energy
     def computeForces(self, structure, verbose=False):
         logging.info("Start forces ...")
         if verbose:

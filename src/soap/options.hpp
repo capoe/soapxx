@@ -54,11 +54,16 @@ public:
 	template<class Archive>
 	void serialize(Archive &arch, const unsigned int version) {
 		arch & _key_value_map;
+
 		arch & _exclude_center;
 		arch & _exclude_target;
+		arch & _exclude_center_list;
+		arch & _exclude_target_list;
 
 		arch & _exclude_center_id;
 		arch & _exclude_target_id;
+		arch & _exclude_center_id_list;
+		arch & _exclude_target_id_list;
 		return;
 	}
 

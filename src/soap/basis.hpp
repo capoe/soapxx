@@ -28,6 +28,7 @@ public:
 	RadialBasis *getRadBasis() { return _radbasis; }
 	AngularBasis *getAngBasis() { return _angbasis; }
 	CutoffFunction *getCutoff() { return _cutoff; }
+	Options *getOptions() { return _options; }
 	const int &N() { return _radbasis->N(); }
 	const int &L() { return _angbasis->L(); }
 

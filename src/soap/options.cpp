@@ -8,6 +8,7 @@ Options::Options() :
 
 	// Set defaults
     this->set("spectrum.gradients", false);
+    this->set("spectrum.2l1_norm", true);
 	this->set("radialbasis.type", "gaussian");
 	this->set("radialbasis.mode", "equispaced");
 	this->set("radialbasis.N", 9);
