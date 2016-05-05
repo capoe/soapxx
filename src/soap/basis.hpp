@@ -73,6 +73,8 @@ public:
     bool hasScalars() { return _has_scalars; }
     bool hasGradients() { return _has_gradients; }
     void add(BasisExpansion &other) { _coeff = _coeff + other._coeff; }
+    void addGradient(BasisExpansion &other);
+    void zeroGradient();
     void conjugate();
     void writeDensity(std::string filename, Options *options,
         	Structure *structure, Particle *center);

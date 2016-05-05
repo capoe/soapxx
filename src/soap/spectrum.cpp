@@ -8,19 +8,19 @@
 namespace soap {
 
 Spectrum::Spectrum(Structure &structure, Options &options) :
-    _log(NULL), _options(&options), _structure(&structure), _own_basis(true) {
+    _log(NULL), _options(&options), _structure(&structure), _own_basis(true), _global_atomic(NULL) {
 	GLOG() << "Configuring spectrum ..." << std::endl;
 	// CREATE & CONFIGURE BASIS
 	_basis = new Basis(&options);
 }
 
 Spectrum::Spectrum(Structure &structure, Options &options, Basis &basis) :
-	_log(NULL), _options(&options), _structure(&structure), _basis(&basis), _own_basis(false) {
+	_log(NULL), _options(&options), _structure(&structure), _basis(&basis), _own_basis(false), _global_atomic(NULL) {
 	;
 }
 
 Spectrum::Spectrum(std::string archfile) :
-	_log(NULL), _options(NULL), _structure(NULL), _basis(NULL), _own_basis(true) {
+	_log(NULL), _options(NULL), _structure(NULL), _basis(NULL), _own_basis(true), _global_atomic(NULL) {
 	this->load(archfile);
 }
 
@@ -38,6 +38,9 @@ Spectrum::~Spectrum() {
 	_atomspec_array.clear();
 	// AtomicSpectra in type map already deleted above, clear only:
 	_map_atomspec_array.clear();
+
+	if (_global_atomic) delete _global_atomic;
+	_global_atomic = NULL;
 }
 
 void Spectrum::compute() {
@@ -120,6 +123,20 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
     }
 
     return atomic_spectrum;
+}
+
+AtomicSpectrum *Spectrum::computeGlobal() {
+    if (_global_atomic) throw soap::base::APIError("<Spectrum::computeGlobal> Already initialised.");
+    _global_atomic = new AtomicSpectrum(_basis);
+    GLOG() << "Computing global spectrum ..." << std::endl;
+    for (auto it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
+        GLOG() << "  Adding center " << (*it)->getCenter()->getId()
+            << " (type " << (*it)->getCenter()->getType() << ")" << std::endl;
+        _global_atomic->mergeQnlm(*it);
+    }
+    _global_atomic->computePower();
+    _global_atomic->computePowerGradients();
+    return _global_atomic;
 }
 
 AtomicSpectrum *Spectrum::getAtomic(int slot_idx, std::string center_type) {
@@ -241,8 +258,10 @@ void Spectrum::registerPython() {
 	    .def("compute", computeCentersTargets)
 		.def("computePower", &Spectrum::computePower)
 		.def("computePowerGradients", &Spectrum::computePowerGradients)
+		.def("computeGlobal", &Spectrum::computeGlobal, return_value_policy<reference_existing_object>())
 		.def("addAtomic", &Spectrum::addAtomic)
 		.def("getAtomic", &Spectrum::getAtomic, return_value_policy<reference_existing_object>())
+		.def("getGlobal", &Spectrum::getGlobal, return_value_policy<reference_existing_object>())
 	    .def("saveAndClean", &Spectrum::saveAndClean)
 		.def("save", &Spectrum::save)
 		.def("load", &Spectrum::load)

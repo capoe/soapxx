@@ -50,8 +50,10 @@ public:
 	void compute(Structure::particle_array_t &sources, Structure::particle_array_t &targets);
 	AtomicSpectrum *computeAtomic(Particle *center);
 	AtomicSpectrum *computeAtomic(Particle *center, Structure::particle_array_t &targets);
+	AtomicSpectrum *computeGlobal();
 	void addAtomic(AtomicSpectrum *atomspec);
 	AtomicSpectrum *getAtomic(int slot_idx, std::string center_type);
+	AtomicSpectrum *getGlobal() { assert(_global_atomic && "Compute first"); return _global_atomic; }
 	void writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type);
 	void writeDensityOnGridInverse(int slot_idx, std::string center_type, std::string type1, std::string type2);
 	void writeDensity(int slot_idx, std::string center_type, std::string density_type);
@@ -71,6 +73,8 @@ public:
 
 		arch & _atomspec_array;
 		arch & _map_atomspec_array;
+
+		arch & _global_atomic;
 		return;
 	}
 
@@ -84,6 +88,8 @@ private:
 
     atomspec_array_t _atomspec_array;
     map_atomspec_array_t _map_atomspec_array;
+
+    AtomicSpectrum *_global_atomic;
 };
 
 

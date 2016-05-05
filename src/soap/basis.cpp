@@ -165,6 +165,24 @@ void BasisExpansion::computeCoefficients(double r, vec d, double weight, double 
 	return;
 }
 
+void BasisExpansion::addGradient(BasisExpansion &other) {
+    assert(_has_gradients);
+    _coeff_grad_x = _coeff_grad_x + other.getCoefficientsGradX();
+    _coeff_grad_y = _coeff_grad_y + other.getCoefficientsGradY();
+    _coeff_grad_z = _coeff_grad_z + other.getCoefficientsGradZ();
+    return;
+}
+
+void BasisExpansion::zeroGradient() {
+    _has_gradients = true;
+    int L = _angbasis->L();
+    int N = _radbasis->N();
+    _coeff_grad_x = coeff_zero_t(N,(L+1)*(L+1));
+    _coeff_grad_y = coeff_zero_t(N,(L+1)*(L+1));
+    _coeff_grad_z = coeff_zero_t(N,(L+1)*(L+1));
+    return;
+}
+
 void BasisExpansion::conjugate() {
 	for (int n = 0; n != _radbasis->N(); ++n) {
 		for (int l = 0; l != _angbasis->L()+1; ++l) {

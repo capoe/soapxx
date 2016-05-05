@@ -38,6 +38,7 @@ public:
 
 
 	AtomicSpectrum(Particle *center, Basis *basis);
+	AtomicSpectrum(Basis *basis);
 	AtomicSpectrum() { this->null(); }
    ~AtomicSpectrum();
     void null();
@@ -55,6 +56,9 @@ public:
     void addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion);
     qnlm_t *getQnlm(std::string type);
     qnlm_t *getQnlmGeneric() { return _qnlm_generic; }
+    map_qnlm_t &getQnlmMap() { return _map_qnlm; }
+    map_pid_qnlm_t &getPidQnlmMap() { return _map_pid_qnlm; }
+    void mergeQnlm(AtomicSpectrum *other);
     // XNKL METHODS
     void computePower();
     void computePowerGradients();
@@ -73,6 +77,7 @@ public:
     void serialize(Archive &arch, const unsigned int version) {
     	// Center & basis
     	arch & _center;
+    	arch & _center_id;
     	arch & _center_pos;
     	arch & _center_type;
     	arch & _basis;
@@ -92,6 +97,7 @@ public:
 protected:
     // CENTER & BASIS LINKS
 	Particle *_center;
+	int _center_id;
 	vec _center_pos;
 	std::string _center_type;
 	Basis *_basis;

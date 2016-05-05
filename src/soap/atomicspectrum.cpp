@@ -10,8 +10,15 @@ namespace soap {
 AtomicSpectrum::AtomicSpectrum(Particle *center, Basis *basis) {
     this->null();
     _center = center;
+    _center_id = center->getId();
     _center_pos = center->getPos();
     _center_type = center->getType();
+    _basis = basis;
+    _qnlm_generic = new BasisExpansion(_basis);
+}
+
+AtomicSpectrum::AtomicSpectrum(Basis *basis) {
+    this->null();
     _basis = basis;
     _qnlm_generic = new BasisExpansion(_basis);
 }
@@ -60,6 +67,7 @@ AtomicSpectrum::~AtomicSpectrum() {
 
 void AtomicSpectrum::null() {
     _center = NULL;
+    _center_id = -1;
     _center_pos = vec(0,0,0);
     _center_type = "?";
     _basis = NULL;
@@ -151,6 +159,49 @@ void AtomicSpectrum::addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion) {
     return;
 }
 
+void AtomicSpectrum::mergeQnlm(AtomicSpectrum *other) {
+    // Function used to construct global spectrum as sum over atomic spectra.
+    // The result is itself an "atomic" spectrum (as data fields are largely identical,
+    // except for the fact that this summed spectrum does not have a well-defined center.
+    assert(other->getBasis() == _basis &&
+        "Should not merge atomic spectra linked against different bases.");
+    // Type-agnostic (=generic) density expansion
+    _qnlm_generic->add(*other->getQnlmGeneric());
+    // Type-resolved (=specific) density expansions
+    map_qnlm_t &map_qnlm_other = other->getQnlmMap();
+    for (auto it = map_qnlm_other.begin(); it != map_qnlm_other.end(); ++it) {
+        std::string density_type = it->first;
+        BasisExpansion *density = it->second;
+        // Already have density of this type?
+        auto mit = _map_qnlm.find(density_type);
+        if (mit == _map_qnlm.end()) {
+            _map_qnlm[density_type] = new qnlm_t(_basis);
+            mit = _map_qnlm.find(density_type);
+        }
+        // Add ...
+        mit->second->add(*density);
+    }
+    // Particle-ID-resolved gradients
+    map_pid_qnlm_t &map_pid_qnlm_other = other->getPidQnlmMap();
+    for (auto it = map_pid_qnlm_other.begin(); it != map_pid_qnlm_other.end(); ++it) {
+        int pid = it->first;
+        std::string pid_type = it->second.first;
+        qnlm_t *density_grad = it->second.second;
+        // Already have density gradient for this particle?
+        auto mit = _map_pid_qnlm.find(pid);
+        if (mit == _map_pid_qnlm.end()) {
+            qnlm_t *qnlm = new qnlm_t(_basis);
+            // Remember to setup zero matrices to store gradient ...
+            qnlm->zeroGradient();
+            _map_pid_qnlm[pid] = std::pair<std::string,qnlm_t*>(pid_type, qnlm);
+            mit = _map_pid_qnlm.find(pid);
+        }
+        // Add gradients ...
+        mit->second.second->addGradient(*density_grad);
+    }
+    return;
+}
+
 AtomicSpectrum::qnlm_t *AtomicSpectrum::getQnlm(std::string type) {
     if (type == "") {
         return _qnlm_generic;
@@ -165,7 +216,7 @@ AtomicSpectrum::qnlm_t *AtomicSpectrum::getQnlm(std::string type) {
 }
 
 void AtomicSpectrum::computePowerGradients() {
-    GLOG() << "CID " << _center->getId() << ": " << std::endl;
+    GLOG() << "CID " << _center_id << ": " << std::endl;
     for (auto it1 = _map_pid_qnlm.begin(); it1 != _map_pid_qnlm.end(); ++it1) {
         // Derivatives are taken with respect to the coordinates of this neighbour particle
         int pi_id = it1->first;
