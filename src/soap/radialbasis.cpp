@@ -107,6 +107,9 @@ void RadialBasisGaussian::configure(Options &options) {
         GLOG() << "Adjusted radial cutoff to " << _Rc
         	<< " based on sigma_0 = " << sigma_0 << ", L = " << L << ", stride = " << sigma_stride_factor << std::endl;
     }
+    else if (_mode == "incremental") {
+        throw std::runtime_error("Not implemented.");
+    }
     else {
     	throw std::runtime_error("Not implemented.");
     }

@@ -7,7 +7,7 @@ import numpy as np
 import logging
 from momo import osio, endl, flush
 
-class KernelAdaptorGeneric:
+class KernelAdaptorGeneric(object):
     def __init__(self, options):
         return
     def adapt(self, spectrum):
@@ -69,6 +69,46 @@ class KernelAdaptorGeneric:
         dX_dz = dX_dz/mag_X - np.dot(X, dX_dz)/mag_X**3 * X
         return dX_dx, dX_dy, dX_dz
         
+class KernelAdaptorGlobalGeneric(object):
+    def __init__(self, options):
+        return
+    def adapt(self, spectrum):
+        # EXTRACT A SET OF CENTER-BASED POWER EXPANSIONS
+        # Here: only global
+        IX = np.zeros((0,0), dtype='complex128')
+        dimX = -1
+        atomic_global = spectrum.getGlobal()
+        Xi_unnorm, Xi_norm = self.adaptScalar(atomic_global)
+        dimX = Xi_norm.shape[0]
+        IX = np.copy(Xi_norm)
+        IX.resize((1,dimX))
+        return IX
+    def adaptScalar(self, atomic):
+        # EXTRACT POWER EXPANSION FROM ATOMIC SPECTRUM
+        # Here: type "":"" (= generic)
+        X = np.real(atomic.getPower("","").array)
+        dimX = X.shape[0]*X.shape[1]
+        X = np.real(X.reshape((dimX)))
+        # Normalize
+        X_norm = X/np.dot(X,X)**0.5
+        return X, X_norm
+    def adaptGradients(self, atomic, nb_pid, X):
+        # NOTE X is not normalized (=> X = X')
+        dxnkl_pid = atomic.getPowerGradGeneric(nb_pid)
+        dX_dx = dxnkl_pid.getArrayGradX()
+        dX_dy = dxnkl_pid.getArrayGradY()
+        dX_dz = dxnkl_pid.getArrayGradZ()        
+        dimX = dX_dx.shape[0]*dX_dx.shape[1]
+        dX_dx = np.real(dX_dx.reshape((dimX)))
+        dX_dy = np.real(dX_dy.reshape((dimX)))
+        dX_dz = np.real(dX_dz.reshape((dimX)))
+        # Normalize
+        mag_X = np.dot(X,X)**0.5
+        dX_dx = dX_dx/mag_X - np.dot(X, dX_dx)/mag_X**3 * X
+        dX_dy = dX_dy/mag_X - np.dot(X, dX_dy)/mag_X**3 * X
+        dX_dz = dX_dz/mag_X - np.dot(X, dX_dz)/mag_X**3 * X
+        return dX_dx, dX_dy, dX_dz
+
 class KernelFunctionDot(object):
     def __init__(self, options):
         self.delta = float(options.get('kernel.delta'))
@@ -82,10 +122,10 @@ class KernelFunctionDot(object):
         c = self.computeDot(IX, X, self.xi-1, self.delta)
         return self.xi*np.diag(c).dot(IX)    
    
-KernelAdaptorFactory = { 'generic': KernelAdaptorGeneric }     
+KernelAdaptorFactory = { 'generic': KernelAdaptorGeneric, 'global-generic': KernelAdaptorGlobalGeneric }     
 KernelFunctionFactory = { 'dot':KernelFunctionDot }
 
-class KernelPotential:
+class KernelPotential(object):
     def __init__(self, options):
         logging.info("Construct kernel potential ...")
         self.basis = soap.Basis(options)
@@ -100,6 +140,7 @@ class KernelPotential:
         # ADAPTOR
         logging.info("Choose adaptor ...")
         self.adaptor = KernelAdaptorFactory[options.get('kernel.adaptor')](options)
+        self.use_global_spectrum = True if options.get('kernel.adaptor') == 'global-generic' else False
         # INCLUSIONS / EXCLUSIONS
         # -> Already be enforced when computing spectra
         return
@@ -109,6 +150,8 @@ class KernelPotential:
         spectrum.compute()
         spectrum.computePower()
         spectrum.computePowerGradients()
+        if self.use_global_spectrum:
+            spectrum.computeGlobal()
         # New X's
         logging.info("Adapt spectrum ...")
         IX_acqu = self.adaptor.adapt(spectrum)
@@ -141,6 +184,9 @@ class KernelPotential:
         spectrum.compute()
         spectrum.computePower()
         spectrum.computePowerGradients()
+        # TODO The kernel policy should take care of this:
+        if self.use_global_spectrum:
+            spectrum.computeGlobal()
         IX_acqu = self.adaptor.adapt(spectrum)        
         n_acqu = IX_acqu.shape[0]
         dim_acqu = IX_acqu.shape[1]
@@ -168,9 +214,14 @@ class KernelPotential:
         spectrum.compute()
         spectrum.computePower()
         spectrum.computePowerGradients()
+        if self.use_global_spectrum:
+            atomic_global = spectrum.computeGlobal()
+            spectrum_iter = [ atomic_global ]
+        else:
+            spectrum_iter = spectrum
         # Extract & compute force
-        for atomic in spectrum:
-            pid = atomic.getCenter().id
+        for atomic in spectrum_iter:
+            pid = atomic.getCenter().id if not use_global_spectrum else -1
             #if not pid in self.pid_list_force:
             #    logging.debug("Skip forces derived from environment with pid = %d" % pid)
             #    continue
