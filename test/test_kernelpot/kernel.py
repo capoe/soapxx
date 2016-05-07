@@ -7,6 +7,28 @@ import numpy as np
 import logging
 from momo import osio, endl, flush
 
+# THERE IS SOMETHING WRONG WITH THE GRADIENTS HERE (DIRECTION SEEMS FINE, BUT MAGNITUDE IS NOT?)! REMARK ~ok, error source found
+# TODO Unit test for global spectrum                                    REMARK ~ok, automatize
+# TODO Check outer kernel derivative                                    REMARK ~ok, automatize
+# TODO Check normalization derivative (compute on C++ level already)    REMARK ~ok, -> C++
+
+# TODO PCA + identification of eigenstructures
+# TODO Sample Bethe tree
+
+class TrajectoryLogger(object):
+    def __init__(self, outfile):
+        self.ofs = open(outfile, 'w')
+    def logFrame(self, structure):
+        # Write first frame
+        self.ofs.write('%d\n\n' % structure.n_particles)
+        for p in structure.particles:
+            r = p.pos
+            self.ofs.write('%s %+1.7f %+1.7f %+1.7f\n' % (p.type, r[0], r[1], r[2]))
+        return
+    def close(self):
+        self.ofs.close()
+        return
+
 class KernelAdaptorGeneric(object):
     def __init__(self, options):
         return
@@ -221,7 +243,7 @@ class KernelPotential(object):
             spectrum_iter = spectrum
         # Extract & compute force
         for atomic in spectrum_iter:
-            pid = atomic.getCenter().id if not use_global_spectrum else -1
+            pid = atomic.getCenter().id if not self.use_global_spectrum else -1
             #if not pid in self.pid_list_force:
             #    logging.debug("Skip forces derived from environment with pid = %d" % pid)
             #    continue
@@ -229,13 +251,13 @@ class KernelPotential(object):
             nb_pids = atomic.getNeighbourPids()
             logging.info("  Center %d" % (pid))
             # neighbour-pid-independent kernel "prevector" (outer derivative)
-            X, X_norm = self.adaptor.adaptScalar(atomic)
-            dIC = self.kernelfct.computeDerivativeOuter(self.IX, X)
+            X_unnorm, X_norm = self.adaptor.adaptScalar(atomic)
+            dIC = self.kernelfct.computeDerivativeOuter(self.IX, X_norm) # TODO This must be X_norm!
             alpha_dIC = self.alpha.dot(dIC)
             for nb_pid in nb_pids:
                 # Force on neighbour
                 logging.info("    -> Nb %d" % (nb_pid))
-                dX_dx, dX_dy, dX_dz = self.adaptor.adaptGradients(atomic, nb_pid, X)
+                dX_dx, dX_dy, dX_dz = self.adaptor.adaptGradients(atomic, nb_pid, X_unnorm)
                 
                 force_x = -alpha_dIC.dot(dX_dx)
                 force_y = -alpha_dIC.dot(dX_dy)
@@ -264,12 +286,12 @@ def perturb_positions(structure, exclude_pid=[]):
         part.pos = part.pos + 0.1*np.array([dx,dy,dz])
     return [ part.pos for part in structure ]
     
-def random_positions(structure, exclude_pid=[]):
+def random_positions(structure, exclude_pid=[], b0=-1., b1=1., x=True, y=True, z=True):
     for part in structure:
         if part.id in exclude_pid: continue
-        dx = np.random.uniform(-1.,1.)
-        dy = np.random.uniform(-1.,1.)
-        dz = np.random.uniform(-1.,1.)
+        dx = np.random.uniform(b0,b1) if x else 0.
+        dy = np.random.uniform(b0,b1) if y else 0.
+        dz = np.random.uniform(b0,b1) if z else 0.
         part.pos = np.array([dx,dy,dz])
     return [ part.pos for part in structure ]
 

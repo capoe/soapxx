@@ -148,6 +148,7 @@ public:
     particle_it_t beginParticles() { return _particles.begin(); }
     particle_it_t endParticles() { return _particles.end(); }
     int getNumberOfParticles() { return _particles.size(); }
+    Particle *getParticle(int pid) { return _particles[pid-1]; }
 
     // SEGMENT CONTAINER
     segment_array_t &segments() { return _segments; }

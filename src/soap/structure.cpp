@@ -160,6 +160,7 @@ void Structure::registerPython() {
 	   .def("addSegment", &Structure::addSegment, return_value_policy<reference_existing_object>())
 	   .def("getSegment", &Structure::getSegment, return_value_policy<reference_existing_object>())
 	   .def("addParticle", &Structure::addParticle, return_value_policy<reference_existing_object>())
+	   .def("getParticle", &Structure::getParticle, return_value_policy<reference_existing_object>())
 	   .def("__iter__", range<return_value_policy<reference_existing_object> >(&Structure::beginParticles, &Structure::endParticles))
 	   .add_property("particles", range<return_value_policy<reference_existing_object> >(&Structure::beginParticles, &Structure::endParticles))
 	   .add_property("segments", range<return_value_policy<reference_existing_object> >(&Structure::beginSegments, &Structure::endSegments))
