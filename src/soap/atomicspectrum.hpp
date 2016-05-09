@@ -58,7 +58,7 @@ public:
     qnlm_t *getQnlmGeneric() { return _qnlm_generic; }
     map_qnlm_t &getQnlmMap() { return _map_qnlm; }
     map_pid_qnlm_t &getPidQnlmMap() { return _map_pid_qnlm; }
-    void mergeQnlm(AtomicSpectrum *other);
+    void mergeQnlm(AtomicSpectrum *other, double scale);
     // XNKL METHODS
     void computePower();
     void computePowerGradients();

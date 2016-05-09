@@ -73,6 +73,7 @@ public:
     bool hasScalars() { return _has_scalars; }
     bool hasGradients() { return _has_gradients; }
     void add(BasisExpansion &other) { _coeff = _coeff + other._coeff; }
+    void add(BasisExpansion &other, double scale) { _coeff = _coeff + scale*other._coeff; }
     void addGradient(BasisExpansion &other);
     void zeroGradient();
     void conjugate();

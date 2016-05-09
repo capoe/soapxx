@@ -132,7 +132,7 @@ AtomicSpectrum *Spectrum::computeGlobal() {
     for (auto it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
         GLOG() << "  Adding center " << (*it)->getCenter()->getId()
             << " (type " << (*it)->getCenter()->getType() << ")" << std::endl;
-        _global_atomic->mergeQnlm(*it);
+        _global_atomic->mergeQnlm(*it, 0.5); // <- Scale factor 0.5 necessary in order not to overcount pairs
     }
     _global_atomic->computePower();
     _global_atomic->computePowerGradients();

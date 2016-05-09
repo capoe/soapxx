@@ -159,14 +159,18 @@ void AtomicSpectrum::addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion) {
     return;
 }
 
-void AtomicSpectrum::mergeQnlm(AtomicSpectrum *other) {
+void AtomicSpectrum::mergeQnlm(AtomicSpectrum *other, double scale) {
     // Function used to construct global spectrum as sum over atomic spectra.
     // The result is itself an "atomic" spectrum (as data fields are largely identical,
     // except for the fact that this summed spectrum does not have a well-defined center.
+    // The <scale> factor modifies the qnlm, whereas their gradients remain unaltered.
+    // For global spectrum, <scale> should be 0.5 in order to guarantee consistency
+    // between the scalars qnlm and their gradients (or, in other words, the 0.5 ensures
+    // that the global spectrum only counts all pairs once).
     assert(other->getBasis() == _basis &&
         "Should not merge atomic spectra linked against different bases.");
     // Type-agnostic (=generic) density expansion
-    _qnlm_generic->add(*other->getQnlmGeneric());
+    _qnlm_generic->add(*other->getQnlmGeneric(), scale);
     // Type-resolved (=specific) density expansions
     map_qnlm_t &map_qnlm_other = other->getQnlmMap();
     for (auto it = map_qnlm_other.begin(); it != map_qnlm_other.end(); ++it) {
@@ -179,7 +183,7 @@ void AtomicSpectrum::mergeQnlm(AtomicSpectrum *other) {
             mit = _map_qnlm.find(density_type);
         }
         // Add ...
-        mit->second->add(*density);
+        mit->second->add(*density, scale);
     }
     // Particle-ID-resolved gradients
     map_pid_qnlm_t &map_pid_qnlm_other = other->getPidQnlmMap();

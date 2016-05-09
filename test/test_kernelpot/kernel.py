@@ -331,3 +331,40 @@ def apply_force_norm_step(structure, forces, scale, constrain_particles=[]):
         part.pos = part.pos + scale*forces[idx]
     return [ part.pos for part in structure ]
 
+def evaluate_energy(positions, structure, kernelpot, opt_pids, verbose=False, ofs=None):
+    if verbose: print "Energy"
+    # Impose positions
+    pid_pos = positions.reshape((opt_pids.shape[0],3))
+    for pidx, pid in enumerate(opt_pids):
+        pos = pid_pos[pidx,:]
+        particle = structure.getParticle(pid)        
+        particle.pos = pos        
+    for part in structure:
+        if verbose: print part.id, part.type, part.pos
+    # Evaluate energy function
+    energy = kernelpot.computeEnergy(structure)
+    # Log
+    if ofs: ofs.logFrame(structure)
+    if verbose: print energy    
+    return energy
+
+def evaluate_energy_gradient(positions, structure, kernelpot, opt_pids, verbose=False, ofs=None):
+    if verbose: print "Forces"
+    # Adjust positions
+    pid_pos = positions.reshape((opt_pids.shape[0],3))
+    for pidx, pid in enumerate(opt_pids):
+        pos = pid_pos[pidx,:]
+        particle = structure.getParticle(pid)        
+        particle.pos = pos        
+    for part in structure:
+        if verbose: print part.id, part.type, part.pos
+    # Evaluate forces
+    forces = kernelpot.computeForces(structure)
+    gradients = -1.*np.array(forces)
+    opt_pidcs = opt_pids-1
+    gradients_short = gradients[opt_pidcs]
+    gradients_short = gradients_short.flatten()
+    if verbose: print gradients_short
+    #forces[2] = 0. # CONSTRAIN TO Z=0 PLANE
+    return gradients_short
+
