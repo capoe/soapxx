@@ -166,6 +166,28 @@ class KernelPotential(object):
         # INCLUSIONS / EXCLUSIONS
         # -> Already be enforced when computing spectra
         return
+    def importAcquire(self, IX_acqu, alpha):
+        n_acqu = IX_acqu.shape[0]
+        dim_acqu = IX_acqu.shape[1]
+        alpha_acqu = np.zeros((n_acqu))
+        alpha_acqu.fill(alpha)
+        if not self.dimX:
+            # First time ...
+            self.dimX = dim_acqu
+            self.IX = IX_acqu
+            self.alpha = alpha_acqu
+        else:
+            # Check and extend ...
+            assert self.dimX == dim_acqu # Acquired descr. should match linear dim. of previous descr.'s
+            I = self.IX.shape[0]
+            self.IX.resize((I+n_acqu, self.dimX))
+            self.IX[I:I+n_acqu,:] = IX_acqu
+            self.alpha.resize((I+n_acqu))
+            self.alpha[I:I+n_acqu] = alpha_acqu
+        #print self.alpha
+        #print self.IX
+        logging.info("Imported %d environments." % n_acqu)
+        return
     def acquire(self, structure, alpha):
         logging.info("Acquire ...")
         spectrum = soap.Spectrum(structure, self.options, self.basis)
