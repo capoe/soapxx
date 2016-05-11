@@ -23,7 +23,13 @@ from pca import PCA, IPCA
 logging.basicConfig(
     format='[%(asctime)s] %(message)s',
     datefmt='%I:%M:%S',
-    level=logging.DEBUG)
+    level=logging.ERROR)
+
+# >>>>>>>>>>>>>>>>
+norm_mean = True
+norm_std = False
+adaptor_type = 'global-generic'
+# <<<<<<<<<<<<<<<<
 
 # OPTIONS
 options = soap.Options()
@@ -47,7 +53,7 @@ options.set('radialcutoff.center_weight', 0.5)
 options.set('angularbasis.type', 'spherical-harmonic')
 options.set('angularbasis.L', 6)
 # Kernel
-options.set('kernel.adaptor', 'generic')                    # <- pull here (generic/global-generic)
+options.set('kernel.adaptor', adaptor_type)                 # <- pull here (generic/global-generic)
 options.set('kernel.type', 'dot')
 options.set('kernel.delta', 1.)
 options.set('kernel.xi', 4.)                                # <- pull here (1., ..., 4., ...)
@@ -66,20 +72,24 @@ basis = soap.Basis(options)
 kernelpot = KernelPotential(options)
 
 # FILL KERNEL
-generate = False
+generate = True
 if generate:
     for struct in structures:
         print struct.label    
         kernelpot.acquire(struct, 1., label=struct.label)
         print kernelpot.IX.shape
     np.savetxt('out.kernelpot.ix.txt', kernelpot.IX)
+    ofs = open('out.kernelpot.labels.txt', 'w')
+    for idx,label in enumerate(kernelpot.labels):
+        ofs.write('%3d %s\n' % (idx,label))
+    ofs.close()
 else:
     IX = np.loadtxt('out.kernelpot.ix.txt')
     kernelpot.importAcquire(IX, 1.)
 
 # KERNEL PCA
 pca = PCA()
-pca.compute(IX, normalize_mean=False, normalize_std=False)
+pca.compute(kernelpot.IX, normalize_mean=norm_mean, normalize_std=norm_std)
 #pca = IPCA()
 #pca.compute(IX, normalize_mean=False, normalize_std=False)
 
@@ -123,7 +133,7 @@ for idx_cutoff in [idx_ref, 500, 400, 300, 200, 100, 50, 40, 30, 20, 10, 5, 4, 3
 # ========================
 
 I_eigencoeffs = pca.expandBlock(kernelpot.IX)
-#np.savetxt('out.pca.eigencoeffs.txt', I_eigencoeffs)
+np.savetxt('out.pca.eigencoeffs.txt', I_eigencoeffs)
 
 # =================
 # SAVE EIGENVECTORS
@@ -131,8 +141,6 @@ I_eigencoeffs = pca.expandBlock(kernelpot.IX)
 
 X_eig_0 = pca.reconstructEigenvec(0)
 X_eig_1 = pca.reconstructEigenvec(1)
-np.savetxt('out.pca.eigenvec_0.txt', X_eig_0)
-np.savetxt('out.pca.eigenvec_1.txt', X_eig_1)
 print np.dot(X_eig_0, X_eig_0)
 print np.dot(X_eig_0, X_eig_1)
 print np.dot(X_eig_1, X_eig_1)

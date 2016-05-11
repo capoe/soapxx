@@ -142,7 +142,14 @@ class KernelFunctionDot(object):
         return self.computeDot(IX, X, self.xi, self.delta)    
     def computeDerivativeOuter(self, IX, X):
         c = self.computeDot(IX, X, self.xi-1, self.delta)
-        return self.xi*np.diag(c).dot(IX)    
+        return self.xi*np.diag(c).dot(IX)
+    def computeBlock(self, IX, return_distance=False):
+        # Order such that: IX[i] => fingerprint observation i
+        K = self.delta**2 * IX.dot(IX.T)**self.xi
+        if return_distance:
+            return (abs(1.-K))**0.5
+        else:
+            return K
    
 KernelAdaptorFactory = { 'generic': KernelAdaptorGeneric, 'global-generic': KernelAdaptorGlobalGeneric }     
 KernelFunctionFactory = { 'dot':KernelFunctionDot }
@@ -156,6 +163,7 @@ class KernelPotential(object):
         self.IX = None
         self.alpha = None
         self.dimX = None # <- Also used as flag set by first ::acquire call
+        self.labels = []
         # KERNEL
         logging.info("Choose kernel function ...")
         self.kernelfct = KernelFunctionFactory[options.get('kernel.type')](options)   
@@ -188,7 +196,7 @@ class KernelPotential(object):
         #print self.IX
         logging.info("Imported %d environments." % n_acqu)
         return
-    def acquire(self, structure, alpha):
+    def acquire(self, structure, alpha, label=None):
         logging.info("Acquire ...")
         spectrum = soap.Spectrum(structure, self.options, self.basis)
         spectrum.compute()
@@ -204,6 +212,9 @@ class KernelPotential(object):
         # New alpha's
         alpha_acqu = np.zeros((n_acqu))
         alpha_acqu.fill(alpha)
+        # Labels
+        labels = [ label for i in range(n_acqu) ]
+        self.labels = self.labels + labels
         if not self.dimX:
             # First time ...
             self.dimX = dim_acqu
@@ -367,7 +378,8 @@ def evaluate_energy(positions, structure, kernelpot, opt_pids, verbose=False, of
     energy = kernelpot.computeEnergy(structure)
     # Log
     if ofs: ofs.logFrame(structure)
-    if verbose: print energy    
+    if verbose: print energy
+    print energy
     return energy
 
 def evaluate_energy_gradient(positions, structure, kernelpot, opt_pids, verbose=False, ofs=None):

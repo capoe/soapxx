@@ -65,6 +65,9 @@ class PCA(object):
         X_recon = self.eigvecs[idx]
         X_recon = self.unnorm(X_recon)
         return X_recon
+    def reconstructEigenvecs(self):
+        X_eig_recon = self.unnormBlock(self.eigvecs)
+        return X_eig_recon
     def reconstructBlock(self, eigencoeffs):
         # Order such that: eigencoeffs[i] => eigencoefficients of sample i
         n_samples = eigencoeffs.shape[0]
