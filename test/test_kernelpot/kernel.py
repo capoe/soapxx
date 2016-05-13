@@ -150,9 +150,41 @@ class KernelFunctionDot(object):
             return (abs(1.-K))**0.5
         else:
             return K
-   
+    def computeBlockDot(self, IX, return_distance=False):
+        return self.computeBlock(IX, return_distance)
+
+class KernelFunctionDotHarmonic(object):
+    """
+    C_i = ( d^2 [ IX.X ]^xi - mu_i )^2
+    """
+    def __init__(self, options):
+        self.delta = float(options.get('kernel.delta'))
+        self.xi = float(options.get('kernel.xi'))
+        self.mu = float(options.get('kernel.mu'))
+        self.kfctdot = KernelFunctionDot(options)
+        return
+    def compute(self, IX, X):
+        if type(self.mu) == float:
+            mu = np.zeros((IX.shape[0]))
+            np.fill(mu, self.mu)
+            self.mu = mu
+        C = self.kfctdot.compute(IX, X)
+        return (C-self.mu)**2
+    def computeDerivativeOuter(self, IX, X):
+        if type(self.mu) == float:
+            mu = np.zeros((IX.shape[0]))
+            mu.fill(self.mu)
+            self.mu = mu
+        C = self.kfctdot.compute(IX, X)
+        IC = self.kfctdot.computeDerivativeOuter(IX, X)
+        return 2*(C-self.mu)*IC
+    def computeBlockDot(self, IX, return_distance=False):
+        return self.kfctdot.computeBlock(IX, return_distance)
+        
+        
+
 KernelAdaptorFactory = { 'generic': KernelAdaptorGeneric, 'global-generic': KernelAdaptorGlobalGeneric }     
-KernelFunctionFactory = { 'dot':KernelFunctionDot }
+KernelFunctionFactory = { 'dot':KernelFunctionDot, 'dot-harmonic': KernelFunctionDotHarmonic }
 
 class KernelPotential(object):
     def __init__(self, options):
@@ -174,6 +206,14 @@ class KernelPotential(object):
         # INCLUSIONS / EXCLUSIONS
         # -> Already be enforced when computing spectra
         return
+    def computeKernelMatrix(self, return_distance=False):
+        return self.kernelfct.computeBlock(self.IX, return_distance)
+    def computeDotKernelMatrix(self, return_distance=False):
+        # Even if the, e.g., dot-harmonic kernel is used for optimization, 
+        # the dot-product based kernel matrix may still be relevant
+        return self.kernelfct.computeBlockDot(self.IX, return_distance)
+    def nConfigs(self):
+        return self.IX.shape[0]
     def importAcquire(self, IX_acqu, alpha):
         n_acqu = IX_acqu.shape[0]
         dim_acqu = IX_acqu.shape[1]
@@ -285,7 +325,7 @@ class KernelPotential(object):
             logging.info("  Center %d" % (pid))
             # neighbour-pid-independent kernel "prevector" (outer derivative)
             X_unnorm, X_norm = self.adaptor.adaptScalar(atomic)
-            dIC = self.kernelfct.computeDerivativeOuter(self.IX, X_norm) # TODO This must be X_norm!
+            dIC = self.kernelfct.computeDerivativeOuter(self.IX, X_norm)
             alpha_dIC = self.alpha.dot(dIC)
             for nb_pid in nb_pids:
                 # Force on neighbour
@@ -364,7 +404,7 @@ def apply_force_norm_step(structure, forces, scale, constrain_particles=[]):
         part.pos = part.pos + scale*forces[idx]
     return [ part.pos for part in structure ]
 
-def evaluate_energy(positions, structure, kernelpot, opt_pids, verbose=False, ofs=None):
+def evaluate_energy(positions, structure, kernelpot, opt_pids, verbose=False, ofs=None, average=False):
     if verbose: print "Energy"
     # Impose positions
     pid_pos = positions.reshape((opt_pids.shape[0],3))
@@ -376,13 +416,14 @@ def evaluate_energy(positions, structure, kernelpot, opt_pids, verbose=False, of
         if verbose: print part.id, part.type, part.pos
     # Evaluate energy function
     energy = kernelpot.computeEnergy(structure)
+    if average: energy /= kernelpot.nConfigs()
     # Log
     if ofs: ofs.logFrame(structure)
     if verbose: print energy
     print energy
     return energy
 
-def evaluate_energy_gradient(positions, structure, kernelpot, opt_pids, verbose=False, ofs=None):
+def evaluate_energy_gradient(positions, structure, kernelpot, opt_pids, verbose=False, ofs=None, average=False):
     if verbose: print "Forces"
     # Adjust positions
     pid_pos = positions.reshape((opt_pids.shape[0],3))
@@ -398,6 +439,8 @@ def evaluate_energy_gradient(positions, structure, kernelpot, opt_pids, verbose=
     opt_pidcs = opt_pids-1
     gradients_short = gradients[opt_pidcs]
     gradients_short = gradients_short.flatten()
+    if average:
+        gradients_short /= kernelpot.nConfigs()
     if verbose: print gradients_short
     #forces[2] = 0. # CONSTRAIN TO Z=0 PLANE
     return gradients_short
