@@ -19,6 +19,17 @@ void Particle::null() {
 	_segment = NULL;
 }
 
+void Particle::model(Particle &model) {
+    // ID assigned internally, so is Segment pointer
+    _pos = model._pos;
+    _name = model._name;
+    _type_id = model._type_id;
+    _type = model._type;
+    _mass = model._mass;
+    _weight = model._weight;
+    _sigma = model._sigma;
+}
+
 boost::python::numeric::array Particle::getPosNumeric() {
 	boost::python::numeric::array pos(boost::python::make_tuple(_pos.x(), _pos.y(), _pos.z())); return pos;
 }
@@ -68,6 +79,27 @@ Structure::Structure(std::string label) {
 
 Structure::Structure() {
 	this->null();
+}
+
+Structure::Structure(const Structure &structure) {
+    this->null();
+    assert(false && "COPY CONSTRUCTOR NOT AVAILABLE. USE ::model(Structure &) instead.");
+}
+
+void Structure::model(Structure &structure) {
+    this->null();
+    // ID, label, box
+    _id = structure._id;
+    _label = structure._label;
+    this->setBoundary(structure._box->getBox());
+    // Segments, particles 
+    for (segment_it_t sit = structure.beginSegments(); sit != structure.endSegments(); ++sit) {
+        Segment &new_seg = this->addSegment();
+        for (particle_it_t pit = (*sit)->beginParticles(); pit != (*sit)->endParticles(); ++pit) {
+            Particle &new_part = this->addParticle(new_seg);
+            new_part.model(*(*pit));
+        }
+    }
 }
 
 void Structure::null() {
@@ -157,6 +189,7 @@ boost::python::numeric::array Structure::getBoundaryNumeric() {
 void Structure::registerPython() {
 	using namespace boost::python;
 	class_<Structure>("Structure", init<std::string>())
+       .def("model", &Structure::model)
 	   .def("addSegment", &Structure::addSegment, return_value_policy<reference_existing_object>())
 	   .def("getSegment", &Structure::getSegment, return_value_policy<reference_existing_object>())
 	   .def("addParticle", &Structure::addParticle, return_value_policy<reference_existing_object>())

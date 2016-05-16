@@ -384,6 +384,7 @@ void AtomicSpectrum::registerPython() {
         .def("getPower", &AtomicSpectrum::getPower, return_value_policy<reference_existing_object>())
         .def("getPowerGradGeneric", &AtomicSpectrum::getPowerGradGeneric, return_value_policy<reference_existing_object>())
         .def("getCenter", &AtomicSpectrum::getCenter, return_value_policy<reference_existing_object>())
+        .def("getCenterId", &AtomicSpectrum::getCenterId)
         .def("getCenterType", &AtomicSpectrum::getCenterType, return_value_policy<reference_existing_object>())
         .def("getCenterPos", &AtomicSpectrum::getCenterPos, return_value_policy<reference_existing_object>());
 }

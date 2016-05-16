@@ -32,6 +32,8 @@ class TrajectoryLogger(object):
 class KernelAdaptorGeneric(object):
     def __init__(self, options):
         return
+    def getListAtomic(self, spectrum):
+        return spectrum
     def adapt(self, spectrum):
         # IX = [
         #    X1 ->,
@@ -75,7 +77,7 @@ class KernelAdaptorGeneric(object):
         X_norm = X/np.dot(X,X)**0.5
         return X, X_norm
     def adaptGradients(self, atomic, nb_pid, X):
-        # NOTE X is not normalized (=> X = X')
+        # NOTE X must not be normalized (=> X = X')
         dxnkl_pid = atomic.getPowerGradGeneric(nb_pid)
         dX_dx = dxnkl_pid.getArrayGradX()
         dX_dy = dxnkl_pid.getArrayGradY()
@@ -94,6 +96,8 @@ class KernelAdaptorGeneric(object):
 class KernelAdaptorGlobalGeneric(object):
     def __init__(self, options):
         return
+    def getListAtomic(self, spectrum):
+        return [ spectrum.getGlobal() ]
     def adapt(self, spectrum):
         # EXTRACT A SET OF CENTER-BASED POWER EXPANSIONS
         # Here: only global
@@ -166,7 +170,7 @@ class KernelFunctionDotHarmonic(object):
     def compute(self, IX, X):
         if type(self.mu) == float:
             mu = np.zeros((IX.shape[0]))
-            np.fill(mu, self.mu)
+            mu.fill(self.mu)
             self.mu = mu
         C = self.kfctdot.compute(IX, X)
         return (C-self.mu)**2

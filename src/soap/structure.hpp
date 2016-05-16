@@ -20,10 +20,11 @@ class Structure;
 class Particle
 {
 public:
-    Particle(int id) { this->null(); _id = id; }
+    explicit Particle(int id) { this->null(); _id = id; }
     Particle() { this->null(); }
    ~Particle() {;}
     void null();
+    void model(Particle &model);
     // Position
     void setPos(vec &pos) { _pos = pos; }
     void setPos(double x, double y, double z) { _pos = vec(x,y,z); }
@@ -91,7 +92,7 @@ public:
 	typedef std::vector<Particle*> particle_array_t;
 	typedef particle_array_t::iterator particle_it_t;
 
-    Segment(int id) : _id(id), _name("?"), _type("?") { ; }
+    explicit Segment(int id) : _id(id), _name("?"), _type("?") { ; }
     Segment() : _id(-1), _name("?"), _type("?") { ; }
    ~Segment() { _particles.clear(); }
 
@@ -138,10 +139,12 @@ public:
 	typedef std::vector<Segment*> segment_array_t;
 	typedef std::vector<Segment*>::iterator segment_it_t;
 
-    Structure(std::string label);
+    explicit Structure(std::string label);
+    Structure(const Structure &structure);
     Structure();
    ~Structure();
     void null();
+    void model(Structure &structure);
 
     // PARTICLE CONTAINER
     particle_array_t &particles() { return _particles; }

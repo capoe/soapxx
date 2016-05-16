@@ -48,6 +48,7 @@ public:
 
     // CENTER & BASIS METHODS
     Particle *getCenter() { return _center; }
+    int getCenterId() { return _center_id; }
 	std::string &getCenterType() { return _center_type; }
 	vec &getCenterPos() { return _center_pos; }
 	Basis *getBasis() { return _basis; }
