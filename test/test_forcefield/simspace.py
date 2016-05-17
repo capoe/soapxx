@@ -26,6 +26,9 @@ class SimSpaceNode(object):
         # Spectrum adaptor
         self.adaptor = KernelAdaptorFactory[options.get('kernel.adaptor')](options)
         if compute: self.acquire()
+        # Potentials
+        self.potentials = []
+        self.potentials_self = []
         return
     def size(self):
         return self.IX.shape[0]
@@ -90,6 +93,9 @@ class SimSpaceNode(object):
             I = self.IX.shape[0]
             self.IX.resize((I+n_acqu, self.dimX))
             self.IX[I:I+n_acqu,:] = IX_acqu
+        return
+    def createPotential(self, nb_node, options): # TODO Simplify. Only one potential needed per pair.
+        self.potentials.append(SimSpacePotential(self, nb_node, options))
         return
     def getListAtomic(self):
         return self.adaptor.getListAtomic(self.spectrum)
@@ -217,15 +223,93 @@ class LJRepulsive(object):
                 grad[j, :] += g * dr / r
         return grad
 
-def evaluate_potential_energy(x0, node, potentials, potentials_self, opt_pidcs, trjlog):
-    #print "Energy at", x0
-    # Adjust positions
+def multi_evaluate_potential_energy(x0_system, nodes, loggers):
+    # Assign & update positions
+    n_nodes = len(nodes)
+    n_coords = x0_system.shape[0]
+    x0_system = x0_system.reshape((n_nodes, n_coords/n_nodes))    
+    for idx, node in enumerate(nodes):
+        x0 = x0_system[idx]
+        opt_pidcs = np.array([ i for i in range(node.structure.n_particles) ])
+        update_node(x0, node, opt_pidcs)
+    # Compute energy
+    energy = 0.
+    for idx, node in enumerate(nodes):
+        x0 = x0_system[idx]
+        opt_pidcs = [ i for i in range(node.structure.n_particles) ]
+        trjlog = loggers[idx]
+        update = False
+        energy += evaluate_potential_energy(
+            x0, node, node.potentials, node.potentials_self, opt_pidcs, 
+            trjlog, update)
+    print "==== %+1.7e ====" % energy
+    return energy
+    
+def multi_evaluate_potential_gradient(x0_system, nodes, loggers):
+    # Assign & update positions
+    n_nodes = len(nodes)
+    n_coords = x0_system.shape[0]
+    x0_system = x0_system.reshape((n_nodes, n_coords/n_nodes))    
+    for idx, node in enumerate(nodes):
+        x0 = x0_system[idx]
+        opt_pidcs = np.array([ i for i in range(node.structure.n_particles) ])
+        update_node(x0, node, opt_pidcs)
+    # Compute gradients
+    gradients = []
+    for idx, node in enumerate(nodes):
+        x0 = x0_system[idx]
+        opt_pidcs = [ i for i in range(node.structure.n_particles) ]
+        trjlog = loggers[idx]
+        update = False
+        gradients_add = evaluate_potential_gradient(
+            x0, node, node.potentials, node.potentials_self, opt_pidcs, 
+            trjlog, update)
+        gradients.append(gradients_add)
+    gradients = np.array(gradients)
+    gradients = gradients.flatten()
+    return gradients        
+
+def multi_optimize_node(nodes, x0):
+    # Log trajectories
+    loggers = []
+    for node in nodes:
+        logger = TrajectoryLogger('out.opt.%d.xyz' % node.id, mode='w')
+        logger.logFrame(node.structure)
+        loggers.append(logger)
+    # Interface to optimizer
+    f = multi_evaluate_potential_energy
+    fprime = multi_evaluate_potential_gradient
+    args = (nodes, loggers)
+    # Run optimizer
+    x0_opt, f_opt, n_calls, n_grad_calls, warnflag = scipy.optimize.fmin_cg(
+        f=f, 
+        x0=x0, 
+        fprime=fprime, 
+        args=args, 
+        gtol=1e-6,
+        full_output=True)
+    if warnflag > 0:
+        print "Warnflag =", warnflag, " => try again."
+        return_code = False
+    else:
+        return_code = True
+    # Close trajectory
+    for logger, node in zip(loggers, nodes):
+        logger.logFrame(node.structure)
+        logger.close()
+    return return_code
+    
+def update_node(x0, node, opt_pidcs):
     pid_pos = x0.reshape((opt_pidcs.shape[0],3))
     for rel_idx, abs_idx in enumerate(opt_pidcs):
         pos = pid_pos[rel_idx,:]
         particle = node.structure.getParticle(abs_idx+1)        
         particle.pos = pos
     node.acquire()
+    return
+
+def evaluate_potential_energy(x0, node, potentials, potentials_self, opt_pidcs, trjlog, update=True):
+    if update: update_node(x0, node, opt_pidcs)
     # Compute energy
     energy = 0.
     for pot in potentials:
@@ -238,26 +322,20 @@ def evaluate_potential_energy(x0, node, potentials, potentials_self, opt_pidcs, 
     print "%+1.7e %+1.7e %+1.7e" % (energy_total, energy, energy_self)
     return energy_total
     
-def evaluate_potential_gradient(x0, node, potentials, potentials_self, opt_pidcs, trjlog):
-    #print "Gradient at", x0
-    # Adjust positions
-    pid_pos = x0.reshape((opt_pidcs.shape[0],3))
-    for rel_idx, abs_idx in enumerate(opt_pidcs):
-        pos = pid_pos[rel_idx,:]
-        particle = node.structure.getParticle(abs_idx+1)        
-        particle.pos = pos
-    node.acquire()
+def evaluate_potential_gradient(x0, node, potentials, potentials_self, opt_pidcs, trjlog, update=True):
+    if update: update_node(x0, node, opt_pidcs)
     # Compute gradients
     gradients = None
     target = None
     for pot in potentials:
+        # Ascertain that target is the same for all potentials
         if target == None:
             target = pot.target
             gradients = pot.computeGradients()
         else:
             assert pot.target == target
             gradients = gradients + pot.computeGradients()
-    trjlog.logFrame(target.structure)    
+    trjlog.logFrame(target.structure)
     # Gradients from structure-internal potentials
     gradients_self = np.zeros(gradients.shape)
     for pot in potentials_self:
