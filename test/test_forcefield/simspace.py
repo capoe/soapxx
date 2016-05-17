@@ -46,6 +46,16 @@ class SimSpaceNode(object):
             x0[pid-1,:] = 0.
         self.assignPositions(x0, compute)
         return x0
+    def perturbPositions(self, scale=0.1, zero_pids=[0], compute=True):
+        x0 = np.random.uniform(-1.*scale, +1.*scale, (self.structure.n_particles, 3))
+        for pid in zero_pids:
+            x0[pid-1,:] = 0.
+        for idx, part in enumerate(self.structure):
+            pos = part.pos
+            part.pos = part.pos + x0[idx]
+            x0[idx] = part.pos
+        if compute: self.acquire()
+        return x0
     def acquire(self, reset=True):
         if reset: self.reset()
         # Compute spectrum
@@ -114,7 +124,7 @@ class SimSpaceTopology(object):
         return node
     def summarize(self):
         for idx, node in enumerate(self.nodes):
-            print "Node %d" % (idx+1)            
+            print "Node %d '%s'" % ((idx+1), node.structure.label)
             for part in node.structure:
                 print part.id, part.type, part.pos
         return
@@ -260,7 +270,7 @@ def evaluate_potential_gradient(x0, node, potentials, potentials_self, opt_pidcs
 
 def optimize_node(node, potentials, potentials_self, opt_pidcs, x0):
     # Log trajectory
-    trjlog_opt = TrajectoryLogger('out.opt.xyz')
+    trjlog_opt = TrajectoryLogger('out.opt.xyz', mode='a')
     trjlog_opt.logFrame(node.structure)
     # Interface to optimizer
     f = evaluate_potential_energy

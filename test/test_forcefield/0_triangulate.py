@@ -128,22 +128,20 @@ options.set('densitygrid.N', 20)
 options.set('densitygrid.dx', 0.15)
 
 
-
+trjlog = TrajectoryLogger('out.opt.xyz', 'w')
+trjlog.close()
 
 
 
 # LOAD STRUCTURES
 structures = [ 
     soap.tools.setup_structure_ase(c.config_file, c.atoms)
-    for c in soap.tools.ase_load_all('in.configs')
+    for c in soap.tools.ase_load_all('in.hex.configs')
 ]
 struct_dict = {}
 for struct in structures:
     print struct.label
     struct_dict[struct.label] = struct
-
-# SELECT STRUCTURE
-struct = struct_dict[select_struct_label]
 
 # DEFINE INTERACTION TEMPLATES
 pot_options_dot = soap.Options()
@@ -167,29 +165,106 @@ pot_options_lj.set('potentials.lj.sigma', 0.02)
 top = SimSpaceTopology(options)
 
 # DEFINE NODES
-node_root = top.createNode(struct)
-
-"""
-node_leaf = top.createNode(struct)
+for struct in structures:
+    top.createNode(struct)
 top.summarize()
 
-# META-INTERACTIONS
-potentials = []
-pot = SimSpacePotential(node_leaf, node_root, pot_options_harm)
-potentials.append(pot)
+# TRIPLE
+node_1 = top.nodes[0]
+node_2 = top.nodes[1]
+node_3 = top.nodes[2]
+triple = [ node_1, node_2, node_3 ]
 
-# SELF-INTERACTIONS
-potentials_self = []
-pot = LJRepulsive(node_leaf, pot_options_lj)
-potentials_self.append(pot)
+for i,j,k in [(0,1,2)]:
+    node_A = triple[i]
+    node_B = triple[j]
+    node_C = triple[k]
+    
+    for start_idx in [0,1,2]:
+    
+        node_ABC = top.createNode(triple[start_idx].structure)
+            
+        potentials = []
+        potentials_self = []
+        
+        # DOT-HARMONIC
+        pot_options_harm.set('kernel.adaptor', 'global-generic')
+        pot_options_harm.set('kernel.type', 'dot')
+        pot_options_harm.set('kernel.alpha', -1./3.)
+        pot_options_harm.set('kernel.delta', 1.)
+        pot_options_harm.set('kernel.xi', 2.)
+        pot_options_harm.set('kernel.mu', 0.95)
+        
+        pot = SimSpacePotential(node_ABC, node_A, pot_options_harm)
+        potentials.append(pot)
+        pot = SimSpacePotential(node_ABC, node_B, pot_options_harm)
+        potentials.append(pot)
+        pot = SimSpacePotential(node_ABC, node_C, pot_options_harm)
+        potentials.append(pot)
 
-# OPTIMIZE
-x0 = node_leaf.randomizePositions(scale=sc, zero_pids=[0], compute=True)
-optimize_node(node_leaf, potentials, potentials_self, np.array([1,2]), x0)
+        #x0 = np.array([ part.pos for part in triple[start_idx].structure ])
+        #x0 = node_ABC.randomizePositions(scale=sc, zero_pids=[], compute=True)
+        x0 = node_ABC.perturbPositions(scale=sc, zero_pids=[], compute=True)
+        optimize_node(node_ABC, potentials, potentials_self, np.array([0,1,2,3,4,5]), x0)
+
 top.writeData()
-"""
 
-for n in range(2):
+for i,j in [(0,1),(1,2),(2,0)]:
+    node_A = triple[i]
+    node_B = triple[j]
+    
+    weights = [-1.+k*0.1 for k in range(11) ] # [-1.,-0.8,-0.6,-0.4,-0.2,0.0]
+    
+    for idx, w in enumerate(weights):
+        w_A = w
+        w_B = -1.-w_A
+    
+        print "%d <> %d  %+1.2e %+1.2e" % (i,j,w_A,w_B)
+    
+        node_AB = top.createNode(node_A.structure)
+        
+        potentials = []
+        potentials_self = []
+        
+        # DOT-HARMONIC
+        pot_options_harm.set('kernel.adaptor', 'global-generic')
+        pot_options_harm.set('kernel.type', 'dot')
+        pot_options_harm.set('kernel.alpha', w_A)
+        pot_options_harm.set('kernel.delta', 1.)
+        pot_options_harm.set('kernel.xi', 2.)
+        pot_options_harm.set('kernel.mu', 0.95)
+        
+        pot = SimSpacePotential(node_AB, node_A, pot_options_harm)
+        potentials.append(pot)
+        
+        pot_options_harm.set('kernel.adaptor', 'global-generic')
+        pot_options_harm.set('kernel.type', 'dot')
+        pot_options_harm.set('kernel.alpha', w_B)
+        pot_options_harm.set('kernel.delta', 1.)
+        pot_options_harm.set('kernel.xi', 2.)
+        pot_options_harm.set('kernel.mu', 0.95)
+        pot = SimSpacePotential(node_AB, node_B, pot_options_harm)
+        potentials.append(pot)
+        
+        if idx == 0:
+            x0 = np.array([ part.pos for part in node_AB.structure ])
+        else:
+            x0 = np.array([ part.pos for part in top.nodes[-2].structure ])
+        #x0 = node_AB.randomizePositions(scale=sc, zero_pids=[0], compute=True)
+        #x0 = np.array([ part.pos for part in top.nodes[-1].structure ])
+        x0 = node_AB.perturbPositions(scale=0.1, zero_pids=[], compute=True)        
+        optimize_node(node_AB, potentials, potentials_self, np.array([0,1,2,3,4,5]), x0)
+    
+    
+    
+top.writeData()
+
+
+
+
+
+"""
+for n in range(6):
     node_leaf = top.createNode(struct)    
     node_root = top.nodes[0]
     
@@ -200,7 +275,7 @@ for n in range(2):
     # DOT-HARMONIC
     pot_options_harm.set('kernel.adaptor', 'global-generic')
     pot_options_harm.set('kernel.type', 'dot-harmonic')
-    pot_options_harm.set('kernel.alpha', +1.)
+    pot_options_harm.set('kernel.alpha', +10.)
     pot_options_harm.set('kernel.delta', 1.)
     pot_options_harm.set('kernel.xi', 2.)
     pot_options_harm.set('kernel.mu', 0.95)
@@ -211,11 +286,11 @@ for n in range(2):
     # DOT
     for j in range(1, len(top.nodes)-1):
         pot_options_dot.set('kernel.adaptor', 'global-generic')
-        pot_options_dot.set('kernel.type', 'dot')
-        pot_options_dot.set('kernel.alpha', +0.1)
+        pot_options_dot.set('kernel.type', 'dot-harmonic')
+        pot_options_dot.set('kernel.alpha', +1.)
         pot_options_dot.set('kernel.delta', 1.)
         pot_options_dot.set('kernel.xi', 2.)
-        pot_options_dot.set('kernel.mu', 0.80)
+        pot_options_dot.set('kernel.mu', 0.95)
         pot = SimSpacePotential(node_leaf, top.nodes[j], pot_options_dot)
         potentials.append(pot)
         print "<dot, ij>", node_leaf.id, top.nodes[j].id
@@ -233,7 +308,7 @@ for n in range(2):
 
 
 top.writeData()
-    
+"""
 
 
 

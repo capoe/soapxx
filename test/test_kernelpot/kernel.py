@@ -16,8 +16,8 @@ from momo import osio, endl, flush
 # TODO Sample Bethe tree
 
 class TrajectoryLogger(object):
-    def __init__(self, outfile):
-        self.ofs = open(outfile, 'w')
+    def __init__(self, outfile, mode='w'):
+        self.ofs = open(outfile, mode)
     def logFrame(self, structure):
         # Write first frame
         self.ofs.write('%d\n\n' % structure.n_particles)

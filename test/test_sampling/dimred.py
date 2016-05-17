@@ -12,7 +12,7 @@ def dimred_matrix(method, kmat=None, distmat=None, outfile=None, ix=None, symmet
         # http://scikit-learn.org/stable/modules/generated/sklearn.manifold.MDS.html#sklearn.manifold.MDS
         mds = sklearn.manifold.MDS(
             n_components=2,
-            metric=False,
+            metric=True,
             verbose=1,
             n_init=10,
             dissimilarity='precomputed')
