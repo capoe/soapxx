@@ -18,7 +18,7 @@ from dimred import dimred_matrix
 
 method = sys.argv[1]
 
-prj_dimension = 2
+prj_dimension = 3
 
 if method == 'mds':
 	dimred_matrix('mds', kmat=K, distmat=Dsym, outfile='tmp.txt', prj_dimension=prj_dimension)

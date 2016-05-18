@@ -97,6 +97,18 @@ class SimSpaceNode(object):
     def createPotential(self, nb_node, options): # TODO Simplify. Only one potential needed per pair.
         self.potentials.append(SimSpacePotential(self, nb_node, options))
         return
+    def clearPotentials(self):
+        del self.potentials
+        del self.potentials_self
+        self.potentials = []
+        self.potentials_self = []
+    def evaluatePotentialEnergy(self):
+        self.energy = 0.
+        for pot in self.potentials:
+            self.energy += pot.computeEnergy()
+        for pot in self.potentials_self:
+            self.energy += pot.computeEnergy()
+        return self.energy
     def getListAtomic(self):
         return self.adaptor.getListAtomic(self.spectrum)
     def getPidX(self, pid):
@@ -123,6 +135,11 @@ class SimSpaceTopology(object):
         if not self.IX.any(): self.compileIX()
         K = self.kernelfct.computeBlock(self.IX, return_distance)
         return K
+    def computePotentialEnergy(self):
+        self.energy = 0.
+        for node in self.nodes:
+            self.energy += node.computeEnergy()
+        return self.energy
     def createNode(self, structure):
         node_id = len(self.nodes)+1
         node = SimSpaceNode(node_id, structure, self.basis, self.options)
@@ -193,6 +210,84 @@ class SimSpacePotential(object):
         return np.array(forces)
     def computeGradients(self, verbose=False):
         return -1 * self.computeForces(verbose)
+
+class SimSpaceJoint(object):
+    def __init__(self, top, par_joint=None, structure=None):
+        self.top = top
+        self.par_joint = par_joint # TODO Extend to several parents => structural cross-over
+        if self.par_joint:
+            assert structure == None
+            self.node = top.createNode(par_joint.node.structure)
+        else:
+            self.node = top.createNode(structure)
+        self.child_joints = []
+    def hasChildren(self):
+        return len(self.child_joints) > 0
+    def spawn(self, n):
+        new_joints = []
+        if self.hasChildren():
+            for child_joint in self.child_joints:
+                new_joints = new_joints + child_joint.spawn(n)
+        else:
+            for i in range(n):
+                child_joint = SimSpaceJoint(self.top, self)
+                self.child_joints.append(child_joint)
+                new_joints.append(child_joint)
+        return new_joints
+    def summarize(self, indent=''):
+        print '%sID=%d: %d children' % (indent, self.node.id, len(self.child_joints))
+        for child in self.child_joints:
+            child.summarize(indent=indent+'  ')
+        return
+    def writeParentChildPairs(self, ofs):
+        for child in self.child_joints:
+            ofs.write('%d %d\n' % (self.node.id, child.node.id))
+            child.writeParentChildPairs(ofs)
+        return
+
+class SimSpaceTree(object):
+    def __init__(self, options):
+        self.top = SimSpaceTopology(options)
+        self.joints = []
+        self.generations = []
+        self.root_joint = None
+    def seed(self, structure):
+        self.root_joint = SimSpaceJoint(self.top, par_joint=None, structure=structure)
+        self.joints.append(self.root_joint)
+        self.generations.append([self.root_joint])
+        return self.root_joint
+    def spawn(self, n):
+        new_joints = self.root_joint.spawn(n)
+        self.joints = self.joints + new_joints
+        self.generations.append(new_joints)
+        return new_joints
+    def summarize(self):
+        n_generations = len(self.generations)
+        n_joints = len(self.joints)
+        print "Generations # = %d   Joints # = %d" % (n_generations, n_joints)
+        for idx, gen in enumerate(self.generations):
+            print "  Gen %d : Joints %d" % (idx, len(gen))
+        self.root_joint.summarize()
+    def writeParentChildPairs(self, outfile='out.tree.txt'):
+        ofs = open(outfile, 'w')
+        self.root_joint.writeParentChildPairs(ofs)
+        ofs.close()
+        return
+    def addPairPotential(self, options):
+        n_joints = len(self.joints)
+        for i in range(n_joints):
+            node_i = self.joints[i].node
+            for j in range(i+1, n_joints):
+                node_j = self.joints[j].node
+                print "%d:%d" % (node_i.id, node_j.id),
+                node_i.createPotential(node_j, options)
+                node_j.createPotential(node_i, options)
+            print ""
+        return
+    def clearPotentials(self):
+        for joint in self.joints:
+            joint.node.clearPotentials()
+        return
 
 class LJRepulsive(object):
     def __init__(self, node, options):
