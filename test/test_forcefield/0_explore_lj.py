@@ -25,14 +25,10 @@ logging.basicConfig(
 select_struct_label = 'config.xyz'
 exclude_centers = []
 adaptor_type = 'global-generic'
-kernel_type = 'dot' # 'dot-harmonic'
-alpha = +1.
-mu = 0.9
-sc = 0.1 # 1.5 # 0.1
-average_energy = True
-lj_sigma = 0.02 # 0.00001 # 0.02
+kernel_type = 'dot'
+sc = 0.1
+lj_sigma = 0.02
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-# NOTE adaptor_type = 'generic' => exclude center if not constrained in optimization
 
 # OPTIONS
 options = soap.Options()
@@ -40,10 +36,8 @@ options.excludeCenters(['H'])
 options.excludeTargets(['H'])
 options.excludeCenterIds(exclude_centers)
 options.excludeTargetIds([])
-# Spectrum
 options.set('spectrum.gradients', True)
 options.set('spectrum.2l1_norm', False)                     # <- pull here (True/False)
-# Basis
 options.set('radialbasis.type', 'gaussian')
 options.set('radialbasis.mode', 'adaptive')
 options.set('radialbasis.N', 9)
@@ -55,15 +49,41 @@ options.set('radialcutoff.type', 'heaviside')
 options.set('radialcutoff.center_weight', 0.5)
 options.set('angularbasis.type', 'spherical-harmonic')
 options.set('angularbasis.L', 6)
-# Kernel
 options.set('kernel.adaptor', adaptor_type)                 # <- pull here (generic/global-generic)
 options.set('kernel.type', kernel_type)
 options.set('kernel.delta', 1.)
 options.set('kernel.xi', 2.)                                # <- pull here (1., ..., 4., ...)
-options.set('kernel.mu', mu)
-# Cube files
 options.set('densitygrid.N', 20)
 options.set('densitygrid.dx', 0.15)
+
+# DEFINE INTERACTION TEMPLATES
+pot_options_dot = soap.Options()
+pot_options_dot.set('kernel.adaptor', 'global-generic')
+pot_options_dot.set('kernel.type', 'dot')
+pot_options_dot.set('kernel.alpha', -1.)
+pot_options_dot.set('kernel.delta', 1.)
+pot_options_dot.set('kernel.xi', 2.)
+pot_options_dot.set('kernel.mu', 0.5)
+
+pot_options_harm = soap.Options()
+pot_options_harm.set('kernel.adaptor', 'global-generic')
+pot_options_harm.set('kernel.type', 'dot-harmonic')
+pot_options_harm.set('kernel.alpha', +1.)
+pot_options_harm.set('kernel.delta', 1.)
+pot_options_harm.set('kernel.xi', 2.)
+pot_options_harm.set('kernel.mu', 0.5)
+
+pot_options_lj = soap.Options()
+pot_options_lj.set('potentials.lj.sigma', 0.02)
+
+pot_options_dotlj = soap.Options()
+pot_options_dotlj.set('kernel.adaptor', 'global-generic')
+pot_options_dotlj.set('kernel.type', 'dot-lj')
+pot_options_dotlj.set('kernel.alpha', +1.)
+pot_options_dotlj.set('kernel.delta', 1.)
+pot_options_dotlj.set('kernel.xi', 2.)
+pot_options_dotlj.set('kernel.lj_sigma', 0.125) # 0.1 # 0.2 too large => TODO Better force capping required
+pot_options_dotlj.set('kernel.lj_eps_cap', 0.001)
 
 # LOAD STRUCTURES
 structures = [ 
@@ -78,32 +98,7 @@ for struct in structures:
 # SELECT STRUCTURE
 struct = struct_dict[select_struct_label]
 
-# DEFINE INTERACTION TEMPLATES
-"""
-pot_options_dot = soap.Options()
-pot_options_dot.set('kernel.adaptor', 'global-generic')
-pot_options_dot.set('kernel.type', 'dot')
-pot_options_dot.set('kernel.alpha', -1.)
-pot_options_dot.set('kernel.delta', 1.)
-pot_options_dot.set('kernel.xi', 2.)
-pot_options_dot.set('kernel.mu', 0.5)
-pot_options_harm = soap.Options()
-pot_options_harm.set('kernel.adaptor', 'global-generic')
-pot_options_harm.set('kernel.type', 'dot-harmonic')
-pot_options_harm.set('kernel.alpha', +1.)
-pot_options_harm.set('kernel.delta', 1.)
-pot_options_harm.set('kernel.xi', 2.)
-pot_options_harm.set('kernel.mu', 0.5)
-pot_options_lj = soap.Options()
-pot_options_lj.set('potentials.lj.sigma', 0.02)
-"""
-
-
-
-
-
-
-
+# CREATE TREE
 osio.cd('out.files')
 tree = SimSpaceTree(options)
 tree.seed(struct)
@@ -113,22 +108,19 @@ N_spawn = [3,3]
 
 N_generations = 4
 N_spawn = [2,2,2,2]
-pot_options_dotlj = soap.Options()
-pot_options_dotlj.set('kernel.adaptor', 'global-generic')
-pot_options_dotlj.set('kernel.type', 'dot-lj')
-pot_options_dotlj.set('kernel.alpha', +1.)
-pot_options_dotlj.set('kernel.delta', 1.)
-pot_options_dotlj.set('kernel.xi', 2.)
-pot_options_dotlj.set('kernel.lj_sigma', 0.1) # 0.2
-pot_options_dotlj.set('kernel.lj_eps_cap', 0.001)
+
+N_generations = 9
+N_spawn = [ 2 for n in range(N_generations) ]
+authorize_spawn_fct = lambda joint: joint.node.energy <= 0.0
 
 for n in range(N_generations):
     gen_id = n+1
     gen_prefix = 'out.gen_%d' % gen_id
     print "Spawn generation %d" % gen_id    
-
-    new_joints = tree.spawn(N_spawn[n])
-    tree.summarize()    
+    
+    tree.top.computePotentialEnergy()
+    new_joints = tree.spawn(N_spawn[n], authorize_spawn_fct)
+    tree.summarize()
     tree.writeParentChildPairs('%s.tree.txt' % gen_prefix)
     
     # POTENTIALS
@@ -147,7 +139,7 @@ for n in range(N_generations):
     # OUTPUT
     tree.top.writeData(prefix=gen_prefix)
     
-    raw_input('...')
+    #raw_input('...')
 
 osio.root()
 

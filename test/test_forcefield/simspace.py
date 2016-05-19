@@ -102,7 +102,7 @@ class SimSpaceNode(object):
         del self.potentials_self
         self.potentials = []
         self.potentials_self = []
-    def evaluatePotentialEnergy(self):
+    def computePotentialEnergy(self):
         self.energy = 0.
         for pot in self.potentials:
             self.energy += pot.computeEnergy()
@@ -138,7 +138,7 @@ class SimSpaceTopology(object):
     def computePotentialEnergy(self):
         self.energy = 0.
         for node in self.nodes:
-            self.energy += node.computeEnergy()
+            self.energy += node.computePotentialEnergy()
         return self.energy
     def createNode(self, structure):
         node_id = len(self.nodes)+1
@@ -163,6 +163,9 @@ class SimSpaceTopology(object):
         # Kernel
         K = self.computeKernelMatrix()
         np.savetxt('%s.kernelmatrix.txt' % prefix, K)
+        # Energy
+        E = [ node.computePotentialEnergy() for node in self.nodes ]
+        np.savetxt('%s.energy.txt' % prefix, E)
         return
 
 class SimSpacePotential(object):
@@ -223,16 +226,17 @@ class SimSpaceJoint(object):
         self.child_joints = []
     def hasChildren(self):
         return len(self.child_joints) > 0
-    def spawn(self, n):
+    def spawn(self, n, authorize_spawn_fct):
         new_joints = []
         if self.hasChildren():
             for child_joint in self.child_joints:
-                new_joints = new_joints + child_joint.spawn(n)
+                new_joints = new_joints + child_joint.spawn(n, authorize_spawn_fct)
         else:
-            for i in range(n):
-                child_joint = SimSpaceJoint(self.top, self)
-                self.child_joints.append(child_joint)
-                new_joints.append(child_joint)
+            if authorize_spawn_fct(self):
+                for i in range(n):
+                    child_joint = SimSpaceJoint(self.top, self)
+                    self.child_joints.append(child_joint)
+                    new_joints.append(child_joint)
         return new_joints
     def summarize(self, indent=''):
         print '%sID=%d: %d children' % (indent, self.node.id, len(self.child_joints))
@@ -256,8 +260,8 @@ class SimSpaceTree(object):
         self.joints.append(self.root_joint)
         self.generations.append([self.root_joint])
         return self.root_joint
-    def spawn(self, n):
-        new_joints = self.root_joint.spawn(n)
+    def spawn(self, n, authorize_spawn_fct=lambda node: True):
+        new_joints = self.root_joint.spawn(n, authorize_spawn_fct)
         self.joints = self.joints + new_joints
         self.generations.append(new_joints)
         return new_joints
