@@ -202,8 +202,27 @@ class KernelFunctionDotLj(object):
     def computeBlockDot(self, IX, return_distance=False):
         return self.kfctdot.computeBlock(IX, return_distance)        
 
+class KernelFunctionDot3Harm(object):
+    def __init__(self, options):
+        self.kfctdot = KernelFunctionDot(options)
+    def compute(self, IX_A, IX_B, X):
+        C_A = self.kfctdot.compute(IX_A, X)
+        C_B = self.kfctdot.compute(IX_B, X)
+        assert False
+        D = (1.-C+self.eps_cap)**0.5
+        return (self.sigma/D)**12 - (self.sigma/D)**6
+    def computeDerivativeOuter(self, IX_A, IX_B, X):
+        assert False
+        C = self.kfctdot.compute(IX, X)
+        D = (1.-C+self.eps_cap)**0.5
+        IC = self.kfctdot.computeDerivativeOuter(IX, X)
+        return (-6.*self.sigma**12*(1./D)**7 + 3.*self.sigma**6*(1./D)**4)*IC 
+
 KernelAdaptorFactory = { 'generic': KernelAdaptorGeneric, 'global-generic': KernelAdaptorGlobalGeneric }     
-KernelFunctionFactory = { 'dot':KernelFunctionDot, 'dot-harmonic': KernelFunctionDotHarmonic, 'dot-lj': KernelFunctionDotLj }
+KernelFunctionFactory = { 
+'dot':KernelFunctionDot, 
+'dot-harmonic': KernelFunctionDotHarmonic, 
+'dot-lj': KernelFunctionDotLj }
 
 class KernelPotential(object):
     def __init__(self, options):

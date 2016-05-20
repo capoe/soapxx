@@ -31,7 +31,7 @@ class SimSpaceNode(object):
         self.potentials_self = []
         return
     def size(self):
-        return self.IX.shape[0]
+        return self.IX.shape[0] # <- Number of environments stored
     def reset(self):
         self.IX = None
         self.dimX = None
@@ -167,6 +167,53 @@ class SimSpaceTopology(object):
         E = [ node.computePotentialEnergy() for node in self.nodes ]
         np.savetxt('%s.energy.txt' % prefix, E)
         return
+
+class SimSpaceThreePotential(object):
+    def __init__(self, A, B, C, options):
+        self.A = A # <- target (see force calculation)
+        self.B = B
+        self.C = C
+        self.alpha = np.array([float(options.get('kernel.alpha'))])
+        # INTERACTION FUNCTION
+        self.kernelfct = KernelFunctionFactory[options.get('kernel.type')](options)
+        # Spectrum adaptor
+        self.adaptor = KernelAdaptorFactory[options.get('kernel.adaptor')](options)   
+        return
+    def computeEnergy(self, return_prj_mat=False):
+        energy = 0.0
+        projection_matrix = []
+        for n in range(self.A.size()):
+            X = self.A.IX[n]
+            ic = self.kernelfct.compute(self.B.IX, self.C.IX, X)
+            energy += self.alpha.dot(ic)
+            projection_matrix.append(ic)
+        if return_prj_mat:
+            return energy, projection_matrix
+        else:
+            return energy
+    def computeForces(self, verbose=False):
+        forces = [ np.zeros((3)) for i in range(self.A.structure.n_particles) ]        
+        for atomic in self.A.getListAtomic():
+            pid = atomic.getCenterId()
+            nb_pids = atomic.getNeighbourPids()
+            if verbose: print "  Center %d" % (pid)
+            # neighbour-pid-independent kernel "prevector" (outer derivative)
+            X_unnorm, X_norm = self.A.getPidX(pid)
+            dIC = self.kernelfct.computeDerivativeOuter(self.B.IX, self.C.IX, X_norm)
+            alpha_dIC = self.alpha.dot(dIC)
+            for nb_pid in nb_pids:
+                # Force on neighbour
+                if verbose: print "    -> Nb %d" % (nb_pid)
+                dX_dx, dX_dy, dX_dz = self.A.getPidGradX(pid, nb_pid)
+                force_x = -alpha_dIC.dot(dX_dx)
+                force_y = -alpha_dIC.dot(dX_dy)
+                force_z = -alpha_dIC.dot(dX_dz)                
+                forces[nb_pid-1][0] += force_x
+                forces[nb_pid-1][1] += force_y
+                forces[nb_pid-1][2] += force_z
+        return np.array(forces)
+    def computeGradients(self, verbose=False):
+        return -1 * self.computeForces(verbose)
 
 class SimSpacePotential(object):
     def __init__(self, target, source, options):
