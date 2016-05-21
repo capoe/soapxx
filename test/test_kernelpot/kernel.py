@@ -202,27 +202,39 @@ class KernelFunctionDotLj(object):
     def computeBlockDot(self, IX, return_distance=False):
         return self.kfctdot.computeBlock(IX, return_distance)        
 
-class KernelFunctionDot3Harm(object):
+class KernelFunctionDot3Harmonic(object):
     def __init__(self, options):
         self.kfctdot = KernelFunctionDot(options)
     def compute(self, IX_A, IX_B, X):
         C_A = self.kfctdot.compute(IX_A, X)
         C_B = self.kfctdot.compute(IX_B, X)
-        assert False
-        D = (1.-C+self.eps_cap)**0.5
-        return (self.sigma/D)**12 - (self.sigma/D)**6
+        # TODO Generalize this to multi-environment representation:
+        assert IX_A.shape[0] == 1
+        assert IX_B.shape[0] == 1
+        C_AB = self.kfctdot.compute(IX_A, IX_B[0])
+        return (C_A - C_B)**2 + (C_A - C_AB)**2 + (C_B - C_AB)**2
     def computeDerivativeOuter(self, IX_A, IX_B, X):
-        assert False
-        C = self.kfctdot.compute(IX, X)
-        D = (1.-C+self.eps_cap)**0.5
-        IC = self.kfctdot.computeDerivativeOuter(IX, X)
-        return (-6.*self.sigma**12*(1./D)**7 + 3.*self.sigma**6*(1./D)**4)*IC 
+        C_A = self.kfctdot.compute(IX_A, X)
+        C_B = self.kfctdot.compute(IX_B, X)
+        # TODO Generalize this to multi-environment representation:
+        assert IX_A.shape[0] == 1
+        assert IX_B.shape[0] == 1
+        C_AB = self.kfctdot.compute(IX_A, IX_B[0])
+        IC_A = self.kfctdot.computeDerivativeOuter(IX_A, X)
+        IC_B = self.kfctdot.computeDerivativeOuter(IX_B, X)
+        return 2*(C_A - C_B)*(IC_A - IC_B) + 2*(C_A - C_AB)*IC_A + 2*(C_B - C_AB)*IC_B
 
-KernelAdaptorFactory = { 'generic': KernelAdaptorGeneric, 'global-generic': KernelAdaptorGlobalGeneric }     
+KernelAdaptorFactory = {
+'generic': KernelAdaptorGeneric, 
+'global-generic': KernelAdaptorGlobalGeneric 
+}     
+
 KernelFunctionFactory = { 
-'dot':KernelFunctionDot, 
+'dot': KernelFunctionDot, 
 'dot-harmonic': KernelFunctionDotHarmonic, 
-'dot-lj': KernelFunctionDotLj }
+'dot-lj': KernelFunctionDotLj,
+'dot-3-harmonic': KernelFunctionDot3Harmonic
+}
 
 class KernelPotential(object):
     def __init__(self, options):

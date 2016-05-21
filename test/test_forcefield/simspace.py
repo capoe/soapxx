@@ -97,6 +97,9 @@ class SimSpaceNode(object):
     def createPotential(self, nb_node, options): # TODO Simplify. Only one potential needed per pair.
         self.potentials.append(SimSpacePotential(self, nb_node, options))
         return
+    def createThreePotential(self, B, C, options):
+        self.potentials.append(SimSpaceThreePotential(self, B, C, options))
+        return
     def clearPotentials(self):
         del self.potentials
         del self.potentials_self
@@ -171,6 +174,7 @@ class SimSpaceTopology(object):
 class SimSpaceThreePotential(object):
     def __init__(self, A, B, C, options):
         self.A = A # <- target (see force calculation)
+        self.target = A
         self.B = B
         self.C = C
         self.alpha = np.array([float(options.get('kernel.alpha'))])
