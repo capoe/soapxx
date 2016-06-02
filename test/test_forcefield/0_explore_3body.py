@@ -26,7 +26,7 @@ select_struct_label = 'config.xyz'
 exclude_centers = []
 adaptor_type = 'global-generic'
 kernel_type = 'dot'
-sc = 0.1
+sc = 0.05
 lj_sigma = 0.02
 N_network = 3
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -69,28 +69,48 @@ pot_options_dot.set('kernel.mu', 0.5)
 pot_options_harm = soap.Options()
 pot_options_harm.set('kernel.adaptor', 'global-generic')
 pot_options_harm.set('kernel.type', 'dot-harmonic')
-pot_options_harm.set('kernel.alpha', +1.)
+pot_options_harm.set('kernel.alpha', +1.) # TODO
 pot_options_harm.set('kernel.delta', 1.)
 pot_options_harm.set('kernel.xi', 2.)
-pot_options_harm.set('kernel.mu', 0.95)
+pot_options_harm.set('kernel.mu', 0.95) # TODO
 
 pot_options_3harm = soap.Options()
 pot_options_3harm.set('kernel.adaptor', 'global-generic')
 pot_options_3harm.set('kernel.type', 'dot-3-harmonic')
-pot_options_3harm.set('kernel.alpha', +1.)
+pot_options_3harm.set('kernel.alpha', +5.) # TODO
 pot_options_3harm.set('kernel.delta', 1.)
 pot_options_3harm.set('kernel.xi', 2.)
 
-pot_options_lj = soap.Options()
-pot_options_lj.set('potentials.lj.sigma', 0.02)
+
+hex_c = 0.1
+pot_options_harm_dist = soap.Options()
+pot_options_harm_dist.set('kernel.adaptor', 'global-generic')
+pot_options_harm_dist.set('kernel.type', 'dot-harmonic-dist')
+pot_options_harm_dist.set('kernel.alpha', +1.) # TODO
+pot_options_harm_dist.set('kernel.delta', 1.)
+pot_options_harm_dist.set('kernel.xi', 2.)
+pot_options_harm_dist.set('kernel.dotharmdist_d0', hex_c) # TODO
+pot_options_harm_dist.set('kernel.dotharmdist_eps', 0.001)
+
+pot_options_3harm_dist = soap.Options()
+pot_options_3harm_dist.set('kernel.adaptor', 'global-generic')
+pot_options_3harm_dist.set('kernel.type', 'dot-3-harmonic-dist')
+pot_options_3harm_dist.set('kernel.alpha', +1.) # TODO
+pot_options_3harm_dist.set('kernel.delta', 1.)
+pot_options_3harm_dist.set('kernel.xi', 2.)
+pot_options_3harm_dist.set('kernel.dot3harmdist_d0', 3.**0.5*hex_c)
+pot_options_3harm_dist.set('kernel.dot3harmdist_eps', 0.001)
+
+#pot_options_lj = soap.Options()
+#pot_options_lj.set('potentials.lj.sigma', 0.02)
 
 pot_options_dotlj = soap.Options()
 pot_options_dotlj.set('kernel.adaptor', 'global-generic')
 pot_options_dotlj.set('kernel.type', 'dot-lj')
-pot_options_dotlj.set('kernel.alpha', +1.)
+pot_options_dotlj.set('kernel.alpha', +0.1) # TODO
 pot_options_dotlj.set('kernel.delta', 1.)
 pot_options_dotlj.set('kernel.xi', 2.)
-pot_options_dotlj.set('kernel.lj_sigma', 0.125) # 0.1 # 0.2 too large => TODO Better force capping required
+pot_options_dotlj.set('kernel.lj_sigma', 0.1) # TODO
 pot_options_dotlj.set('kernel.lj_eps_cap', 0.001)
 
 
@@ -160,7 +180,32 @@ class SimSpaceNetwork(object):
         self.spawned = self.spawned + spawned
         self.gen_spawned.append(spawned)
         return spawned
+    def addNonbondedPairPotential(self, options, exclude_nbs=True):
+        print "Add non-bonded pair potential ..."
+        n_spawns = len(self.spawned)
+        for i in range(n_spawns):
+            for j in range(i+1, n_spawns):
+                vert_i = self.spawned[i]
+                vert_j = self.spawned[j]
+                if exclude_nbs:
+                    excluded = False
+                    if vert_i in vert_j.nbs: excluded = True
+                    if vert_j in vert_i.nbs: assert excluded
+                    if excluded: continue
+                    for nb in vert_i.nbs:
+                        if vert_j in nb.nbs: excluded = True
+                    for nb in vert_j.nbs:
+                        if vert_i in nb.nbs: assert excluded
+                    if excluded: continue
+                node_i = self.spawned[i].node
+                node_j = self.spawned[j].node
+                print "%d:%d" % (node_i.id, node_j.id),
+                node_i.createPotential(node_j, options)
+                node_j.createPotential(node_i, options)
+        print ""
+        return
     def addPairPotential(self, options):
+        print "Add bonded pair potential ..."
         for spawn in self.spawned:
             for nb in spawn.nbs:
                 if nb.isInitialized():
@@ -169,6 +214,7 @@ class SimSpaceNetwork(object):
             print ""
         return
     def addThreePotential(self, options):
+        print "Add three-body potential ..."
         for spawn in self.spawned:
             if len(spawn.nbs) != 3: continue
             nb1 = spawn.nbs[0]
@@ -276,7 +322,7 @@ for struct in structures:
     struct_dict[struct.label] = struct
 
 # CHANGE TO WORKING DIRECTORY
-osio.cd('out.files')
+osio.cd('out.files.hexcomb')
 
 # SELECT STRUCTURE
 struct = struct_dict[select_struct_label]
@@ -287,10 +333,10 @@ struct = struct_dict[select_struct_label]
 hexcomb = SimSpaceNetwork(options)
 hexcomb.createHexComb(c=1.4, N=N_network)
 hexcomb.createNeighbours(cutoff=1.41)
+hexcomb.writeXyz()
 
 root_idx = 2*((2*N_network+1)*2*N_network + N_network)
 """
-hexcomb.writeXyz()
 hexcomb.printInfo()
 hexcomb.printConnectivity(root_idx=root_idx, levels=3)
 """
@@ -298,7 +344,7 @@ hexcomb.printConnectivity(root_idx=root_idx, levels=3)
 # SEED
 hexcomb.seed(root_idx, struct)
 
-N_generations = 2
+N_generations = 3
 for i in range(N_generations):
     gen_id = i+1
     gen_prefix = "out.gen_%d" % gen_id
@@ -311,8 +357,11 @@ for i in range(N_generations):
     
     # POTENTIALS
     hexcomb.clearPotentials()
-    hexcomb.addPairPotential(pot_options_harm)
-    hexcomb.addThreePotential(pot_options_3harm)
+    #hexcomb.addPairPotential(pot_options_harm)
+    #hexcomb.addThreePotential(pot_options_3harm)
+    hexcomb.addPairPotential(pot_options_harm_dist)
+    hexcomb.addThreePotential(pot_options_3harm_dist)
+    #hexcomb.addNonbondedPairPotential(pot_options_dotlj)
     
     # OPTIMIZE 1st GENERATION
     nodes_opt = [ vertex.node for vertex in hexcomb.gen_spawned[-1] ]
@@ -322,11 +371,11 @@ for i in range(N_generations):
         x0 = node.perturbPositions(scale=0.1, zero_pids=[], compute=True)
         x0_opt.append(x0)
     x0_opt = np.array(x0_opt).flatten()
-    #multi_optimize_node(nodes_opt, x0_opt)
+    multi_optimize_node(nodes_opt, x0_opt)
     
     # OUTPUT
     hexcomb.top.writeData(prefix=gen_prefix)
-    raw_input('...')
+    #raw_input('...')
 
 # RETURN
 osio.root()

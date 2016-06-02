@@ -184,6 +184,22 @@ class KernelFunctionDotHarmonic(object):
         return 2*(C-self.mu)*IC
     def computeBlockDot(self, IX, return_distance=False):
         return self.kfctdot.computeBlock(IX, return_distance)
+
+class KernelFunctionDotHarmonicDist(object):
+    def __init__(self, options):
+        self.d0 = float(options.get('kernel.dotharmdist_d0'))
+        self.eps = float(options.get('kernel.dotharmdist_eps'))
+        self.kfctdot = KernelFunctionDot(options)
+        return
+    def compute(self, IX, X):
+        C = self.kfctdot.compute(IX, X)
+        D = (1.-C+self.eps)**0.5
+        return (D-self.d0)**2
+    def computeDerivativeOuter(self, IX, X):
+        C = self.kfctdot.compute(IX, X)
+        D = (1.-C+self.eps)**0.5
+        IC = self.kfctdot.computeDerivativeOuter(IX, X)
+        return 2*(D-self.d0)*0.5/D*(-1.)*IC
         
 class KernelFunctionDotLj(object):
     def __init__(self, options):
@@ -224,6 +240,36 @@ class KernelFunctionDot3Harmonic(object):
         IC_B = self.kfctdot.computeDerivativeOuter(IX_B, X)
         return 2*(C_A - C_B)*(IC_A - IC_B) + 2*(C_A - C_AB)*IC_A + 2*(C_B - C_AB)*IC_B
 
+class KernelFunctionDot3HarmonicDist(object):
+    def __init__(self, options):
+        self.kfctdot = KernelFunctionDot(options)
+        self.d0 = float(options.get('kernel.dot3harmdist_d0'))
+        self.eps = float(options.get('kernel.dot3harmdist_eps'))
+    def compute(self, IX_A, IX_B, X):
+        C_A = self.kfctdot.compute(IX_A, X)
+        C_B = self.kfctdot.compute(IX_B, X)
+        # TODO Generalize this to multi-environment representation:
+        assert IX_A.shape[0] == 1
+        assert IX_B.shape[0] == 1
+        C_AB = self.kfctdot.compute(IX_A, IX_B[0])
+        D_A = (1. - C_A + self.eps)**0.5
+        D_B = (1. - C_B + self.eps)**0.5
+        D_AB = (1. - C_AB + self.eps)**0.5
+        return (D_A - D_B)**2 + (D_A - D_AB)**2 + (D_B - D_AB)**2 + (D_A - self.d0)**2 + (D_B - self.d0)**2
+    def computeDerivativeOuter(self, IX_A, IX_B, X):
+        C_A = self.kfctdot.compute(IX_A, X)
+        C_B = self.kfctdot.compute(IX_B, X)
+        # TODO Generalize this to multi-environment representation:
+        assert IX_A.shape[0] == 1
+        assert IX_B.shape[0] == 1
+        C_AB = self.kfctdot.compute(IX_A, IX_B[0])
+        D_A = (1. - C_A + self.eps)**0.5
+        D_B = (1. - C_B + self.eps)**0.5
+        D_AB = (1. - C_AB + self.eps)**0.5
+        IC_A = self.kfctdot.computeDerivativeOuter(IX_A, X)
+        IC_B = self.kfctdot.computeDerivativeOuter(IX_B, X)
+        return 2*(D_A - D_B)*(0.5/D_A*(-1.)*IC_A - 0.5/D_B*(-1.)*IC_B) + 2*(D_A - D_AB)*0.5/D_A*(-1.)*IC_A + 2*(D_B - D_AB)*0.5/D_B*(-1.)*IC_B + 2*(D_A-self.d0)*1./D_A*(-1.)*IC_A + 2*(D_B-self.d0)*1./D_B*(-1.)*IC_B
+
 KernelAdaptorFactory = {
 'generic': KernelAdaptorGeneric, 
 'global-generic': KernelAdaptorGlobalGeneric 
@@ -232,8 +278,10 @@ KernelAdaptorFactory = {
 KernelFunctionFactory = { 
 'dot': KernelFunctionDot, 
 'dot-harmonic': KernelFunctionDotHarmonic, 
+'dot-harmonic-dist': KernelFunctionDotHarmonicDist,
 'dot-lj': KernelFunctionDotLj,
-'dot-3-harmonic': KernelFunctionDot3Harmonic
+'dot-3-harmonic': KernelFunctionDot3Harmonic, 
+'dot-3-harmonic-dist': KernelFunctionDot3HarmonicDist
 }
 
 class KernelPotential(object):
