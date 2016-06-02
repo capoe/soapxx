@@ -157,6 +157,51 @@ TEST_F(TestRadialBasisGaussian, computeCoefficientsGradients) {
     //std::cout << capture << std::endl;
 }
 
+/*
+TEST_F(TestRadialBasisGaussian, computeCoefficientsGradientsStdout) {
+
+    // PARAMETERS: SETUP
+    double sigma = 0.5;
+    soap::vec d(0.,1.,0.);
+    double dr = 0.05;
+    double N_r_samples = 100;    
+    std::vector< std::pair<int,int> > kl_list { 
+        std::pair<int,int>{0,0}, 
+        std::pair<int,int>{1,0}, 
+        std::pair<int,int>{2,0}, 
+        std::pair<int,int>{3,0}, 
+        std::pair<int,int>{4,0}, 
+        std::pair<int,int>{5,0}, 
+        std::pair<int,int>{6,0}, 
+        std::pair<int,int>{7,0}, 
+        std::pair<int,int>{8,0} };
+    
+    // OUTPUT: SETUP
+    int N = _radbasis->N();
+    int L = _options.get<int>("angularbasis.L");
+
+    soap::RadialBasis::radcoeff_t Gnl = soap::RadialBasis::radcoeff_zero_t(N,L+1);
+    soap::RadialBasis::radcoeff_t dGnl_dx = soap::RadialBasis::radcoeff_zero_t(N,L+1);
+    soap::RadialBasis::radcoeff_t dGnl_dy = soap::RadialBasis::radcoeff_zero_t(N,L+1);
+    soap::RadialBasis::radcoeff_t dGnl_dz = soap::RadialBasis::radcoeff_zero_t(N,L+1);
+    
+    // GENERATE
+    for (int i = 0; i < N_r_samples; ++i) {
+        double ri = i*dr;
+        _radbasis->computeCoefficients(d, ri, sigma, Gnl, &dGnl_dx, &dGnl_dy, &dGnl_dz);        
+        std::cout << boost::format("%1$+1.7f ") % ri << std::flush;
+        
+        for (auto kl = kl_list.begin(); kl != kl_list.end(); ++kl) {
+            int k = (*kl).first;
+            int l = (*kl).second;
+            std::cout << boost::format("%1$+1.7e ") %
+                Gnl(k,l) << std::flush;
+        }
+        std::cout << std::endl;
+    }
+}
+*/
+
 TEST_F(TestRadialBasisGaussian, NumericalIntegrationBessel) {
 
     // CHECK NUMERICAL INTEGRATION

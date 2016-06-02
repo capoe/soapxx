@@ -22,7 +22,7 @@ element_mass = {
 ase_config_list = soap.tools.ase_load_all('configs')
 for config in ase_config_list:
     print config.config_file
-config = ase_config_list[1]
+config = ase_config_list[4]
 osio << config.atoms << endl
 
 sigma = 0.5
@@ -36,7 +36,7 @@ options.set('radialbasis.N', 9)
 options.set('radialbasis.sigma', sigma)
 options.set('radialbasis.integration_steps', 15)
 #options.set('radialbasis.N', 9)
-options.set('radialcutoff.Rc', 6.8)
+options.set('radialcutoff.Rc', 3.41)
 options.set('radialcutoff.Rc_width', 0.5)
 options.set('radialcutoff.type', 'shifted-cosine')
 options.set('radialcutoff.center_weight', 1.)
@@ -66,8 +66,8 @@ for atom in structure:
 spectrum = soap.Spectrum(structure, options)
 spectrum.compute()
 spectrum.computePower()
-spectrum.save("test_serialization/%s.spectrum.arch" % structure.label)
-spectrum.save("test_invert/%s.spectrum.arch" % structure.label)
+#spectrum.save("test_serialization/%s.spectrum.arch" % structure.label)
+#spectrum.save("test_invert/%s.spectrum.arch" % structure.label)
 
 spectrum.writeDensity(1, "C", "")
 spectrum.writePowerDensity(1, "C", "", "")
