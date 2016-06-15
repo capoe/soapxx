@@ -96,6 +96,30 @@ bool Options::doExcludeTargetId(int pid) {
     return (it == _exclude_target_id.end()) ? false : true;
 }
 
+void Options::generateExclusionLists() {
+    if (!boost::python::len(_exclude_center_list)) {
+        for (auto it = _exclude_center.begin(); it != _exclude_center.end(); ++it) {
+            if (it->second) _exclude_center_list.append(it->first);
+        }
+    }
+    if (!boost::python::len(_exclude_target_list)) {
+        for (auto it = _exclude_target.begin(); it != _exclude_target.end(); ++it) {
+            if (it->second) _exclude_target_list.append(it->first);
+        }
+    }
+    if (!boost::python::len(_exclude_center_id_list)) {
+        for (auto it = _exclude_center_id.begin(); it != _exclude_center_id.end(); ++it) {
+            if (it->second) _exclude_center_id_list.append(it->first);
+        }
+    }
+    if (!boost::python::len(_exclude_target_id_list)) {
+        for (auto it = _exclude_target_id.begin(); it != _exclude_target_id.end(); ++it) {
+            if (it->second) _exclude_target_id_list.append(it->first);
+        }
+    }
+    return;
+}
+
 void Options::registerPython() {
 	using namespace boost::python;
 	void (Options::*set_int)(std::string, int) = &Options::set;

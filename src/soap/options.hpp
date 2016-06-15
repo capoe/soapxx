@@ -47,6 +47,9 @@ public:
 	boost::python::list getExcludeCenterIdList() { return _exclude_center_id_list; }
 	boost::python::list getExcludeTargetIdList() { return _exclude_target_id_list; }
 
+    // USED IN SERIALIZATION-LOAD: std::map TO boost::python::list
+    void generateExclusionLists();
+
 	// PYTHON
 	static void registerPython();
 
@@ -57,13 +60,15 @@ public:
 
 		arch & _exclude_center;
 		arch & _exclude_target;
-		arch & _exclude_center_list;
-		arch & _exclude_target_list;
+		//arch & _exclude_center_list;
+		//arch & _exclude_target_list;
 
 		arch & _exclude_center_id;
 		arch & _exclude_target_id;
-		arch & _exclude_center_id_list;
-		arch & _exclude_target_id_list;
+		//arch & _exclude_center_id_list;
+		//arch & _exclude_target_id_list;
+
+        this->generateExclusionLists();
 		return;
 	}
 

@@ -159,7 +159,7 @@ void AtomicSpectrum::addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion) {
     return;
 }
 
-void AtomicSpectrum::mergeQnlm(AtomicSpectrum *other, double scale) {
+void AtomicSpectrum::mergeQnlm(AtomicSpectrum *other, double scale, bool gradients) {
     // Function used to construct global spectrum as sum over atomic spectra.
     // The result is itself an "atomic" spectrum (as data fields are largely identical,
     // except for the fact that this summed spectrum does not have a well-defined center.
@@ -186,22 +186,24 @@ void AtomicSpectrum::mergeQnlm(AtomicSpectrum *other, double scale) {
         mit->second->add(*density, scale);
     }
     // Particle-ID-resolved gradients
-    map_pid_qnlm_t &map_pid_qnlm_other = other->getPidQnlmMap();
-    for (auto it = map_pid_qnlm_other.begin(); it != map_pid_qnlm_other.end(); ++it) {
-        int pid = it->first;
-        std::string pid_type = it->second.first;
-        qnlm_t *density_grad = it->second.second;
-        // Already have density gradient for this particle?
-        auto mit = _map_pid_qnlm.find(pid);
-        if (mit == _map_pid_qnlm.end()) {
-            qnlm_t *qnlm = new qnlm_t(_basis);
-            // Remember to setup zero matrices to store gradient ...
-            qnlm->zeroGradient();
-            _map_pid_qnlm[pid] = std::pair<std::string,qnlm_t*>(pid_type, qnlm);
-            mit = _map_pid_qnlm.find(pid);
+    if (gradients) {
+        map_pid_qnlm_t &map_pid_qnlm_other = other->getPidQnlmMap();
+        for (auto it = map_pid_qnlm_other.begin(); it != map_pid_qnlm_other.end(); ++it) {
+            int pid = it->first;
+            std::string pid_type = it->second.first;
+            qnlm_t *density_grad = it->second.second;
+            // Already have density gradient for this particle?
+            auto mit = _map_pid_qnlm.find(pid);
+            if (mit == _map_pid_qnlm.end()) {
+                qnlm_t *qnlm = new qnlm_t(_basis);
+                // Remember to setup zero matrices to store gradient ...
+                qnlm->zeroGradient();
+                _map_pid_qnlm[pid] = std::pair<std::string,qnlm_t*>(pid_type, qnlm);
+                mit = _map_pid_qnlm.find(pid);
+            }
+            // Add gradients ...
+            mit->second.second->addGradient(*density_grad);
         }
-        // Add gradients ...
-        mit->second.second->addGradient(*density_grad);
     }
     return;
 }

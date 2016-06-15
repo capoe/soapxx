@@ -4,6 +4,8 @@
 #include <string>
 #include <math.h>
 #include <vector>
+#include <boost/serialization/base_object.hpp>
+#include <boost/serialization/export.hpp>
 
 #include "soap/base/exceptions.hpp"
 #include "soap/base/objectfactory.hpp"
@@ -93,6 +95,9 @@ inline CutoffFunction *CutoffFunctionFactory::create(const std::string &key) {
     }
 }
 
-}
+} /* CLOSE NAMESPACE */
+
+BOOST_CLASS_EXPORT_KEY(soap::CutoffFunction);
+BOOST_CLASS_EXPORT_KEY(soap::CutoffFunctionHeaviside);
 
 #endif

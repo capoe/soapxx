@@ -1,4 +1,8 @@
 #include "soap/cutoff.hpp"
+#include <boost/archive/binary_iarchive.hpp>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/archive/text_oarchive.hpp>
 
 namespace soap {
 
@@ -77,6 +81,7 @@ void CutoffFunctionFactory::registerAll(void) {
 	CutoffFunctionOutlet().Register<CutoffFunctionHeaviside>("heaviside");
 }
 
-
 }
+
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::CutoffFunctionHeaviside);
 
