@@ -4,6 +4,7 @@ file(GLOB LOCAL_SOURCES *.cpp)
 add_subdirectory(base)
 add_subdirectory(linalg)
 add_subdirectory(tools)
+add_subdirectory(soapy)
 
 # COMPILE SOURCES
 get_directory_property(LINALG_LOCAL_SOURCES DIRECTORY linalg DEFINITION LOCAL_SOURCES)
