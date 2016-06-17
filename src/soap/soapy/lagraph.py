@@ -28,7 +28,12 @@ def flg_compute_k_flg(S1, S2):
     S2_inv = la.inv(S2)        
     S12_inv = 0.5*(S1_inv+S2_inv)
     S12_inv_inv = la.inv(S12_inv)
-    return (la.det(S12_inv_inv))**0.5/(la.det(S1)*la.det(S2))**0.25 
+    det_12 = la.det(S12_inv_inv)
+    det_1_2 = la.det(S1)*la.det(S2)
+    if det_12 < 0. or det_1_2 < 0.:
+        print "WARNING__%+1.7f<0__%+1.7f<0__" % (det_12, det_1_2)
+    #return (la.det(S12_inv_inv))**0.5/(la.det(S1)*la.det(S2))**0.25 
+    return det_12**0.5/det_1_2**0.25
 
 def compare_graphs_kernelized(L1, L2, K12, options, zero_eps=1e-10):
     
@@ -62,6 +67,12 @@ def compare_graphs_kernelized(L1, L2, K12, options, zero_eps=1e-10):
     k_flg = flg_compute_k_flg(S1_reg, S2_reg)
         
     return k_flg
+
+def compare_graphs_laplacian_kernelized(g1, g2, options):
+    if options['laplacian.hierarchical']:
+        return compare_graphs_hierarchical(g1, g2, options)
+    else:
+        return compare_graphs(g1, g2, options)
 
 def compare_graphs(g1, g2, options):
 
@@ -228,12 +239,11 @@ class ParticleGraph(object):
     def setupVertexFeatures(self, atoms, options):
         n_atoms = len(atoms)
         descriptor_type = options['laplacian.descriptor']
-        if descriptor_type == 'atom_type':            
-            feature_map = {
-                1:0,
-                6:1,
-                7:2,
-                8:3}
+        options_descriptor = options['descriptor.%s' % descriptor_type]
+        if descriptor_type == 'atom_type':
+            feature_map = {}
+            feature_list = options_descriptor['type_map']
+            for idx, f in enumerate(feature_list): feature_map[f] = idx
             dim = len(feature_map.keys())
             P = np.zeros((n_atoms, dim))
             for idx, atom in enumerate(atoms):
@@ -246,13 +256,18 @@ class ParticleGraph(object):
             structure = soap.tools.setup_structure_ase(self.label, atoms)
             # Options
             options_soap = soap.Options()
-            for item in options.iteritems():
-                options_soap.set(*item)
+            for item in options_descriptor.items():
+                key = item[0]
+                val = item[1]
+                if type(val) == list: continue # TODO Exclusions loaded separately, fix this
+                options_soap.set(key, val)
+            options_soap.excludeCenters(options_descriptor['exclude_centers'])
+            options_soap.excludeTargets(options_descriptor['exclude_targets'])
             # Spectrum
             spectrum = soap.Spectrum(structure, options_soap)
             spectrum.compute()
             spectrum.computePower()
-            if options['spectrum.gradients']:
+            if options_descriptor['spectrum.gradients']:
                 spectrum.computePowerGradients()
             spectrum.computeGlobal()
             # Adapt spectrum
