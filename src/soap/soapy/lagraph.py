@@ -30,10 +30,12 @@ def flg_compute_k_flg(S1, S2):
     S12_inv_inv = la.inv(S12_inv)
     det_12 = la.det(S12_inv_inv)
     det_1_2 = la.det(S1)*la.det(S2)
+    warn = False
     if det_12 < 0. or det_1_2 < 0.:
         print "WARNING__%+1.7f<0__%+1.7f<0__" % (det_12, det_1_2)
+        warn = True
     #return (la.det(S12_inv_inv))**0.5/(la.det(S1)*la.det(S2))**0.25 
-    return det_12**0.5/det_1_2**0.25
+    return abs(det_12)**0.5/abs(det_1_2)**0.25, warn
 
 def compare_graphs_kernelized(L1, L2, K12, options, zero_eps=1e-10):
     
@@ -64,9 +66,9 @@ def compare_graphs_kernelized(L1, L2, K12, options, zero_eps=1e-10):
     S2_reg = flg_compute_S(L2, Q2, eta, gamma).real
     
     # Laplacian-graph kernel
-    k_flg = flg_compute_k_flg(S1_reg, S2_reg)
+    k_flg, warn = flg_compute_k_flg(S1_reg, S2_reg)
         
-    return k_flg
+    return k_flg, warn
 
 def compare_graphs_laplacian_kernelized(g1, g2, options):
     if options['laplacian.hierarchical']:
@@ -102,7 +104,8 @@ def compare_graphs(g1, g2, options):
     K12 = P12.dot(P12.T)
     
     # KERNELIZED COMPARISON
-    k_flg = compare_graphs_kernelized(L1, L2, K12, options)
+    k_flg, warn = compare_graphs_kernelized(L1, L2, K12, options)
+    if warn: print "WARNED __%s:%s__" % (g1.label, g2.label)
     return k_flg
 
 def compare_graphs_hierarchical(g1, g2, options):
@@ -151,18 +154,19 @@ def compare_graphs_hierarchical(g1, g2, options):
                     K12_sub = K12_l_out[idcs][:,idcs] # <- TODO This is slow
                     #K12_sub = K12_l_out[np.ix_(idcs,idcs)] # <- TODO Also slow
                     # Compute kernel
-                    k_flg = compare_graphs_kernelized(gsub_i.L, gsub_j.L, K12_sub, options)
+                    k_flg, warn = compare_graphs_kernelized(gsub_i.L, gsub_j.L, K12_sub, options)
                     K12[i,j] = k_flg
                     K12[j,i] = K12[i,j]                    
             # Update child kernel
             K12_l_out = np.copy(K12)
     
-    k_flg_top = compare_graphs_kernelized(g1.L, g2.L, K12_l_out, options)
+    k_flg_top, warn = compare_graphs_kernelized(g1.L, g2.L, K12_l_out, options)
     
     return k_flg_top
 
 class ParticleSubgraph(object):
-    def __init__(self, idx, idcs_sub, P_sub, L_sub, D_sub):
+    def __init__(self, parent, idx, idcs_sub, P_sub, L_sub, D_sub):
+        self.parent = parent
         self.idx = idx
         self.idcs = idcs_sub
         self.size = len(self.idcs)
@@ -173,6 +177,9 @@ class ParticleSubgraph(object):
         assert self.L.shape[0] == self.size
         assert self.D.shape[0] == self.size
         return
+    @property
+    def label(self):
+        return self.parent.label
 
 class ParticleGraph(object):
     def __init__(self, label, atoms, options):
@@ -194,7 +201,7 @@ class ParticleGraph(object):
                 D_sub = self.D[idcs_sub][:,idcs_sub]
                 L_sub = self.L[idcs_sub][:,idcs_sub]
                 P_sub = self.P[idcs_sub]
-                subgraph = ParticleSubgraph(i, idcs_sub, P_sub, L_sub, D_sub)
+                subgraph = ParticleSubgraph(self, i, idcs_sub, P_sub, L_sub, D_sub)
                 subgraphs[-1].append(subgraph)
                 #print i
                 #print D_sub
