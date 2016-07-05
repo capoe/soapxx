@@ -44,6 +44,7 @@ def flg_compute_k_flg(S1, S2):
     return abs(det_12)**0.5/abs(det_1_2)**0.25, warn
 
 def adjust_regularization(graphs, options):
+    print "Adjust eta, gamma based on %d graphs." % len(graphs)
     # Adjust L-regularization
     traces = []
     for g in graphs:
@@ -56,6 +57,7 @@ def adjust_regularization(graphs, options):
     # Adjust S-regularization
     traces = []
     for g in graphs:
+        print g.label
         if options['laplacian.hierarchical']:
             k, travg_S1, travg_S2 = compare_graphs_hierarchical(g, g, options, return_traces=True)
         else:
@@ -87,7 +89,7 @@ def compare_graphs_kernelized(L1, L2, K12, options, zero_eps=1e-10, verbose=Fals
     if eigvals[0] < -zero_eps:        
         e_min = np.min(eigvals)
         e_max = np.max(eigvals)
-        if abs(e_min/e_max) > zero_eps**0.5:
+        if abs(e_min/e_max) > 0.01: #zero_eps**0.5:
             #print K12
             print "WARNING Eigvals < 0 (%+1.7e) (%+1.7e) (%+1.7e)" % (e_min, e_max, e_min/e_max)
     
@@ -307,9 +309,9 @@ class ParticleGraph(object):
             subgraphs.append([])
             for i in range(self.D.shape[0]):
                 idcs_sub = np.where(self.D[i] < r_cut_l)[0]
-                D_sub = self.D[idcs_sub][:,idcs_sub]
-                L_sub = self.L[idcs_sub][:,idcs_sub]
-                P_sub = self.P[idcs_sub]
+                D_sub = self.D[idcs_sub][:,idcs_sub] # TODO Copies array => too memory-intensive
+                L_sub = self.L[idcs_sub][:,idcs_sub] # TODO Same here
+                P_sub = self.P[idcs_sub]             # TODO Same here
                 subgraph = ParticleSubgraph(self, self.centers[i], r_cut_l, i, idcs_sub, P_sub, L_sub, D_sub)
                 subgraphs[-1].append(subgraph)
                 #print i
@@ -388,7 +390,9 @@ class ParticleGraph(object):
                 spectrum.computePowerGradients()
             spectrum.computeGlobal()
             # Adapt spectrum
-            adaptor = kern.KernelAdaptorFactory[options_soap.get('kernel.adaptor')](options_soap)
+            adaptor = kern.KernelAdaptorFactory[options_soap.get('kernel.adaptor')](
+                options_soap, 
+                types_global=options_descriptor['type_list'])
             ix = adaptor.adapt(spectrum)
             dim = ix.shape[1]
             assert ix.shape[0] == n_atoms
