@@ -6,6 +6,9 @@ import json
 import datetime
 import resource
 
+HARTREE_TO_EV = 27.21138602
+HARTREE_TO_KCALMOL = 627.509469
+
 def mp_compute_column_block(gi, gj_list, kfct):
     """
     Evaluates kfct for each pair (gi, gj), with gj from gj_list
@@ -23,7 +26,16 @@ def mp_compute_column_block(gi, gj_list, kfct):
         krow.append(k)
     return krow
 
-def mp_compute_upper_triangle(kfct, g_list, n_procs, n_blocks, log=None, tstart_twall=(None,None), **kwargs):
+def mp_compute_upper_triangle(
+        kfct, 
+        g_list, 
+        n_procs, 
+        n_blocks, 
+        log=None, 
+        tstart_twall=(None,None), 
+        backup=True,
+        verbose=True,
+        **kwargs):
     """
     Compute kernel matrix computed from pairs of objects in object list
 
@@ -35,6 +47,7 @@ def mp_compute_upper_triangle(kfct, g_list, n_procs, n_blocks, log=None, tstart_
     n_blocks: number of column blocks onto which computation is split
     kwargs: keyword arguments supplied to kfct
     """
+    if not verbose: log=None
     t_start = tstart_twall[0]
     t_wall = tstart_twall[1]
     dim = len(g_list)
@@ -71,7 +84,7 @@ def mp_compute_upper_triangle(kfct, g_list, n_procs, n_blocks, log=None, tstart_
         else:
             kmat_column_block = pool.map(mp_compute_column_block_primed, gi_list)
             kmat_column_block = np.array(kmat_column_block)
-            np.save(npyfile, kmat_column_block)
+            if backup: np.save(npyfile, kmat_column_block)
         # Update kernel matrix
         kmat[0:c1,c0:c1] = kmat_column_block
         pool.close()
@@ -116,3 +129,36 @@ def _byteify(data, ignore_dicts = False):
         }
     # if it's anything else, return it in its original form
     return data
+
+def idcs_split_train_test(N_data, N_train, shift=0, method='stride'):
+    N_test = N_data-N_train
+    idcs = np.arange(0, N_data)
+    if method == 'stride':
+        idcs_test = idcs_select_stride(idcs, N_test, shift)
+        idcs_train = idcs_select_complement(idcs, idcs_test)
+    else:
+        raise NotImplementedError(method)
+    return idcs_train, idcs_test
+
+def idcs_select_stride(idcs, n_sel, shift=0):
+    idcs_sel = [ int(float(idcs.shape[0])/n_sel*i) for i in range(n_sel) ]
+    idcs_sel = np.array(idcs_sel)
+    if shift:
+        idcs_sel = idcs_shift_pbc(idcs_sel, shift, idcs.shape[0])
+    return idcs_sel
+
+def idcs_shift_pbc(idcs, shift, length):
+    return np.sort((idcs + shift) % length)
+
+def idcs_select_complement(idcs, idcs_sel):
+    mask = np.zeros(idcs.shape[0], dtype=bool)
+    mask[idcs_sel] = True
+    return idcs[~mask]
+
+
+
+
+
+
+
+

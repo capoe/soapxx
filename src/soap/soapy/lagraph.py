@@ -69,7 +69,69 @@ def adjust_regularization(graphs, options):
     print "Adjust gamma to", options['laplacian.regularize_gamma']    
     return
 
+def optimize_regularization(graphs, options, write_out=False, log=None):
+    if not options['laplacian.optimize_eta_gamma']: return
+    if log: log << "Optimizing eta, gamma based on %d graphs" % len(graphs) << log.endl
+    # ETA-GAMMA PAIRS
+    etas   = [ 1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1., 5., 10., 50., 100., 500. ]
+    gammas = [ 1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1., 5., 10., 50., 100., 500. ]
+    etas   = [ 10**(-7+i) for i in range(14) ]
+    gammas = [ 10**(-7+i) for i in range(14) ]
+    pairs = []
+    for eta in etas:
+        for gamma in gammas:
+            pairs.append((eta,gamma))
+        pairs.append((None,None))
+    if write_out: ofs = open('out.optimize_regularization.txt', 'w')
+    # COMPUTE MERIT (VIA STD-DEV) FOR EACH PAIR
+    merits = []
+    for eta, gamma in pairs:
+        if eta == gamma == None:
+            if write_out: ofs.write('\n')
+            continue
+        # Set
+        options['laplacian.regularize_eta'] = eta
+        options['laplacian.regularize_gamma'] = gamma
+        # Process
+        kmat = soap.soapy.util.mp_compute_upper_triangle(
+            kfct=compare_graphs_laplacian_kernelized,
+            g_list=graphs,
+            n_procs=4,
+            n_blocks=1,
+            log=None,
+            tstart_twall=(None, None),
+            backup=False,
+            options=options)
+        # Analyse
+        kmat = kmat + kmat.T
+        np.fill_diagonal(kmat, 0.5*kmat.diagonal())
+        triu_idcs = np.triu_indices(kmat.shape[0], 1)
+        kmat_triu = kmat[triu_idcs]
+        kmat_min = np.min(kmat_triu)
+        kmat_max = np.max(kmat_triu)
+        kmat_avg = np.average(kmat_triu)
+        kmat_std = np.std(kmat_triu)
+        #kmat_ent = -np.sum(kmat_triu*np.log(kmat_triu+1e-20))
+        kmat_ent = soap.soapy.math.shannon_entropy(kmat_triu, eps=1e-20, norm=True)
+        if log: log << 'Eta=%+1.2e Gamma=%+1.2e avg/std %+1.2e %+1.2e min/max %+1.2e %+1.2e ent %+1.2e' % \
+            (eta, gamma, kmat_avg, kmat_std, kmat_min, kmat_max, kmat_ent) << log.endl
+        if write_out:
+            ofs.write('%+1.7e %+1.7e avg/std %+1.7e %+1.7e min/max %+1.7e %+1.7e ent %+1.2e\n' % \
+                (eta, gamma, kmat_avg, kmat_std, kmat_min, kmat_max, kmat_ent))
+        # Store
+        merits.append((eta, gamma, kmat_std, kmat_ent))
+    ent_target = 0.25/(-0.5*np.log(0.5)) # <- entropy of random uniform numbers in [0,1]
+    ent_target = 1. # TODO
+    merits = sorted(merits, key=lambda m: -(m[3]-ent_target)**2)
+    #merits = sorted(merits, key=lambda m: m[3])
+    if log: log << "Optimum for eta=%+1.7e gamma=%+1.7e : std=%+1.7e ent=%+1.7e" % merits[-1] << log.endl
+    options['laplacian.regularize_eta'] = merits[-1][0]
+    options['laplacian.regularize_gamma'] = merits[-1][1]
+    return
+
 def compare_graphs_laplacian_kernelized(g1, g2, options):
+    if options['run']['verbose']:
+        print "flg(%s,%s)" % (g1.label, g2.label)
     if options['laplacian.hierarchical']:
         return compare_graphs_hierarchical(g1, g2, options)
     else:
@@ -331,7 +393,8 @@ class ParticleGraph(object):
         D = np.zeros((n_atoms, n_atoms))
         # Read options
         inverse_dist = options['laplacian.inverse_dist']
-        scale = options['laplacian.scale']        
+        scale = options['laplacian.scale']
+        coulomb = options['laplacian.coulomb']
         # Off-diagonal
         for i in range(n_atoms):
             ai = atoms[i]
@@ -343,11 +406,15 @@ class ParticleGraph(object):
                 D[i,j] = Rij
                 D[j,i] = D[i,j]
                 # Laplacian
+                if coulomb: 
+                    pre = ai.number*aj.number
+                else: 
+                    pre = 1.
                 if inverse_dist:
-                    L[i,j] = -1.*scale*ai.number*aj.number * 1./Rij
+                    L[i,j] = -1.*scale*pre * 1./Rij
                     L[j,i] = L[i,j]
                 else:
-                    L[i,j] = -1.*scale*ai.number*aj.number * Rij
+                    L[i,j] = -1.*scale*pre * Rij
                     L[j,i] = L[i,j]
         # Diagonal
         d = -np.sum(L, axis=1)
@@ -362,6 +429,7 @@ class ParticleGraph(object):
         if descriptor_type == 'atom_type':
             feature_map = {}
             feature_list = options_descriptor['type_map']
+            """
             for idx, f in enumerate(feature_list): feature_map[f] = idx
             dim = len(feature_map.keys())
             P = np.zeros((n_atoms, dim))
@@ -369,6 +437,16 @@ class ParticleGraph(object):
                 p = np.zeros((dim))
                 atom_type = atom.number
                 p[feature_map[atom_type]] = 1
+                P[idx,:] = p
+            """
+            dim = len(feature_list)
+            P = np.zeros((n_atoms, dim))
+            for idx, atom in enumerate(atoms):
+                p = np.zeros((dim))
+                atom_type = atom.number
+                for i in range(dim):
+                    if feature_list[i] == atom_type: p[i] = 1
+                    else: p[i] = 0
                 P[idx,:] = p
         elif descriptor_type == 'soap':
             # Structure
@@ -397,6 +475,11 @@ class ParticleGraph(object):
             dim = ix.shape[1]
             assert ix.shape[0] == n_atoms
             P = ix
+        elif descriptor_type == 'none':
+            dim = 1
+            P = np.zeros((n_atoms, dim))
+            for idx, atom in enumerate(atoms):
+                P[idx,0] = 1.
         else:
             raise NotImplementedError(descriptor_type)        
         return P, positions
