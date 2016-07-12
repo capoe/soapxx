@@ -9,6 +9,22 @@ import resource
 HARTREE_TO_EV = 27.21138602
 HARTREE_TO_KCALMOL = 627.509469
 
+MP_LOCK = mp.Lock()
+
+def mp_compute_vector(
+        kfct,
+        g_list,
+        n_procs,
+        **kwargs):
+    kfct_primed = fct.partial(
+        kfct,
+        **kwargs)
+    pool = mp.Pool(processes=n_procs)
+    kvec = pool.map(kfct_primed, g_list)
+    pool.close()
+    pool.join()
+    return kvec
+
 def mp_compute_column_block(gi, gj_list, kfct):
     """
     Evaluates kfct for each pair (gi, gj), with gj from gj_list
@@ -78,7 +94,7 @@ def mp_compute_upper_triangle(
         # Map & close
         npyfile = 'out.block_i_%d_%d_j_%d_%d.npy' % (0, c1, c0, c1)
         # ... but first check for previous calculations of same slice
-        if npyfile in os.listdir('./'):
+        if backup and npyfile in os.listdir('./'):
             if log: log << "Load block from '%s'" % npyfile << log.endl
             kmat_column_block = np.load(npyfile)
         else:

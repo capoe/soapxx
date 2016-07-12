@@ -2,7 +2,12 @@ import numpy as np
 import numpy.linalg as la
 import kernel as kern
 import soap
+import multiprocessing as mp
 
+LAGRAPH_DEBUG = False
+LAGRAPH_CHECK = True
+
+# TODO Properly construct subgraph Laplacians
 
 class ParticleGraphVertex(object):
     def __init__(self, atom, options):
@@ -27,6 +32,17 @@ def flg_compute_S(L, Q, eta, gamma):
     S_reg = Q.T.dot(L_reg_inv).dot(Q).real
     travg_S = np.trace(S_reg)/S_reg.shape[0]
     S_reg = S_reg + gamma*np.identity(Q.shape[1])
+
+    #DEBUG
+    if LAGRAPH_DEBUG:
+        print ""
+        print "<flg_compute_S>"
+        print "L_reg=", L_reg
+        print "L_reg_inv=", L_reg_inv
+        print "Identity?=", L_reg.dot(L_reg_inv)
+        print "S_reg", S_reg
+        raw_input('...')
+    #DEBUG
     return S_reg, travg_S
 
 def flg_compute_k_flg(S1, S2):
@@ -52,46 +68,47 @@ def adjust_regularization(graphs, options):
         traces.append(travg_L)
     traces = np.array(traces)
     avg = np.average(traces)
-    options['laplacian.regularize_eta'] = avg/100.
-    print "Adjust eta to", options['laplacian.regularize_eta']
+    options['laplacian']['eta'] = avg/100.
+    print "Adjust eta to", options['laplacian']['eta']
     # Adjust S-regularization
     traces = []
     for g in graphs:
         print g.label
-        if options['laplacian.hierarchical']:
+        if options['graph']['hierarchical']:
             k, travg_S1, travg_S2 = compare_graphs_hierarchical(g, g, options, return_traces=True)
         else:
             k, travg_S1, travg_S2 = compare_graphs_featurized(g, g, options, return_traces=True)
         traces.append(travg_S1)
     traces = np.array(traces)
     avg = np.average(traces)    
-    options['laplacian.regularize_gamma'] = avg/100.
-    print "Adjust gamma to", options['laplacian.regularize_gamma']    
+    options['laplacian']['gamma'] = avg/100.
+    print "Adjust gamma to", options['laplacian']['regularize_gamma']    
     return
 
-def optimize_regularization(graphs, options, write_out=False, log=None):
-    if not options['laplacian.optimize_eta_gamma']: return
-    if log: log << "Optimizing eta, gamma based on %d graphs" % len(graphs) << log.endl
+def optimize_resolution(graphs, options, write_out=False, log=None, verbose=False):
+    if not options['graph']['optimize_hierarchy']: return
+    if log: log << "Optimizing r0, n_levels based on %d graphs" % len(graphs) << log.endl
     # ETA-GAMMA PAIRS
-    etas   = [ 1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1., 5., 10., 50., 100., 500. ]
-    gammas = [ 1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1., 5., 10., 50., 100., 500. ]
-    etas   = [ 10**(-7+i) for i in range(14) ]
-    gammas = [ 10**(-7+i) for i in range(14) ]
+    r0s = [ 0.5, 0.6, 0.7, 0.8, 0.9, 1., 1.5, 2. ]
+    levels = [ 1,2,3,4,5 ]
     pairs = []
-    for eta in etas:
-        for gamma in gammas:
-            pairs.append((eta,gamma))
+    for r0 in r0s:
+        for l in levels:
+            pairs.append((r0,l))
         pairs.append((None,None))
-    if write_out: ofs = open('out.optimize_regularization.txt', 'w')
+    if write_out: ofs = open('out.optimize_resolution.txt', 'w')
     # COMPUTE MERIT (VIA STD-DEV) FOR EACH PAIR
     merits = []
-    for eta, gamma in pairs:
-        if eta == gamma == None:
+    for r0, l in pairs:
+        if r0 == l == None:
             if write_out: ofs.write('\n')
             continue
         # Set
-        options['laplacian.regularize_eta'] = eta
-        options['laplacian.regularize_gamma'] = gamma
+        options['graph']['r0'] = r0
+        options['graph']['n_levels'] = l
+        for graph in graphs:
+            del graph.subgraphs
+            graph.createSubgraphs(options)
         # Process
         kmat = soap.soapy.util.mp_compute_upper_triangle(
             kfct=compare_graphs_laplacian_kernelized,
@@ -111,41 +128,117 @@ def optimize_regularization(graphs, options, write_out=False, log=None):
         kmat_max = np.max(kmat_triu)
         kmat_avg = np.average(kmat_triu)
         kmat_std = np.std(kmat_triu)
+        kmat_med = np.median(kmat_triu)
+        #kmat_ent = -np.sum(kmat_triu*np.log(kmat_triu+1e-20))
+        kmat_ent = soap.soapy.math.shannon_entropy(kmat_triu, eps=1e-20, norm=True)
+        if log: log << 'r0=%+1.2f n_lev=%d avg/std %+1.2e %+1.2e min/max %+1.2e %+1.2e ent %+1.2e' % \
+            (r0, l, kmat_avg, kmat_std, kmat_min, kmat_max, kmat_ent) << log.endl
+        if log and verbose: log << kmat << log.endl
+        if write_out:
+            ofs.write('%+1.2f %d avg/std %+1.7e %+1.7e min/max %+1.7e %+1.7e ent %+1.2e\n' % \
+                (r0, l, kmat_avg, kmat_std, kmat_min, kmat_max, kmat_ent))
+        # Store
+        merits.append((r0, l, kmat_std, kmat_ent, kmat_med))
+    ent_target = 0.25/(-0.5*np.log(0.5)) # <- entropy of numbers uniformly distributed over [0,1]
+    std_target = (1./12.)**0.5 # <- std deviation of numbers uniformly distributed over [0,1]
+    med_target = 0.5
+    merits = sorted(merits, key=lambda m: -(m[2]-std_target)**2 -(m[3]-ent_target)**2 -(m[4]-med_target)**2)
+    if log: log << "Optimum for r0=%+1.7e n_lev=%d : std=%+1.4e ent=%+1.4e med=%+1.4e" % merits[-1] << log.endl
+    options['graph']['r0'] = merits[-1][0]
+    options['graph']['n_levels'] = merits[-1][1]
+    return
+    
+
+def optimize_regularization(graphs, options, write_out=False, log=None, verbose=False):
+    if not options['laplacian']['optimize_eta_gamma']: return
+    if log: log << "Optimizing eta, gamma based on %d graphs" % len(graphs) << log.endl
+    if verbose:
+        for graph in graphs: 
+            print graph.label
+            print graph.L
+    # ETA-GAMMA PAIRS
+    etas   = [ 1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1., 5., 10., 50., 100., 500. ]
+    gammas = [ 1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1., 5., 10., 50., 100., 500. ]
+    etas   = [ 10**(-7+i) for i in range(14) ]
+    gammas = [ 10**(-7+i) for i in range(14) ]
+    etas   = [ 10**(-3+i) for i in range(5) ]
+    gammas = [ 10**(-3+i) for i in range(5) ]
+    pairs = []
+    for eta in etas:
+        for gamma in gammas:
+            pairs.append((eta,gamma))
+        pairs.append((None,None))
+    if write_out: ofs = open('out.optimize_regularization.txt', 'w')
+    # COMPUTE MERIT (VIA STD-DEV) FOR EACH PAIR
+    merits = []
+    for eta, gamma in pairs:
+        if eta == gamma == None:
+            if write_out: ofs.write('\n')
+            continue
+        # Set
+        options['laplacian']['eta'] = eta
+        options['laplacian']['gamma'] = gamma
+        # Process
+        kmat = soap.soapy.util.mp_compute_upper_triangle(
+            kfct=compare_graphs_laplacian_kernelized,
+            g_list=graphs,
+            n_procs=4,
+            n_blocks=1,
+            log=None,
+            tstart_twall=(None, None),
+            backup=False,
+            options=options)
+        # Analyse
+        kmat = kmat + kmat.T
+        np.fill_diagonal(kmat, 0.5*kmat.diagonal())
+        triu_idcs = np.triu_indices(kmat.shape[0], 1)
+        kmat_triu = kmat[triu_idcs]
+        kmat_min = np.min(kmat_triu)
+        kmat_max = np.max(kmat_triu)
+        kmat_avg = np.average(kmat_triu)
+        kmat_std = np.std(kmat_triu)
+        kmat_med = np.median(kmat_triu)
         #kmat_ent = -np.sum(kmat_triu*np.log(kmat_triu+1e-20))
         kmat_ent = soap.soapy.math.shannon_entropy(kmat_triu, eps=1e-20, norm=True)
         if log: log << 'Eta=%+1.2e Gamma=%+1.2e avg/std %+1.2e %+1.2e min/max %+1.2e %+1.2e ent %+1.2e' % \
             (eta, gamma, kmat_avg, kmat_std, kmat_min, kmat_max, kmat_ent) << log.endl
+        if log and verbose: log << kmat << log.endl
         if write_out:
             ofs.write('%+1.7e %+1.7e avg/std %+1.7e %+1.7e min/max %+1.7e %+1.7e ent %+1.2e\n' % \
                 (eta, gamma, kmat_avg, kmat_std, kmat_min, kmat_max, kmat_ent))
         # Store
-        merits.append((eta, gamma, kmat_std, kmat_ent))
-    ent_target = 0.25/(-0.5*np.log(0.5)) # <- entropy of random uniform numbers in [0,1]
-    ent_target = 1. # TODO
-    merits = sorted(merits, key=lambda m: -(m[3]-ent_target)**2)
+        merits.append((eta, gamma, kmat_std, kmat_ent, kmat_med))
+    ent_target = 0.25/(-0.5*np.log(0.5)) # <- entropy of numbers uniformly distributed over [0,1]
+    std_target = (1./12.)**0.5 # <- std deviation of numbers uniformly distributed over [0,1]
+    med_target = 0.5
+    #ent_target = 1. # TODO
+    merits = sorted(merits, key=lambda m: -(m[2]-std_target)**2 -(m[3]-ent_target)**2 -(m[4]-med_target)**2)
     #merits = sorted(merits, key=lambda m: m[3])
-    if log: log << "Optimum for eta=%+1.7e gamma=%+1.7e : std=%+1.7e ent=%+1.7e" % merits[-1] << log.endl
-    options['laplacian.regularize_eta'] = merits[-1][0]
-    options['laplacian.regularize_gamma'] = merits[-1][1]
+    if log: log << "Optimum for eta=%+1.7e gamma=%+1.7e : std=%+1.4e ent=%+1.4e med=%+1.4e" % merits[-1] << log.endl
+    options['laplacian']['eta'] = merits[-1][0]
+    options['laplacian']['gamma'] = merits[-1][1]
     return
 
 def compare_graphs_laplacian_kernelized(g1, g2, options):
     if options['run']['verbose']:
         print "flg(%s,%s)" % (g1.label, g2.label)
-    if options['laplacian.hierarchical']:
+    if options['graph']['hierarchical']:
         return compare_graphs_hierarchical(g1, g2, options)
     else:
         return compare_graphs_featurized(g1, g2, options)
 
 def compare_graphs_kernelized(L1, L2, K12, options, zero_eps=1e-10, verbose=False):
-    
+
+    if LAGRAPH_CHECK:   
+        assert np.max(np.abs(np.sum(L1, axis=1))) < zero_eps
+        assert np.max(np.abs(np.sum(L2, axis=1))) < zero_eps
     assert L1.shape[0] + L2.shape[0] == K12.shape[0]
     assert L1.shape[1] + L2.shape[1] == K12.shape[1]
     assert K12.shape[0] == K12.shape[1]
     
     # JOINT-SUB-SPACE CALCULATION
     # Non-zero-eigenvalue eigenspace
-    assert np.max(K12 - K12.T) < zero_eps # TODO Debug mode
+    assert np.max(np.abs(K12 - K12.T)) < zero_eps # TODO Debug mode
     eigvals, eigvecs = sorted_eigenvalues_vectors(K12, hermitian=True)    
     
     if eigvals[0] < -zero_eps:        
@@ -170,10 +263,25 @@ def compare_graphs_kernelized(L1, L2, K12, options, zero_eps=1e-10, verbose=Fals
     
     # COMPUTE SPECTRUM OVERLAP   
     # Inverse regularized laplacian
-    eta = options['laplacian.regularize_eta']
-    gamma = options['laplacian.regularize_gamma']
+    eta = options['laplacian']['eta']
+    gamma = options['laplacian']['gamma']
     S1_reg, travg_S1 = flg_compute_S(L1, Q1, eta, gamma)
     S2_reg, travg_S2 = flg_compute_S(L2, Q2, eta, gamma)
+    
+    #DEBUG
+    if LAGRAPH_DEBUG:
+        print ""
+        print "<compare_graphs_kernelized>"
+        print "eigvals=", eigvals
+        print "eigvecs=", eigvecs
+        print "Q1=", Q1
+        print "Q2=", Q2
+        print "L1=", L1
+        print "L2=", L2
+        print "S1_reg=", S1_reg
+        print "S2_reg=", S2_reg
+        raw_input('...')
+    #DEBUG
     
     """
     if verbose:
@@ -219,6 +327,18 @@ def compare_graphs_featurized(g1, g2, options, return_traces=False):
     P12[0:n1,:] = P1
     P12[n1:n12,:] = P2
     K12 = P12.dot(P12.T)
+
+    #DEBUG
+    if LAGRAPH_DEBUG:
+        print ""
+        print "<compare_graphs_featurized>"
+        print "P1=", P1
+        print "P2=", P2
+        print "L1=", L1
+        print "L2=", L2
+        print "K12=", K12
+        raw_input('...')
+    #DEBUG
     
     # KERNELIZED COMPARISON
     k_flg, warn, trace_S1, trace_S2 = compare_graphs_kernelized(L1, L2, K12, options)
@@ -336,23 +456,30 @@ def compare_graphs_hierarchical(g1, g2, options, return_traces=False):
         return k_flg_top
 
 class ParticleSubgraph(object):
-    def __init__(self, parent, position, cutoff, idx, idcs_sub, P_sub, L_sub, D_sub):
+    def __init__(self, idx, parent, idcs, position, cutoff):
+        self.idx = idx
         self.parent = parent
+        self.idcs = idcs
         self.position = position
         self.cutoff = cutoff
-        self.idx = idx
-        self.idcs = idcs_sub
         self.size = len(self.idcs)
-        self.P = P_sub # <- Feature matrix
-        self.L = L_sub # <- Laplacian matrix
-        self.D = D_sub # <- Distance matrix
-        assert self.P.shape[0] == self.size
-        assert self.L.shape[0] == self.size
-        assert self.D.shape[0] == self.size
         return
     @property
     def label(self):
         return self.parent.label
+    @property
+    def L(self):
+        L = self.parent.L[self.idcs][:,self.idcs]
+        # Convert L into proper Laplacian
+        np.fill_diagonal(L, 0.)
+        np.fill_diagonal(L, -np.sum(L, axis=1))
+        return L
+    @property
+    def D(self):
+        return self.parent.D[self.idcs][:,self.idcs]
+    @property
+    def P(self):
+        return self.parent.P[self.idcs]
 
 class ParticleGraph(object):
     def __init__(self, label, atoms, options):
@@ -361,28 +488,31 @@ class ParticleGraph(object):
         self.L, self.D = self.setupLaplacian(atoms, options) # <- Laplacian matrix
         self.K = None
         self.subgraphs = None
+        self.subgraph_cutoffs = None
+        if options['graph']['hierarchical']:
+            self.createSubgraphs(options)
+        return
     def createSubgraphs(self, options):
         subgraphs = []
-        n_levels = options['laplacian.n_levels']   
-        r0 = options['laplacian.r0']
-        alpha = options['laplacian.alpha']
+        subgraph_cutoffs = []
+        n_levels = options['graph']['n_levels']   
+        r0 = options['graph']['r0']
+        alpha = options['graph']['alpha']
         for l in range(n_levels):
             r_cut_l = r0*alpha**l
             subgraphs.append([])
+            subgraph_cutoffs.append(r_cut_l)
             for i in range(self.D.shape[0]):
                 idcs_sub = np.where(self.D[i] < r_cut_l)[0]
-                D_sub = self.D[idcs_sub][:,idcs_sub] # TODO Copies array => too memory-intensive
-                L_sub = self.L[idcs_sub][:,idcs_sub] # TODO Same here
-                P_sub = self.P[idcs_sub]             # TODO Same here
-                subgraph = ParticleSubgraph(self, self.centers[i], r_cut_l, i, idcs_sub, P_sub, L_sub, D_sub)
+                subgraph = ParticleSubgraph(
+                    i, self, idcs_sub, self.centers[i], r_cut_l)
                 subgraphs[-1].append(subgraph)
-                #print i
-                #print D_sub
-                #print P_sub
         self.subgraphs = subgraphs
+        self.subgraph_cutoffs = subgraph_cutoffs
         self.n_levels = len(self.subgraphs)
         return self.subgraphs
     def computeKernel(self, options):
+        assert False
         kernelfct = kern.KernelFunctionFactory[options['kernel.type']](options)
         self.K = kernelfct.computeBlock(self.P)
         return self.K
@@ -392,9 +522,9 @@ class ParticleGraph(object):
         L = np.zeros((n_atoms, n_atoms))
         D = np.zeros((n_atoms, n_atoms))
         # Read options
-        inverse_dist = options['laplacian.inverse_dist']
-        scale = options['laplacian.scale']
-        coulomb = options['laplacian.coulomb']
+        inverse_dist = options['laplacian']['inverse_dist']
+        scale = options['laplacian']['scale']
+        coulomb = options['laplacian']['coulomb']
         # Off-diagonal
         for i in range(n_atoms):
             ai = atoms[i]
@@ -424,21 +554,11 @@ class ParticleGraph(object):
     def setupVertexFeatures(self, atoms, options):
         n_atoms = len(atoms)
         positions = [ atom.position for atom in atoms ]
-        descriptor_type = options['laplacian.descriptor']
-        options_descriptor = options['descriptor.%s' % descriptor_type]
+        descriptor_type = options['graph']['descriptor']
+        options_descriptor = options['descriptor'][descriptor_type]
         if descriptor_type == 'atom_type':
             feature_map = {}
             feature_list = options_descriptor['type_map']
-            """
-            for idx, f in enumerate(feature_list): feature_map[f] = idx
-            dim = len(feature_map.keys())
-            P = np.zeros((n_atoms, dim))
-            for idx, atom in enumerate(atoms):
-                p = np.zeros((dim))
-                atom_type = atom.number
-                p[feature_map[atom_type]] = 1
-                P[idx,:] = p
-            """
             dim = len(feature_list)
             P = np.zeros((n_atoms, dim))
             for idx, atom in enumerate(atoms):
@@ -484,7 +604,13 @@ class ParticleGraph(object):
             raise NotImplementedError(descriptor_type)        
         return P, positions
         
-        
+def mp_create_graph(config, options, log):
+    soap.soapy.util.MP_LOCK.acquire()
+    log << log.item << "Graph('%s') PID=%d" % (\
+        config.config_file, mp.current_process().pid) << log.endl
+    soap.soapy.util.MP_LOCK.release()
+    graph = ParticleGraph(config.config_file, config.atoms, options)
+    return graph        
         
         
         
