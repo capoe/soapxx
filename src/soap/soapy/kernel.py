@@ -7,7 +7,6 @@ import numpy as np
 import logging
 from momo import osio, endl, flush
 
-# THERE IS SOMETHING WRONG WITH THE GRADIENTS HERE (DIRECTION SEEMS FINE, BUT MAGNITUDE IS NOT?)! REMARK ~ok, error source found
 # TODO Unit test for global spectrum                                    REMARK ~ok, automatize
 # TODO Check outer kernel derivative                                    REMARK ~ok, automatize
 # TODO Check normalization derivative (compute on C++ level already)    REMARK ~ok, -> C++
@@ -84,7 +83,109 @@ class Xnklab(object):
                 #raw_input('...')
         return self.X_linear
 
+def reduce_xnklab_atomic(atomic, types_global, verbose=False):
+    types_atomic = atomic.getTypes()
+    N = atomic.basis.N
+    L = atomic.basis.L
+    S = len(types_global)
+    S_atomic = len(types_atomic)
+
+    # ORGANIZATION:
+    # | <-        dim_aa_sum = off_ab -> | <-    dim_ab_sum                 -> |
+    # | 11 <- dim_aa_red -> 22 <- ... -> | 12,21 <- dim_ab_red -> 13,31 ... -> |
+    dim_aa_red = (N*N+N)/2*(L+1)
+    dim_aa_sum = S*dim_aa_red
+
+    off_ab = dim_aa_sum
+    dim_ab_red = N*N*(L+1)
+    dim_ab_sum = (S*S-S)/2*dim_ab_red
+
+    X = np.zeros((dim_aa_sum+dim_ab_sum))
+
+    if verbose:
+        print "Global types:", types_global
+        print "Local types: ", types_atomic
+        print "Dim. aa (one pair  a=b) ", dim_aa_red
+        print "Dim. aa (all pairs a=b) ", dim_aa_sum
+        print "Dim. ab (one pair  a!=b)", dim_ab_red
+        print "Dim. ab (all pairs a<b)", dim_ab_sum
+
+    # SPECIES a = b
+    for i in range(S_atomic):
+        a = types_atomic[i]
+        xnklaa = atomic.getPower(a,a).array.real
+        xnklaa_red = np.zeros(((N*N+N)/2, L+1))
+        # Select where n <= k
+        for i in range(N):
+            for j in range(i, N):
+                ij_red = i*N - (i*i-i)/2 + j-i
+                xnklaa_red[ij_red] = xnklaa[i*N+j]
+        # Locate in global array
+        sa = types_global.index(a)
+        i0 = sa*dim_aa_red
+        i1 = i0 + dim_aa_red
+        X[i0:i1] = xnklaa_red.flatten()
+        #print a,X
+        #raw_input('...')
+        #print a,sa,i0,i1
+
+    # SPECIES a != b
+    for i in range(S_atomic):
+        for j in range(i+1, S_atomic):
+            # Select all
+            a = types_atomic[i]
+            b = types_atomic[j]
+            xnklab = atomic.getPower(a,b).array.real
+            xnklab_red = xnklab
+            # Locate in global array
+            sa = types_global.index(a)
+            sb = types_global.index(b)
+            if sa > sb:
+                stmp = sa
+                sa = sb
+                sb = stmp
+            i0 = off_ab + (sa*S - (sa*sa+sa)/2 + sb-sa-1)*dim_ab_red
+            i1 = i0 + dim_ab_red
+            X[i0:i1] = xnklab.flatten()
+            #print a,b,X
+            #raw_input('...')
+            #print a,b,sa,sb,i0,i1
+    return X
+
+class KernelAdaptorSpecificUnique(object):
+    """
+    Extracts Xnklab from spectrum, while removing duplicates
+    resulting from elements that are identical by symmetry:
+    e.g., Xnklab and Xknlba, and Xnklab and Xknlab if a=b
+    """
+    def __init__(self, options, types_global):
+        self.types = types_global
+        self.S = len(types_global)
+        return
+    def adapt(self, spectrum):
+        IX = np.zeros((0.,0.), dtype='float64')
+        dimX = -1
+        for atomic_i in spectrum:
+            Xi_unnorm, Xi_norm = self.adaptScalar(atomic_i)
+            dimX = Xi_norm.shape[0]
+            if not IX.any():
+                IX = np.copy(Xi_norm) # TODO Is this necessary?
+                IX.resize((1, dimX))
+            else:
+                i = IX.shape[0]
+                IX.resize((i+1, dimX))
+                IX[-1,:] = Xi_norm
+            #print IX
+        return IX
+    def adaptScalar(self, atomic):
+        X = reduce_xnklab_atomic(atomic, self.types)
+        X_norm = X/np.dot(X,X)**0.5
+        return X, X_norm
+
 class KernelAdaptorSpecific(object):
+    """
+    WARNING: Duplicate components in Xnklab are not removed
+    """
     def __init__(self, options, types_global):
         self.types = types_global
         self.S = len(types_global)
@@ -222,11 +323,31 @@ class KernelAdaptorGlobalGeneric(object):
         dX_dz = dX_dz/mag_X - np.dot(X, dX_dz)/mag_X**3 * X
         return dX_dx, dX_dy, dX_dz
 
+
+class KernelFunctionDotShifted(object):
+    """
+    For descriptors X,Y where X.dot(Y) e [-1,+1]
+    => k e [0,1]
+    """
+    def __init__(self, options):
+        self.delta = float(options['kernel.delta'])
+        self.xi = float(options['kernel.xi'])
+        return
+    def evaluate(self, IX, IY):
+        k = 0.5*(1.+IX.dot(IY.T))
+        return self.delta**2 * k**self.xi
+
 class KernelFunctionDot(object):
     def __init__(self, options):
-        self.delta = float(options.get('kernel.delta'))
-        self.xi = float(options.get('kernel.xi'))
+        if (type(options) == dict):
+            self.delta = float(options['kernel.delta'])
+            self.xi = float(options['kernel.xi'])
+        else:
+            self.delta = float(options.get('kernel.delta'))
+            self.xi = float(options.get('kernel.xi'))
         return
+    def evaluate(self, IX, IY):
+        return self.delta**2 * IX.dot(IY.T)**self.xi
     def computeDot(self, IX, X, xi, delta):
         return delta**2 * np.dot(IX,X)**xi
     def compute(self, IX, X):
@@ -360,11 +481,13 @@ class KernelFunctionDot3HarmonicDist(object):
 KernelAdaptorFactory = {
 'generic': KernelAdaptorGeneric, 
 'specific': KernelAdaptorSpecific,
+'specific-unique': KernelAdaptorSpecificUnique,
 'global-generic': KernelAdaptorGlobalGeneric
-}     
+}
 
 KernelFunctionFactory = { 
 'dot': KernelFunctionDot, 
+'dot-shifted': KernelFunctionDotShifted,
 'dot-harmonic': KernelFunctionDotHarmonic, 
 'dot-harmonic-dist': KernelFunctionDotHarmonicDist,
 'dot-lj': KernelFunctionDotLj,

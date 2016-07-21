@@ -4,6 +4,12 @@ import kernel as kern
 import soap
 import multiprocessing as mp
 
+import momo
+import datasets.gdb
+import datasets.soap
+import libmatch.environments # Alchemy
+import libmatch.structures # structure
+
 LAGRAPH_DEBUG = False
 LAGRAPH_CHECK = True
 
@@ -85,7 +91,7 @@ def adjust_regularization(graphs, options):
     print "Adjust gamma to", options['laplacian']['regularize_gamma']    
     return
 
-def optimize_resolution(graphs, options, write_out=False, log=None, verbose=False):
+def optimize_hierarchy(graphs, options, kfct, write_out=False, log=None, verbose=False):
     if not options['graph']['optimize_hierarchy']: return
     if log: log << "Optimizing r0, n_levels based on %d graphs" % len(graphs) << log.endl
     # ETA-GAMMA PAIRS
@@ -111,7 +117,7 @@ def optimize_resolution(graphs, options, write_out=False, log=None, verbose=Fals
             graph.createSubgraphs(options)
         # Process
         kmat = soap.soapy.util.mp_compute_upper_triangle(
-            kfct=compare_graphs_laplacian_kernelized,
+            kfct=kfct,
             g_list=graphs,
             n_procs=4,
             n_blocks=1,
@@ -463,6 +469,7 @@ class ParticleSubgraph(object):
         self.position = position
         self.cutoff = cutoff
         self.size = len(self.idcs)
+        self.z = self.parent.Z[self.idx]
         return
     @property
     def label(self):
@@ -489,6 +496,7 @@ class ParticleGraph(object):
         self.K = None
         self.subgraphs = None
         self.subgraph_cutoffs = None
+        self.Z = atoms.get_atomic_numbers()
         if options['graph']['hierarchical']:
             self.createSubgraphs(options)
         return
@@ -595,6 +603,31 @@ class ParticleGraph(object):
             dim = ix.shape[1]
             assert ix.shape[0] == n_atoms
             P = ix
+        elif descriptor_type == 'soap-quippy':
+            atoms_quippy = datasets.gdb.convert_ase2quippy_atomslist([atoms])
+            # Read options
+            options_xml_file = options_descriptor["options_xml"]
+            opt_interface = momo.OptionsInterface()
+            xml_options = opt_interface.ParseOptionsFile(options_xml_file, 'options')
+            if xml_options.soap.nocenter and xml_options.soap.nocenter != 'None':
+                xml_options.soap.nocenter = map(int, xml_options.soap.nocenter.split())
+            else:
+                xml_options.soap.nocenter = []
+            datasets.soap.finalize_options(None, xml_options)
+            # Process
+            soap = libmatch.structures.structure(xml_options.kernel.alchemy)
+            soap.parse(atoms_quippy,
+                options.soap.R,
+                options.soap.N,
+                options.soap.L,
+                options.soap.sigma,
+                options.soap.w0,
+                options.soap.nocenter,
+                options.soap.noatom,
+                kit = options.kernel.kit)
+            # ...
+
+
         elif descriptor_type == 'none':
             dim = 1
             P = np.zeros((n_atoms, dim))
