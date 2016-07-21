@@ -604,30 +604,56 @@ class ParticleGraph(object):
             assert ix.shape[0] == n_atoms
             P = ix
         elif descriptor_type == 'soap-quippy':
-            atoms_quippy = datasets.gdb.convert_ase2quippy_atomslist([atoms])
+            atoms_quippy = datasets.gdb.convert_ase2quippy_atomslist([atoms])[0]
             # Read options
             options_xml_file = options_descriptor["options_xml"]
             opt_interface = momo.OptionsInterface()
             xml_options = opt_interface.ParseOptionsFile(options_xml_file, 'options')
+            # Finalize options
+            xml_options.kernel.alchemy = xml_options.kernel.alchemy.As(str)
+            xml_options.kernel.alchemy_rules = xml_options.kernel.alchemy
+            xml_options.soap.nocenter = xml_options.soap.nocenter.As(str)
+            xml_options.soap.noatom = [] # TODO
             if xml_options.soap.nocenter and xml_options.soap.nocenter != 'None':
                 xml_options.soap.nocenter = map(int, xml_options.soap.nocenter.split())
             else:
                 xml_options.soap.nocenter = []
-            datasets.soap.finalize_options(None, xml_options)
+            datasets.soap.finalize_options([], xml_options)
             # Process
-            soap = libmatch.structures.structure(xml_options.kernel.alchemy)
-            soap.parse(atoms_quippy,
-                options.soap.R,
-                options.soap.N,
-                options.soap.L,
-                options.soap.sigma,
-                options.soap.w0,
-                options.soap.nocenter,
-                options.soap.noatom,
-                kit = options.kernel.kit)
-            # ...
-
-
+            z_types = options_descriptor["z_type_list"]
+            struct = libmatch.structures.structure(xml_options.kernel.alchemy)
+            soap_raw = struct.parse(atoms_quippy,
+                xml_options.soap.R.As(float),
+                xml_options.soap.N.As(int),
+                xml_options.soap.L.As(int),
+                xml_options.soap.sigma.As(float),
+                xml_options.soap.w0.As(float),
+                xml_options.soap.nocenter,
+                xml_options.soap.noatom,
+                types = z_types,
+                kit = xml_options.kernel.kit)
+            # Assign raw soaps to atoms (currently stored by z-key)
+            z_idx_counter = {}
+            for z in soap_raw:
+                #print z, soap_raw[z].shape
+                z_idx_counter[z] = 0
+            ix = []
+            for i,z in enumerate(atoms.get_atomic_numbers()):
+                z_idx = z_idx_counter[z]
+                ix.append(soap_raw[z][z_idx])
+                z_idx_counter[z] += 1
+                #print z, z_idx
+            P = np.array(ix)
+            dim = P.shape[1]
+            assert P.shape[0] == n_atoms
+            #print P.dot(P.T)
+        elif descriptor_type == 'npy_load':
+            folder = options_descriptor["folder"]
+            npy_file = '%s/%s.x.npy' % (folder, self.label)
+            print npy_file
+            P = np.load(npy_file)
+            dim = P.shape[1]
+            assert P.shape[0] == n_atoms
         elif descriptor_type == 'none':
             dim = 1
             P = np.zeros((n_atoms, dim))
