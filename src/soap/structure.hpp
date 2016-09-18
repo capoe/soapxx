@@ -168,6 +168,7 @@ public:
     Particle &addParticle(Segment &seg);
 
     // BOUNDARY CREATION & INTERFACE
+    Boundary *getBoundary() { return _box; }
     void setBoundary(const matrix &box);
     vec connect(const vec &r1, const vec &r2) { return _box->connect(r1, r2); /* 1->2 */ }
     void setBoundaryNumeric(const boost::python::numeric::array &m);

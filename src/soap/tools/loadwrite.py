@@ -132,7 +132,7 @@ class AseConfig(object):
         config_idx=None, 
         frame_idx=None, 
         config_file=None,
-        datastring=None):
+        datastring=''):
         # COORDINATES
         self.atoms = ase_config
         # BOOK-KEEPING

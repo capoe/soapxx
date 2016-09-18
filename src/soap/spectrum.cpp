@@ -92,10 +92,24 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
     GLOG() << "Compute atomic spectrum for particle " << center->getId()
         << " (type " << center->getType() << ", targets " << targets.size() << ") ..." << std::endl;
 
+    vec box_a = _structure->getBoundary()->getBox().getCol(0);
+    vec box_b = _structure->getBoundary()->getBox().getCol(1);
+    vec box_c = _structure->getBoundary()->getBox().getCol(2);
+
+    double rc = _basis->getCutoff()->getCutoff();
+    int na_max = int(1 + rc/box_a.getX() - 0.5);
+    int nb_max = int(1 + rc/box_b.getY() - 0.5);
+    int nc_max = int(1 + rc/box_c.getZ() - 0.5);
+
+
+    GLOG() << box_a << " " << box_b << " " << box_c << std::endl;
+    GLOG() << rc << std::endl;
+    GLOG() << na_max << " " << nb_max << " " << nc_max << std::endl;
+
     AtomicSpectrum *atomic_spectrum = new AtomicSpectrum(center, this->_basis);
 
     Structure::particle_it_t pit;
-    for (pit = targets.begin(); pit != targets.end(); ++pit) {
+    for (pit = targets.begin(); pit != targets.end(); ++pit) { // TODO Consider images
 
         // CHECK FOR EXCLUSIONS
         if (_options->doExcludeTarget((*pit)->getType()) ||
@@ -108,7 +122,7 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
         vec d = (r > 0.) ? dr/r : vec(0.,0.,1.);
 
         // APPLY CUTOFF (= WEIGHT REDUCTION)
-        bool is_center = (*pit == center);
+        bool is_center = (*pit == center); // TODO Consider images
         double weight0 = (*pit)->getWeight();
         double weight_scale = _basis->getCutoff()->calculateWeight(r);
         if (is_center) {
@@ -119,7 +133,7 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
         bool gradients = (is_center) ? false : _options->get<bool>("spectrum.gradients");
         BasisExpansion *nb_expansion = new BasisExpansion(this->_basis); // <- kept by AtomicSpectrum
         nb_expansion->computeCoefficients(r, d, weight0, weight_scale, (*pit)->getSigma(), gradients);
-        atomic_spectrum->addQnlmNeighbour(*pit, nb_expansion);
+        atomic_spectrum->addQnlmNeighbour(*pit, nb_expansion); // TODO Consider images
     }
 
     return atomic_spectrum;

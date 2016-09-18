@@ -212,13 +212,31 @@ class KernelAdaptorSpecific(object):
         return X, X_norm
 
 class KernelAdaptorGlobalSpecific(object):
-    def __init__(self, options, *args, **kwargs):
-        if kwargs != {}: raise ValueError
-        if args != (): raise ValueError
+    def __init__(self, options, types_global=None):
+        self.types = types_global
+        self.S = len(types_global)
         return
+    def getListAtomic(self, spectrum):
+        return [ spectrum.getGlobal() ]
+    def adapt(self, spectrum):
+        # EXTRACT A SET OF CENTER-BASED POWER EXPANSIONS
+        # Here: only global
+        IX = np.zeros((0,0), dtype='complex128')
+        dimX = -1
+        atomic_global = spectrum.getGlobal()
+        Xi_unnorm, Xi_norm = self.adaptScalar(atomic_global)
+        dimX = Xi_norm.shape[0]
+        IX = np.copy(Xi_norm)
+        IX.resize((1,dimX))
+        return IX
+    def adaptScalar(self, atomic):
+        xnklab_atomic = Xnklab(atomic, self.types)
+        X = xnklab_atomic.reduce()
+        x_norm = X/np.dot(X,X)**0.5
+        return X, X_norm
 
 class KernelAdaptorGeneric(object):
-    def __init__(self, options):
+    def __init__(self, options, types_global=None):
         return
     def getListAtomic(self, spectrum):
         return spectrum
@@ -282,7 +300,7 @@ class KernelAdaptorGeneric(object):
         return dX_dx, dX_dy, dX_dz
         
 class KernelAdaptorGlobalGeneric(object):
-    def __init__(self, options):
+    def __init__(self, options, types_global=None):
         return
     def getListAtomic(self, spectrum):
         return [ spectrum.getGlobal() ]
@@ -482,7 +500,8 @@ KernelAdaptorFactory = {
 'generic': KernelAdaptorGeneric, 
 'specific': KernelAdaptorSpecific,
 'specific-unique': KernelAdaptorSpecificUnique,
-'global-generic': KernelAdaptorGlobalGeneric
+'global-generic': KernelAdaptorGlobalGeneric,
+'global-specific': KernelAdaptorGlobalSpecific
 }
 
 KernelFunctionFactory = { 

@@ -3,12 +3,14 @@ import numpy.linalg as la
 import kernel as kern
 import soap
 import multiprocessing as mp
-
 import momo
-import datasets.gdb
-import datasets.soap
-import libmatch.environments # Alchemy
-import libmatch.structures # structure
+try:
+    import datasets.gdb
+    import datasets.soap
+    import libmatch.environments # Alchemy
+    import libmatch.structures # structure
+except ImportError:
+    pass
 
 LAGRAPH_DEBUG = False
 LAGRAPH_CHECK = True
