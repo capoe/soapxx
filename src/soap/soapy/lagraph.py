@@ -581,6 +581,30 @@ class ParticleGraph(object):
         elif descriptor_type == 'soap':
             # Structure
             structure = soap.tools.setup_structure_ase(self.label, atoms)
+            # Customize density
+            density_type = options["atomic_density"]["density_type"]
+            use_covrad = options["atomic_density"]["use_covrad"]
+            atom_rad_scale = float(options["atomic_density"]["atomic_radius"])
+            # ... Particle radii
+            if use_covrad:
+                radius_map = soap.soapy.elements.periodic_table.getPropertyDict("covrad", convert=lambda x: x*atom_rad_scale)
+            else:
+                radius_map = {}
+                for elem in soap.soapy.elements.PeriodicTable.element_names:
+                    radius_map[elem] = atom_rad_scale
+            # ... Particle 'charge'
+            if density_type == "elneg_density":
+                charge_map = soap.soapy.elements.periodic_table.getPropertyDict("elneg")
+            elif density_type == "z_density":
+                charge_map = soap.soapy.elements.periodic_table.getPropertyDict("z")
+            elif density_type == "number_density":
+                charge_map = {}
+                for elem in soap.soapy.elements.PeriodicTable.element_names:
+                    charge_map[elem] = 1.
+            else:
+                raise NotImplementedError("Density type '%s'" % density_type)
+            # ... Apply
+            soap.tools.setup_structure_density(structure, radius_map=radius_map, charge_map=charge_map)
             # Options
             options_soap = soap.Options()
             for item in options_descriptor.items():

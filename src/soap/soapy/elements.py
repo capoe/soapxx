@@ -16,17 +16,17 @@ class PeriodicTable(object):
     ] # Allen scale
     
     element_names = ["?",
-   "H  ","He ",
-   "Li ","Be ","B  ","C  ","N  ","O  ","F  ","Ne ",
-   "Na ","Mg ","Al ","Si ","P  ","S  ","Cl ","Ar ",
-   "K  ","Ca ","Sc ","Ti ","V  ","Cr ","Mn ","Fe ","Co ","Ni ","Cu ","Zn ","Ga ","Ge ", "As ","Se ","Br ","Kr ",
-   "Rb ","Sr ","Y  ","Zr ","Nb ","Mo ","Tc ","Ru ","Rh ","Pd ","Ag ","Cd ","In ","Sn ", "Sb ","Te ","I  ","Xe ",
-   "Cs ","Ba ",
-   "La ","Ce ","Pr ","Nd ","Pm ","Sm ","Eu ","Gd ","Tb ","Dy ","Ho ","Er ","Tm ","Yb ","Lu ",
-   "Hf ","Ta ","W  ","Re ","Os ","Ir ","Pt ","Au ","Hg ","Tl ","Pb ","Bi ","Po ","At ","Rn ",
-   "Fr ","Ra ",
-   "Ac ","Th ","Pa ","U  ","Np ","Pu ","Am ","Cm ", "Bk ","Cf ","Es ","Fm ","Md ","No ","Lr ",
-   "Rf ","Db ","Sg ","Bh ","Hs ","Mt ","Ds ","Rg ","Uub", "Uut","Uuq","Uup","Uuh" ]
+   "H","He",
+   "Li","Be","B","C","N","O","F","Ne",
+   "Na","Mg","Al","Si","P","S","Cl","Ar",
+   "K ","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge", "As","Se","Br","Kr",
+   "Rb","Sr","Y","Zr","Nb","Mo","Tc","Ru","Rh","Pd","Ag","Cd","In","Sn", "Sb","Te","I","Xe",
+   "Cs","Ba",
+   "La","Ce","Pr","Nd","Pm","Sm","Eu","Gd","Tb","Dy","Ho","Er","Tm","Yb","Lu",
+   "Hf","Ta","W","Re","Os","Ir","Pt","Au","Hg","Tl","Pb","Bi","Po","At","Rn",
+   "Fr","Ra",
+   "Ac","Th","Pa","U","Np","Pu","Am","Cm", "Bk","Cf","Es","Fm","Md","No","Lr",
+   "Rf","Db","Sg","Bh","Hs","Mt","Ds","Rg","Uub", "Uut","Uuq","Uup","Uuh" ]
 
     element_mass = [-1., 
 1.00794, 4.00260, 6.941, 9.012187, 10.811, 12.0107, 14.00674, 15.9994, 18.99840, 20.1797, 22.98977,  
