@@ -92,20 +92,22 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
     GLOG() << "Compute atomic spectrum for particle " << center->getId()
         << " (type " << center->getType() << ", targets " << targets.size() << ") ..." << std::endl;
 
+    // FIND IMAGE REPITIONS REQUIRED TO SATISFY CUTOFF
     vec box_a = _structure->getBoundary()->getBox().getCol(0);
     vec box_b = _structure->getBoundary()->getBox().getCol(1);
     vec box_c = _structure->getBoundary()->getBox().getCol(2);
 
     double rc = _basis->getCutoff()->getCutoff();
-    int na_max = int(1 + rc/box_a.getX() - 0.5);
-    int nb_max = int(1 + rc/box_b.getY() - 0.5);
-    int nc_max = int(1 + rc/box_c.getZ() - 0.5);
-
+    std::vector<int> na_nb_nc = _structure->getBoundary()->calculateRepetitions(rc);
+    int na_max = na_nb_nc[0];
+    int nb_max = na_nb_nc[1];
+    int nc_max = na_nb_nc[2];
 
     GLOG() << box_a << " " << box_b << " " << box_c << std::endl;
     GLOG() << rc << std::endl;
     GLOG() << na_max << " " << nb_max << " " << nc_max << std::endl;
 
+    // CREATE BLANK
     AtomicSpectrum *atomic_spectrum = new AtomicSpectrum(center, this->_basis);
 
     Structure::particle_it_t pit;
@@ -115,26 +117,38 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
         if (_options->doExcludeTarget((*pit)->getType()) ||
             _options->doExcludeTargetId((*pit)->getId())) continue;
 
+    for (int na=-na_max; na<na_max+1; ++na) {
+    for (int nb=-nb_max; nb<nb_max+1; ++nb) {
+    for (int nc=-nc_max; nc<nc_max+1; ++nc) {
+
+        //GLOG() << na << " " << nb << " " << nc << std::endl;
+        vec L = na*box_a + nb*box_b + nc*box_c;
+
         // FIND DISTANCE & DIRECTION, CHECK CUTOFF
-        vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
+        vec dr = _structure->connect(center->getPos(), (*pit)->getPos()) + L;  // TODO Consider images
         double r = soap::linalg::abs(dr);
         if (! this->_basis->getCutoff()->isWithinCutoff(r)) continue;
         vec d = (r > 0.) ? dr/r : vec(0.,0.,1.);
 
         // APPLY CUTOFF (= WEIGHT REDUCTION)
-        bool is_center = (*pit == center); // TODO Consider images
+        bool is_image = (*pit == center);
+        bool is_center = (*pit == center && na==0 && nb==0 && nc==0); // TODO Consider images
         double weight0 = (*pit)->getWeight();
         double weight_scale = _basis->getCutoff()->calculateWeight(r);
         if (is_center) {
             weight0 *= _basis->getCutoff()->getCenterWeight();
         }
 
+        GLOG() << "C " << dr.getX() << " " << dr.getY() << " " << dr.getZ() << std::endl;
+
         // COMPUTE EXPANSION & ADD TO SPECTRUM
-        bool gradients = (is_center) ? false : _options->get<bool>("spectrum.gradients");
+        bool gradients = (is_image) ? false : _options->get<bool>("spectrum.gradients");
         BasisExpansion *nb_expansion = new BasisExpansion(this->_basis); // <- kept by AtomicSpectrum
         nb_expansion->computeCoefficients(r, d, weight0, weight_scale, (*pit)->getSigma(), gradients);
         atomic_spectrum->addQnlmNeighbour(*pit, nb_expansion); // TODO Consider images
-    }
+
+    }}} // Close loop over images
+    } // Close loop over particles
 
     return atomic_spectrum;
 }

@@ -152,9 +152,19 @@ void AtomicSpectrum::addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion) {
     else {
         auto it = _map_pid_qnlm.find(id);
         if (it != _map_pid_qnlm.end()) {
-            throw soap::base::SanityCheckFailed("<AtomicSpectrum::addQnlm> Already have entry for pid.");
+
+            // There is already an entry for this pid - hence, this must be an image of the actual particle.
+            // Add coefficients & gradients to existing density expansion.
+            // This sanity check is no longer adequate:
+            // throw soap::base::SanityCheckFailed("<AtomicSpectrum::addQnlm> Already have entry for pid.");
+            _map_pid_qnlm[id].second->add(*nb_expansion);
+            if (nb_expansion->hasGradients()) {
+                _map_pid_qnlm[id].second->addGradient(*nb_expansion);
+            }
         }
-        _map_pid_qnlm[id] = std::pair<std::string,qnlm_t*>(type, nb_expansion);
+        else {
+            _map_pid_qnlm[id] = std::pair<std::string,qnlm_t*>(type, nb_expansion);
+        }
     }
     return;
 }
