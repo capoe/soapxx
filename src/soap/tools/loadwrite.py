@@ -83,6 +83,14 @@ def setup_structure_ase(label, ase_config, top=None):
                 atom_idx += 1
     return structure 
 
+def setup_structure_density(structure, radius_map, charge_map, anonymize=False):
+    for particle in structure:
+        particle.weight = charge_map[particle.type]
+        particle.sigma = radius_map[particle.type]
+        if anonymize:
+            particle.type = "X"
+    return
+
 class AseConfigList(object):
     def __init__(self,
         config_files=[],

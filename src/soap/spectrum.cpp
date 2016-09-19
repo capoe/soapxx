@@ -139,7 +139,7 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
             weight0 *= _basis->getCutoff()->getCenterWeight();
         }
 
-        GLOG() << "C " << dr.getX() << " " << dr.getY() << " " << dr.getZ() << std::endl;
+        GLOG() << (*pit)->getType() << " " << dr.getX() << " " << dr.getY() << " " << dr.getZ() << std::endl;
 
         // COMPUTE EXPANSION & ADD TO SPECTRUM
         bool gradients = (is_image) ? false : _options->get<bool>("spectrum.gradients");
