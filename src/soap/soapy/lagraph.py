@@ -627,8 +627,11 @@ class ParticleGraph(object):
                 types_global=options_descriptor['type_list'])
             ix = adaptor.adapt(spectrum)
             dim = ix.shape[1]
-            assert ix.shape[0] == n_atoms
             P = ix
+            if options_soap.get('kernel.adaptor') in [ 'global-generic', 'global-specific' ]:
+                pass
+            else:
+                assert P.shape[0] == n_atoms 
         elif descriptor_type == 'soap-quippy':
             atoms_quippy = datasets.gdb.convert_ase2quippy_atomslist([atoms])[0]
             # Read options
@@ -671,7 +674,10 @@ class ParticleGraph(object):
                 #print z, z_idx
             P = np.array(ix)
             dim = P.shape[1]
-            assert P.shape[0] == n_atoms
+            if options_soap.get('kernel.adaptor') in [ 'global-generic', 'global-specific' ]:
+                pass
+            else:
+                assert P.shape[0] == n_atoms 
             #print P.dot(P.T)
         elif descriptor_type == 'npy_load':
             folder = options_descriptor["folder"]
