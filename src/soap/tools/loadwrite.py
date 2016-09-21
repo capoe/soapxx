@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from .. import _soapxx as soap
+from ..soapy import momo
 
 
 try:

@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.linalg as la
 import soap
-import permanent as perm
+from .. import linalg as perm
 import kernel as kern
 import lagraph
 

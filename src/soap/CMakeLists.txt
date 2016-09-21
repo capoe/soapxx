@@ -3,6 +3,7 @@ file(GLOB LOCAL_SOURCES *.cpp)
 # SUBDIRECTORIES
 add_subdirectory(base)
 add_subdirectory(linalg)
+add_subdirectory(linalg/permanent)
 add_subdirectory(tools)
 add_subdirectory(soapy)
 
