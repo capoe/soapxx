@@ -10,7 +10,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 # BUILD OPTIONS
 enable_language(CXX)
-set(CMAKE_CXX_COMPILER "/usr/local/shared/intel/compilers_and_libraries_2016.2.181/linux/bin/intel64/icc")
+#set(CMAKE_CXX_COMPILER "/usr/local/shared/intel/compilers_and_libraries_2016.2.181/linux/bin/intel64/icc")
 message("C++ compiler: " ${CMAKE_CXX_COMPILER} " " ${CMAKE_CXX_COMPILER_ID})
 option(BUILD_SHARED_LIBS "Build shared libs" ON)
 if(${CMAKE_VERSION} VERSION_GREATER 3.1)
