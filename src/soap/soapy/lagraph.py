@@ -696,10 +696,11 @@ class ParticleGraph(object):
         return P, positions
         
 def mp_create_graph(config, options, log):
-    soap.soapy.util.MP_LOCK.acquire()
-    log << log.item << "Graph('%s') PID=%d" % (\
-        config.config_file, mp.current_process().pid) << log.endl
-    soap.soapy.util.MP_LOCK.release()
+    if log:
+        soap.soapy.util.MP_LOCK.acquire()
+        log << log.item << "Graph('%s') PID=%d" % (\
+            config.config_file, mp.current_process().pid) << log.endl
+        soap.soapy.util.MP_LOCK.release()
     graph = ParticleGraph(config.config_file, config.atoms, options)
     return graph        
         

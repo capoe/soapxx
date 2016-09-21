@@ -6,19 +6,21 @@ import kernel as kern
 import lagraph
 
 def compare_graphs_average(g1, g2, options):
-    P1 = g1.P
+    # TODO Use KernelFunctionFactory here
+    xi = options['basekernel']['kernel.xi']
     P1_avg = np.average(g1.P, axis=0)
     P1_avg = P1_avg / np.dot(P1_avg, P1_avg)**0.5
-    P2 = g2.P
     P2_avg = np.average(g2.P, axis=0)
     P2_avg = P2_avg / np.dot(P2_avg, P2_avg)**0.5
-    print P1.shape, P2.shape, P1_avg.shape, P2_avg.shape
-    return np.dot(P1_avg, P2_avg)
+    #print P1.shape, P2.shape, P1_avg.shape, P2_avg.shape
+    return np.dot(P1_avg, P2_avg)**xi
 
 def compare_graphs_global(g1, g2, options):
+    # TODO Use KernelFunctionFactory here
+    xi = options['basekernel']['kernel.xi']
     assert g1.P.shape[0] == 1 # Global descriptor computed?
     assert g2.P.shape[0] == 1 # Global descriptor computed?
-    return np.dot(g1.P[0], g2.P[0])
+    return np.dot(g1.P[0], g2.P[0])**xi
 
 def compare_graphs_rematch(g1, g2, options):
     if options['graph']['hierarchical']:

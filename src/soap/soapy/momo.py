@@ -4,7 +4,10 @@ import commands
 import argparse
 import time
 import numpy as np
-from lxml import etree
+try:
+    from lxml import etree
+except ImportError:
+    pass
 
 boolean_dict = \
     {'true' : True,   '1' : True,  'yes' : True,

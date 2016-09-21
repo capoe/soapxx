@@ -1,7 +1,11 @@
 import numpy as np
 import numpy.linalg
 
-from momo import osio, endl, flush
+from ..soapy import momo
+
+osio = momo.osio
+endl = momo.endl
+flush = momo.flush
 
 class Xnklab(object):
     def __init__(self, atomic, types_global):

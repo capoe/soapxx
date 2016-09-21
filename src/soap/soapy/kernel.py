@@ -232,7 +232,7 @@ class KernelAdaptorGlobalSpecific(object):
     def adaptScalar(self, atomic):
         xnklab_atomic = Xnklab(atomic, self.types)
         X = xnklab_atomic.reduce()
-        x_norm = X/np.dot(X,X)**0.5
+        X_norm = X/np.dot(X,X)**0.5
         return X, X_norm
 
 class KernelAdaptorGeneric(object):

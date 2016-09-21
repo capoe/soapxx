@@ -1,8 +1,11 @@
 import numpy as np
 import numpy.linalg
 
-from momo import osio, endl, flush
+from ..soapy import momo
 
+osio = momo.osio
+endl = momo.endl
+flush = momo.flush
 
 def compute_X(Qr):
     # Q is N x (2*L+1) real-valued matrix
