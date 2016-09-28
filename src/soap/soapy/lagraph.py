@@ -601,6 +601,12 @@ class ParticleGraph(object):
                 charge_map = {}
                 for elem in soap.soapy.elements.PeriodicTable.element_names:
                     charge_map[elem] = 1.
+            elif density_type == "number_density_generic":
+                charge_map = {}
+                for elem in soap.soapy.elements.PeriodicTable.element_names:
+                    charge_map[elem] = 1.
+            elif density_type == "valence_charge_density":
+                charge_map = soap.soapy.elements.periodic_table.getPropertyDict("valence")
             else:
                 raise NotImplementedError("Density type '%s'" % density_type)
             # ... Apply

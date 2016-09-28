@@ -76,7 +76,6 @@ public:
 		_box.ZeroMatrix();
 	}
     vec connect(const vec &r_i, const vec &r_j) const {
-        std::cout << "connect open" << std::endl;
     	return r_j - r_i;
     }
     template<class Archive>

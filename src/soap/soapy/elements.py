@@ -48,6 +48,17 @@ class PeriodicTable(object):
 1.570,1.560,2.000,1.560,1.440,1.340,1.300,1.280,1.260,1.270,1.300,1.340,1.490,1.480,1.470,1.460,1.460, 
 2.000,2.000,2.000,2.000,2.000,1.650,2.000,1.420,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000, 
 2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000,2.000 ]
+
+    element_valence = [-1.,
+1,-1, 1, 2, 3, 4, 3, 2, 1,-1, 1, 2, 3, 4, 3, 2,     
+  1,-1, 1, 2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,     
+ -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,     
+ -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,     
+ -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,     
+ -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,     
+ -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,     
+ -1,-1,-1,-1]
+
     def __init__(self):
         self.elements_by_z = {}
         self.elements_by_name = {}
@@ -60,13 +71,13 @@ class PeriodicTable(object):
             raise RuntimeError("Invalid element identifier '%s'" % key)
     def setup(self):
         element_z = [ i for i in range(len(self.element_names)) ]
-        assert len(self.element_names) == len(self.element_mass) == len(self.element_covrad)
-        for z, name, mass, covrad, elneg in zip(element_z, self.element_names, self.element_mass, self.element_covrad, self.element_elneg):
+        assert len(self.element_names) == len(self.element_mass) == len(self.element_covrad) == len(self.element_valence)
+        for z, name, mass, covrad, elneg, valence in zip(element_z, self.element_names, self.element_mass, self.element_covrad, self.element_elneg, self.element_valence):
             name = name.strip()
-            self.addElement(z, name, mass, covrad, elneg)
+            self.addElement(z, name, mass, covrad, elneg, valence)
         return self
-    def addElement(self, z, name, mass, covrad, elneg):
-        elem = AtomicElement(z, name, mass, covrad, elneg)
+    def addElement(self, z, name, mass, covrad, elneg, valence):
+        elem = AtomicElement(z, name, mass, covrad, elneg, valence)
         self.elements_by_z[z] = elem
         self.elements_by_name[name] = elem
         return
@@ -77,13 +88,14 @@ class PeriodicTable(object):
         return props
 
 class AtomicElement(object):
-    def __init__(self, z, name, mass, covrad, elneg):
+    def __init__(self, z, name, mass, covrad, elneg, valence):
         self.z = z
         self.name = name
         self.mass = mass
         self.covrad = covrad
         self.elneg = elneg
-        self.property_dict = { 'z' : z, 'covrad' : covrad, 'name': name, 'mass': mass, 'elneg': elneg }
+        self.valence = valence
+        self.property_dict = { 'z' : z, 'covrad' : covrad, 'name': name, 'mass': mass, 'elneg': elneg, 'valence': valence }
     def __getitem__(self, key):
         return self.property_dict[key]
 
