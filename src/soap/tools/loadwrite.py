@@ -1,14 +1,95 @@
 import os
 import numpy as np
+import itertools
+import partition
 from .. import _soapxx as soap
 from ..soapy import momo
-
+from ..soapy import elements
 
 try:
     import ase
     import ase.io
 except ImportError:
     print("Note: ase.io import failed. Install PYTHON-ASE to harvest full reader functionality.")
+
+def structures_from_xyz(xyz_file, do_partition=True, add_fragment_com=True):
+    # Read xyz via ASE
+    ase_configs = ase.io.read(xyz_file, index=':')
+    return structures_from_ase(
+        ase_configs=ase_configs, 
+        do_partition=do_partition,
+        add_fragment_com=add_fragment_com)
+
+def structures_from_ase(ase_configs, do_partition=True, add_fragment_com=True, use_center_of_geom=False, log=None):
+    # NOTE Center of mass is computed without considering PBC => Requires unwrapped coordinates
+    # Create structures
+    structures = []
+    for config in ase_configs:
+        # System properties
+        label = config.info['label']
+        positions = config.get_positions()
+        types = config.get_chemical_symbols()
+        if log: log << log.back << "Reading '%s'" % label << log.flush
+        # Simulation cell
+        if config.pbc.all(): 
+            box = np.array([ase_config.cell[0], ase_config.cell[1], ase_config.cell[2]])
+        elif not config.pbc.any(): 
+            box = np.zeros((3,3))
+        else: 
+            raise NotImplementedError("<structures_from_xyz> Partial periodicity not implemented.")
+        # Partition 
+        if do_partition:
+            frags, top = partition.PartitionStructure(types, positions)
+            positions = [ atm.xyz for atm in itertools.chain(*frags) ]
+            types = [ atm.e for atm in itertools.chain(*frags) ]
+        else:
+            top = [('SEG', 1, len(positions))]
+        # Check particle count consistent with top
+        atom_count = 0
+        for section in top:
+            atom_count += section[1]*section[2]
+        assert atom_count == len(positions) # Does topology match structure?
+        # Create segments, particles
+        structure = soap.Structure(label)
+        structure.box = box
+        atom_idx = 0
+        for section in top:
+            seg_type = section[0]
+            n_segs = section[1]
+            n_atoms = section[2]
+            for i in range(n_segs):
+                segment = structure.addSegment()
+                segment.name = seg_type
+                # Add particles, compute CoM
+                com = np.array([0.,0.,0.])
+                com_weight_total = 0
+                for j in range(n_atoms):
+                    particle = structure.addParticle(segment)
+                    particle.pos = positions[atom_idx]
+                    particle.weight = 1.
+                    particle.sigma = 0.5
+                    particle.type = types[atom_idx]
+                    # Compute CoMass/CoGeom
+                    if use_center_of_geom:
+                        com_weight = 1.
+                    else:
+                        com_weight = elements.periodic_table[particle.type].mass
+                    com_weight_total += com_weight
+                    com = com + com_weight*positions[atom_idx]
+                    atom_idx += 1
+                com = com/com_weight_total
+                # Add CoM particle if requested
+                if add_fragment_com:
+                    segment = structure.addSegment()
+                    segment.name = "%s.COM" % seg_type
+                    particle = structure.addParticle(segment)
+                    particle.pos = com
+                    particle.weight = 0.
+                    particle.sigma = 0.5
+                    particle.type = "COM"
+        structures.append(structure)
+    if log: log << log.endl
+    return structures
 
 def write_xyz(xyz_file, structure):
     ofs = open(xyz_file, 'w')
