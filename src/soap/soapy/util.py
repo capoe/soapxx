@@ -42,6 +42,24 @@ def mp_compute_column_block(gi, gj_list, kfct):
         krow.append(k)
     return krow
 
+def compute_upper_triangle(
+        kfct,
+        g_list,
+        **kwargs):
+    dim = len(g_list)
+    kmat = np.zeros((dim,dim), dtype='float64')
+    kfct_primed = fct.partial(
+        kfct,
+        **kwargs)
+    for i in range(dim):
+        gi = g_list[i]
+        for j in range(i, dim):
+            gj = g_list[j]
+            kij = kfct(gi, gj)
+            kmat[i,j] = kij
+            kmat[j,i] = kij
+    return kmat
+
 def mp_compute_upper_triangle(
         kfct, 
         g_list, 

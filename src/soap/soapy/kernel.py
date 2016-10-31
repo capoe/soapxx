@@ -166,9 +166,11 @@ class KernelAdaptorSpecificUnique(object):
         IX = np.zeros((0,0), dtype='float64') # feature matrix
         dimX = -1
         IR = np.zeros((0,0), dtype='float64') # position matrix
+        types = []
         for atomic_i in spectrum:
             Xi_unnorm, Xi_norm = self.adaptScalar(atomic_i)
             Ri = atomic_i.getCenter().pos
+            types.append(atomic_i.getCenter().type)
             dimX = Xi_norm.shape[0]
             if not IX.any():
                 IX = np.copy(Xi_norm) # TODO Is this necessary?
@@ -182,7 +184,7 @@ class KernelAdaptorSpecificUnique(object):
                 IR.resize((i+1, 3))
                 IR[-1,:] = Ri
         if return_pos_matrix:
-            return IX, IR
+            return IX, IR, types
         else:
             return IX
     def adaptScalar(self, atomic):

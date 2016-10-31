@@ -79,6 +79,7 @@ class AtomXyz(object):
     def __init__(self, e, xyz, id):
         # PROPERTIES
         self.e = e
+        self.id_initial = id
         self.id = id
         self.xyz = xyz
         self.x = xyz[0]
