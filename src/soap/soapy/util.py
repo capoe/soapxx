@@ -11,6 +11,30 @@ HARTREE_TO_KCALMOL = 627.509469
 
 MP_LOCK = mp.Lock()
 
+def mp_pool_compute_upper_triangle(
+        kfct,
+        g_list,
+        n_procs,
+        dtype='float64',
+        mplog=None,
+        **kwargs):
+    kfct_primed=fct.partial(kfct, **kwargs)
+    n_rows = len(g_list)
+    kmat = np.zeros((n_rows, n_rows), dtype=dtype)
+    for i in range(n_rows):
+        if mplog: mplog << mplog.back << "Computing row %d" % i << mplog.endl
+        g_pair_list = []
+        gi = g_list[i]
+        for j in range(i, n_rows):
+            gj = g_list[j]
+            g_pair_list.append([gi,gj])
+        pool = mp.Pool(processes=n_procs)
+        krow = pool.map(kfct_primed, g_pair_list)
+        pool.close()
+        pool.join()
+        kmat[i,i:] = krow
+    return kmat
+
 def mp_compute_vector(
         kfct,
         g_list,
@@ -42,12 +66,30 @@ def mp_compute_column_block(gi, gj_list, kfct):
         krow.append(k)
     return krow
 
+def compute_upper_triangle(
+        kfct,
+        g_list,
+        **kwargs):
+    dim = len(g_list)
+    kmat = np.zeros((dim,dim), dtype='float64')
+    kfct_primed = fct.partial(
+        kfct,
+        **kwargs)
+    for i in range(dim):
+        gi = g_list[i]
+        for j in range(i, dim):
+            gj = g_list[j]
+            kij = kfct(gi, gj)
+            kmat[i,j] = kij
+            kmat[j,i] = kij
+    return kmat
+
 def mp_compute_upper_triangle(
         kfct, 
         g_list, 
         n_procs, 
         n_blocks, 
-        log=None, 
+        mplog=None, 
         tstart_twall=(None,None), 
         backup=True,
         verbose=True,
@@ -63,7 +105,7 @@ def mp_compute_upper_triangle(
     n_blocks: number of column blocks onto which computation is split
     kwargs: keyword arguments supplied to kfct
     """
-    if not verbose: log=None
+    if not verbose: mplog=None
     t_start = tstart_twall[0]
     t_wall = tstart_twall[1]
     dim = len(g_list)
@@ -78,7 +120,7 @@ def mp_compute_upper_triangle(
         # Column start, column end
         c0 = col_div[0]
         c1 = col_div[-1]+1
-        if log: log << "Column block i[%d:%d] j[%d:%d]" % (0, c1, c0, c1) << log.endl
+        if mplog: mplog << "Column block i[%d:%d] j[%d:%d]" % (0, c1, c0, c1) << mplog.endl
         gj_list = g_list[c0:c1]
         gi_list = g_list[0:c1]
         # Prime kernel function
@@ -95,7 +137,7 @@ def mp_compute_upper_triangle(
         npyfile = 'out.block_i_%d_%d_j_%d_%d.npy' % (0, c1, c0, c1)
         # ... but first check for previous calculations of same slice
         if backup and npyfile in os.listdir('./'):
-            if log: log << "Load block from '%s'" % npyfile << log.endl
+            if mplog: mplog << "Load block from '%s'" % npyfile << mplog.endl
             kmat_column_block = np.load(npyfile)
         else:
             kmat_column_block = pool.map(mp_compute_column_block_primed, gi_list)
@@ -110,9 +152,9 @@ def mp_compute_upper_triangle(
         dt_block = t_out-t_in
         if t_start and t_wall:
             t_elapsed = t_out-t_start
-            if log: log << "Time elapsed =" << t_elapsed << " (wall time = %s) (maxmem = %d)" % (t_wall, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) << log.endl
+            if mplog: mplog << "Time elapsed =" << t_elapsed << " (wall time = %s) (maxmem = %d)" % (t_wall, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) << mplog.endl
             if col_div_idx+1 != len(col_div_list) and t_elapsed+dt_block > t_wall-dt_block:
-                log << "Wall time hit expected for next iteration, break ..." << log.endl
+                mplog << "Wall time hit expected for next iteration, break ..." << mplog.endl
                 break
             else: pass
     return kmat

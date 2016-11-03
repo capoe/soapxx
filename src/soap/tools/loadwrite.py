@@ -1,14 +1,179 @@
 import os
 import numpy as np
+import itertools
+import partition
 from .. import _soapxx as soap
 from ..soapy import momo
-
+from ..soapy import elements
 
 try:
     import ase
     import ase.io
 except ImportError:
     print("Note: ase.io import failed. Install PYTHON-ASE to harvest full reader functionality.")
+
+def structures_from_xyz(xyz_file, **kwargs):
+    # Read xyz via ASE
+    ase_configs = ase.io.read(xyz_file, index=':')
+    return structures_from_ase(
+        ase_configs=ase_configs, 
+        **kwargs)
+
+def structures_from_ase(
+        configs, 
+        return_all=False, 
+        **kwargs):
+    configs_mod = []
+    structs = []
+    return_tuples = []
+    for config in configs:
+        return_tuple = \
+            structure_from_ase(
+                config,
+                **kwargs)
+        configs_mod.append(return_tuple[0])
+        structs.append(return_tuple[1])
+    if return_all:
+        return return_tuples
+    else:
+        return configs_mod, structs
+
+def structure_from_ase(
+        config, 
+        do_partition=False, 
+        add_fragment_com=False, 
+        use_center_of_geom=False, 
+        log=None):
+    # NOTE Center of mass is computed without considering PBC => Requires unwrapped coordinates
+    structure = None
+    frag_bond_matrix = None
+    atom_bond_matrix = None
+    frag_labels = []
+    atom_labels = []
+    # System properties
+    label = config.info['label']
+    positions = config.get_positions()
+    types = config.get_chemical_symbols()
+    if log: log << log.back << "Reading '%s'" % label << log.flush
+    # Simulation cell
+    if config.pbc.all(): 
+        box = np.array([config.cell[0], config.cell[1], config.cell[2]])
+    elif not config.pbc.any(): 
+        box = np.zeros((3,3))
+    else: 
+        raise NotImplementedError("<structures_from_xyz> Partial periodicity not implemented.")
+    # Partition 
+    if do_partition:
+        # Partition => Frags, top, reordered positions
+        frags, top = partition.PartitionStructure(types, positions, outfile_gro='%s.gro' % label)
+        atms = [ atm for atm in itertools.chain(*frags) ]
+        positions = [ atm.xyz for atm in itertools.chain(*frags) ]
+        types = [ atm.e for atm in itertools.chain(*frags) ]
+        # Generate fragment labels
+        for frag in frags:
+            label = '-'.join(atm.e for atm in frag)
+            frag_labels.append(label)
+        # Reorder map
+        id_reorder_map = {}
+        for atm in atms:
+            id_reorder_map[atm.id_initial] = atm.id
+        # Connectivity matrix: fragments
+        frag_bond_matrix = np.zeros((len(frags),len(frags)), dtype=bool)
+        for i in range(len(frags)):
+            frag_bond_matrix[i,i] = True
+            for j in range(i+1, len(frags)):
+                frags_are_bonded = False
+                for ai in frags[i]:
+                    for aj in frags[j]:
+                        if aj in ai.bonded:
+                            frags_are_bonded = True
+                            break
+                    if frags_are_bonded: break
+                frag_bond_matrix[i,j] = frags_are_bonded
+                frag_bond_matrix[j,i] = frags_are_bonded
+        # Connectivity matrix: atoms
+        atom_bond_matrix = np.zeros((len(positions),len(positions)), dtype=bool)
+        for i in range(len(atms)):
+            atom_bond_matrix[i,i] = True
+            ai = atms[i]
+            for j in range(i+1, len(atms)):
+                atoms_are_bonded = False
+                aj = atms[j]
+                if aj in ai.bonded:
+                    atoms_are_bonded = True
+                atom_bond_matrix[i,j] = atoms_are_bonded
+                atom_bond_matrix[j,i] = atoms_are_bonded
+        # Reorder ASE atoms
+        config = ase.Atoms(
+            sorted(config, key = lambda atm: id_reorder_map[atm.index+1]), 
+            info=config.info, 
+            cell=config.cell, 
+            pbc=config.pbc)
+    else:
+        top = [('SEG', 1, len(positions))]
+    # Check particle count consistent with top
+    atom_count = 0
+    for section in top:
+        atom_count += section[1]*section[2]
+    assert atom_count == len(positions) # Does topology match structure?
+    # Create segments, particles
+    structure = soap.Structure(label)
+    structure.box = box
+    atom_idx = 0
+    for section in top:
+        seg_type = section[0]
+        n_segs = section[1]
+        n_atoms = section[2]
+        for i in range(n_segs):
+            segment = structure.addSegment()
+            segment.name = seg_type
+            # Add particles, compute CoM
+            com = np.array([0.,0.,0.])
+            com_weight_total = 0
+            for j in range(n_atoms):
+                particle = structure.addParticle(segment)
+                particle.pos = positions[atom_idx]
+                particle.weight = 1.
+                particle.sigma = 0.5
+                particle.type = types[atom_idx]
+                atom_labels.append(particle.type)
+                # Compute CoMass/CoGeom
+                if use_center_of_geom:
+                    com_weight = 1.
+                else:
+                    com_weight = elements.periodic_table[particle.type].mass
+                com_weight_total += com_weight
+                com = com + com_weight*positions[atom_idx]
+                atom_idx += 1
+            com = com/com_weight_total
+            # Add CoM particle if requested
+            if add_fragment_com:
+                segment = structure.addSegment()
+                segment.name = "%s.COM" % seg_type
+                particle = structure.addParticle(segment)
+                particle.pos = com
+                particle.weight = 0.
+                particle.sigma = 0.5
+                particle.type = "COM"
+    if log: log << log.endl
+    return config, structure, top, frag_bond_matrix, atom_bond_matrix, frag_labels, atom_labels
+
+def join_structures_as_segments(structs):
+            # NOTE Segments of the individual structures will be lost
+            # NOTE Box will be adopted from first structure in list
+            label = ':'.join([s.label for s in structs])
+            struct = soap.Structure(label)
+            struct.box = structs[0].box
+            for struct_i in structs:
+                seg = struct.addSegment()
+                seg.name = struct_i.label
+                for p_i in struct_i.particles:
+                    p = struct.addParticle(seg)
+                    p.pos = p_i.pos
+                    p.weight = p_i.weight
+                    p.sigma = p_i.sigma
+                    p.type = p_i.type
+            return struct
 
 def write_xyz(xyz_file, structure):
     ofs = open(xyz_file, 'w')

@@ -162,24 +162,37 @@ class KernelAdaptorSpecificUnique(object):
         self.types = types_global
         self.S = len(types_global)
         return
-    def adapt(self, spectrum):
-        IX = np.zeros((0.,0.), dtype='float64')
+    def adapt(self, spectrum, return_pos_matrix=False):
+        IX = np.zeros((0,0), dtype='float64') # feature matrix
         dimX = -1
+        IR = np.zeros((0,0), dtype='float64') # position matrix
+        types = []
         for atomic_i in spectrum:
             Xi_unnorm, Xi_norm = self.adaptScalar(atomic_i)
+            Ri = atomic_i.getCenter().pos
+            types.append(atomic_i.getCenter().type)
             dimX = Xi_norm.shape[0]
             if not IX.any():
                 IX = np.copy(Xi_norm) # TODO Is this necessary?
                 IX.resize((1, dimX))
+                IR = np.copy(Ri)
+                IR.resize((1, 3))
             else:
                 i = IX.shape[0]
                 IX.resize((i+1, dimX))
                 IX[-1,:] = Xi_norm
-            #print IX
-        return IX
-    def adaptScalar(self, atomic):
+                IR.resize((i+1, 3))
+                IR[-1,:] = Ri
+        if return_pos_matrix:
+            return IX, IR, types
+        else:
+            return IX
+    def adaptScalar(self, atomic, epsilon=1e-20):
         X = reduce_xnklab_atomic(atomic, self.types)
-        X_norm = X/np.dot(X,X)**0.5
+        X_mag = np.dot(X,X)**0.5
+        if X_mag < epsilon: 
+            X_mag = 1.
+        X_norm = X/X_mag
         return X, X_norm
 
 class KernelAdaptorSpecific(object):
@@ -203,7 +216,6 @@ class KernelAdaptorSpecific(object):
                 i = IX.shape[0]
                 IX.resize((i+1, dimX))
                 IX[-1,:] = Xi_norm
-            #print IX
         return IX
     def adaptScalar(self, atomic):
         xnklab_atomic = Xnklab(atomic, self.types)

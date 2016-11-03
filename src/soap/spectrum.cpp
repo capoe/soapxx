@@ -47,6 +47,10 @@ void Spectrum::compute() {
     this->compute(_structure->particles(), _structure->particles());
 }
 
+void Spectrum::compute(Segment *center) {
+    this->compute(center->particles(), _structure->particles());
+}
+
 void Spectrum::compute(Segment *center, Segment *target) {
     this->compute(center->particles(), target->particles());
 }
@@ -139,7 +143,7 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
             weight0 *= _basis->getCutoff()->getCenterWeight();
         }
 
-        GLOG() << (*pit)->getType() << " " << dr.getX() << " " << dr.getY() << " " << dr.getZ() << std::endl;
+        GLOG() << (*pit)->getType() << " " << dr.getX() << " " << dr.getY() << " " << dr.getZ() << " " << (*pit)->getWeight() << std::endl;
 
         // COMPUTE EXPANSION & ADD TO SPECTRUM
         bool gradients = (is_image) ? false : _options->get<bool>("spectrum.gradients");
@@ -275,6 +279,7 @@ void Spectrum::load(std::string archfile) {
 void Spectrum::registerPython() {
     using namespace boost::python;
     void (Spectrum::*computeAll)() = &Spectrum::compute;
+    void (Spectrum::*computeSeg)(Segment*) = &Spectrum::compute;
     void (Spectrum::*computeSegPair)(Segment*, Segment*) = &Spectrum::compute;
     void (Spectrum::*computeCentersTargets)(Structure::particle_array_t&, Structure::particle_array_t&) = &Spectrum::compute;
 
@@ -283,6 +288,7 @@ void Spectrum::registerPython() {
     	.def(init<std::string>())
     	.def("__iter__", range<return_value_policy<reference_existing_object> >(&Spectrum::beginAtomic, &Spectrum::endAtomic))
 	    .def("compute", computeAll)
+        .def("compute", computeSeg)
 	    .def("compute", computeSegPair)
 	    .def("compute", computeCentersTargets)
 		.def("computePower", &Spectrum::computePower)

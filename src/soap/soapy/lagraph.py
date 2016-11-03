@@ -680,10 +680,7 @@ class ParticleGraph(object):
                 #print z, z_idx
             P = np.array(ix)
             dim = P.shape[1]
-            if options_soap.get('kernel.adaptor') in [ 'global-generic', 'global-specific' ]:
-                pass
-            else:
-                assert P.shape[0] == n_atoms 
+            assert P.shape[0] == n_atoms 
             #print P.dot(P.T)
         elif descriptor_type == 'npy_load':
             folder = options_descriptor["folder"]
