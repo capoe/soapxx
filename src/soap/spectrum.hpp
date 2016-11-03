@@ -46,6 +46,7 @@ public:
 	void clean();
 
 	void compute();
+    void compute(Segment *centers);
 	void compute(Segment *centers, Segment *targets);
 	void compute(Structure::particle_array_t &sources, Structure::particle_array_t &targets);
 	AtomicSpectrum *computeAtomic(Particle *center);

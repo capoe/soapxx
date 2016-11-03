@@ -187,9 +187,12 @@ class KernelAdaptorSpecificUnique(object):
             return IX, IR, types
         else:
             return IX
-    def adaptScalar(self, atomic):
+    def adaptScalar(self, atomic, epsilon=1e-20):
         X = reduce_xnklab_atomic(atomic, self.types)
-        X_norm = X/np.dot(X,X)**0.5
+        X_mag = np.dot(X,X)**0.5
+        if X_mag < epsilon: 
+            X_mag = 1.
+        X_norm = X/X_mag
         return X, X_norm
 
 class KernelAdaptorSpecific(object):

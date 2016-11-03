@@ -37,6 +37,30 @@ ligand_size_lower   = 4
 def covalent_cutoff(rad1, rad2):
     return 1.15*(rad1+rad2)
 
+def calculate_connectivity_mat(distance_mat, type_vec, cutoff=None):
+    dim = distance_mat.shape[0]
+    connectivity_mat = np.zeros((dim,dim), dtype=bool)
+    if cutoff != None:
+        for i in range(dim):
+            for j in range(dim):
+                if distance_mat[i,j] < constant:
+                    connectivity_mat[i,j] = True
+                else:
+                    connectivity_mat[i,j] = False
+    else:
+        for i in range(dim):
+            for j in range(dim):
+                t1 = type_vec[i]
+                t2 = type_vec[j]
+                r1 = COVRAD_TABLE[t1]
+                r2 = COVRAD_TABLE[t2]
+                r12 = distance_mat[i,j]
+                if r12 <= covalent_cutoff(r1, r2):
+                    connectivity_mat[i,j] = True
+                else:
+                    connectivity_mat[i,j] = False
+    return connectivity_mat
+
 # COVALENCE RADII (from Cambridge Structural Database, table see http://en.wikipedia.org/wiki/Covalent_radius)
 COVRAD_TABLE = {}
 COVRAD_TABLE['H'] = 0.31
@@ -50,6 +74,7 @@ COVRAD_TABLE['S'] = 1.05
 COVRAD_TABLE['Br'] = 1.20
 COVRAD_TABLE['Cl'] = 1.02
 COVRAD_TABLE['I'] = 1.39
+COVRAD_TABLE['P'] = 1.07
 
 # FORCEFIELD TYPE TABLE
 TYPE_TABLE = {\

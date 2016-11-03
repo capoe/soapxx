@@ -12,20 +12,36 @@ try:
 except ImportError:
     print("Note: ase.io import failed. Install PYTHON-ASE to harvest full reader functionality.")
 
-def structures_from_xyz(xyz_file, do_partition=True, add_fragment_com=True):
+def structures_from_xyz(xyz_file, **kwargs):
     # Read xyz via ASE
     ase_configs = ase.io.read(xyz_file, index=':')
     return structures_from_ase(
         ase_configs=ase_configs, 
-        do_partition=do_partition,
-        add_fragment_com=add_fragment_com)
+        **kwargs)
 
-# TODO def structures_from_ase in addition to structure_from_ase
+def structures_from_ase(
+        configs, 
+        return_all=False, 
+        **kwargs):
+    configs_mod = []
+    structs = []
+    return_tuples = []
+    for config in configs:
+        return_tuple = \
+            structure_from_ase(
+                config,
+                **kwargs)
+        configs_mod.append(return_tuple[0])
+        structs.append(return_tuple[1])
+    if return_all:
+        return return_tuples
+    else:
+        return configs_mod, structs
 
 def structure_from_ase(
         config, 
-        do_partition=True, 
-        add_fragment_com=True, 
+        do_partition=False, 
+        add_fragment_com=False, 
         use_center_of_geom=False, 
         log=None):
     # NOTE Center of mass is computed without considering PBC => Requires unwrapped coordinates
@@ -141,6 +157,23 @@ def structure_from_ase(
                 particle.type = "COM"
     if log: log << log.endl
     return config, structure, top, frag_bond_matrix, atom_bond_matrix, frag_labels, atom_labels
+
+def join_structures_as_segments(structs):
+            # NOTE Segments of the individual structures will be lost
+            # NOTE Box will be adopted from first structure in list
+            label = ':'.join([s.label for s in structs])
+            struct = soap.Structure(label)
+            struct.box = structs[0].box
+            for struct_i in structs:
+                seg = struct.addSegment()
+                seg.name = struct_i.label
+                for p_i in struct_i.particles:
+                    p = struct.addParticle(seg)
+                    p.pos = p_i.pos
+                    p.weight = p_i.weight
+                    p.sigma = p_i.sigma
+                    p.type = p_i.type
+            return struct
 
 def write_xyz(xyz_file, structure):
     ofs = open(xyz_file, 'w')
