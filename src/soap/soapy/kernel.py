@@ -342,6 +342,18 @@ class KernelAdaptorGlobalGeneric(object):
         return dX_dx, dX_dy, dX_dz
 
 
+class KernelFunctionGaussianDiff(object):
+    def __init__(self, options):
+        self.delta = float(options['kernel.gaussian_delta'])
+        self.sigma = float(options['kernel.gaussian_sigma'])
+    def evaluate(self, IX, IY):
+        #res = np.zeros((IX.shape[0],IY.shape[0]))
+        #for i in range(IX.shape[0]):
+        #    for j in range(IY.shape[0]):
+        #        res[i][j] = self.delta**2 * np.exp(-0.5/(self.sigma)**2 * (IX[i]-IY[j]).dot(IX[i]-IY[j]))
+        #return res
+        return self.delta**2 * np.exp(-(1. - IX.dot(IY.T))/self.sigma**2)
+
 class KernelFunctionDotShifted(object):
     """
     For descriptors X,Y where X.dot(Y) e [-1,+1]
@@ -505,6 +517,7 @@ KernelAdaptorFactory = {
 }
 
 KernelFunctionFactory = { 
+'gaussian-diff': KernelFunctionGaussianDiff,
 'dot': KernelFunctionDot, 
 'dot-shifted': KernelFunctionDotShifted,
 'dot-harmonic': KernelFunctionDotHarmonic, 
