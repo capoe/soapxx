@@ -66,6 +66,19 @@ def mp_compute_column_block(gi, gj_list, kfct):
         krow.append(k)
     return krow
 
+def mp_compute_column_block_idx(gi, gj_list, kfct):
+    """
+    Evaluates kfct for each pair (i, j), with j from j_list
+    """
+    krow = []
+    for gj in gj_list:
+        if gj < gi:
+            k = 0.
+        else:
+            k = kfct(gi, gj)
+        krow.append(k)
+    return krow
+
 def compute_upper_triangle(
         kfct,
         g_list,
@@ -79,7 +92,7 @@ def compute_upper_triangle(
         gi = g_list[i]
         for j in range(i, dim):
             gj = g_list[j]
-            kij = kfct(gi, gj)
+            kij = kfct_primed(gi, gj)
             kmat[i,j] = kij
             kmat[j,i] = kij
     return kmat
@@ -93,6 +106,7 @@ def mp_compute_upper_triangle(
         tstart_twall=(None,None), 
         backup=True,
         verbose=True,
+        embed_idx=True,
         **kwargs):
     """
     Compute kernel matrix computed from pairs of objects in object list
@@ -110,8 +124,9 @@ def mp_compute_upper_triangle(
     t_wall = tstart_twall[1]
     dim = len(g_list)
     kmat = np.zeros((dim,dim))
-    # Embed mp index in g-list objects
-    for mp_idx, g in enumerate(g_list): g.mp_idx = mp_idx
+    if embed_idx:
+        # Embed mp index in g-list objects
+        for mp_idx, g in enumerate(g_list): g.mp_idx = mp_idx
     # Divide onto column blocks
     col_idcs = np.arange(len(g_list))
     col_div_list = np.array_split(col_idcs, n_blocks)
@@ -130,7 +145,7 @@ def mp_compute_upper_triangle(
         pool = mp.Pool(processes=n_procs)
         # Prime mp function
         mp_compute_column_block_primed = fct.partial(
-            mp_compute_column_block,
+            mp_compute_column_block if embed_idx else mp_compute_column_block_idx,
             gj_list=gj_list,
             kfct=kfct_primed)
         # Map & close

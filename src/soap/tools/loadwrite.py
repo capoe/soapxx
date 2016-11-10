@@ -46,8 +46,8 @@ def structure_from_ase(
         log=None):
     # NOTE Center of mass is computed without considering PBC => Requires unwrapped coordinates
     structure = None
-    frag_bond_matrix = None
-    atom_bond_matrix = None
+    frag_bond_matrix = np.array([], dtype=bool)
+    atom_bond_matrix = np.array([], dtype=bool)
     frag_labels = []
     atom_labels = []
     # System properties
