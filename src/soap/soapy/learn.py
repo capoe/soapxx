@@ -6,8 +6,12 @@ def subsample_array(array, n_select, method='stride', stride_shift=0):
         n_data = len(array)
     else:
         n_data = array.shape[0]
+    # Treat border cases
+    if n_select >= n_data:
+        return array, []
+    elif n_select <= 0:
+        return [], array
     n_discard = n_data - n_select
-    assert n_discard >= 0 # Trying to select more data than available?
     # Subsample
     if method == 'random':
         # Random access indices

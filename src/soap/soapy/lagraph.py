@@ -685,7 +685,7 @@ class ParticleGraph(object):
         elif descriptor_type == 'npy_load':
             folder = options_descriptor["folder"]
             npy_file = '%s/%s.x.npy' % (folder, self.label)
-            print npy_file
+            #print npy_file
             P = np.load(npy_file)
             dim = P.shape[1]
             assert P.shape[0] == n_atoms
