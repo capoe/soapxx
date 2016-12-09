@@ -33,6 +33,7 @@ public:
     coeff_t &getCoefficientsGradY() { return _coeff_grad_y; }
     coeff_t &getCoefficientsGradZ() { return _coeff_grad_z; }
     void computeCoefficients(BasisExpansion *basex1, BasisExpansion *basex2);
+    void computeCoefficientsHermConj(BasisExpansion *basex1, BasisExpansion *basex2, double scale);
     void computeCoefficientsGradients(BasisExpansion *dqnlm, BasisExpansion *qnlm, bool same_types);
     void add(PowerExpansion *other);
     void writeDensity(std::string filename, Options *options, Structure *structure, Particle *center);

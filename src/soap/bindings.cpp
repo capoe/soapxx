@@ -18,6 +18,7 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::AtomicSpectrum::registerPython();
     soap::BasisExpansion::registerPython();
     soap::PowerExpansion::registerPython();
+    soap::EnergySpectrum::registerPython();
 
     soap::RadialBasisFactory::registerAll();
     soap::AngularBasisFactory::registerAll();
@@ -26,4 +27,3 @@ BOOST_PYTHON_MODULE(_soapxx)
 
     boost::python::def("silence", &soap::GLOG_SILENCE);
 }
-

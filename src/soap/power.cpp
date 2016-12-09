@@ -127,6 +127,31 @@ void PowerExpansion::computeCoefficientsGradients(BasisExpansion *basex1, BasisE
     return;
 }
 
+void PowerExpansion::computeCoefficientsHermConj(BasisExpansion *basex1, BasisExpansion *basex2, double scale) {
+    if (!_basis) throw soap::base::APIError("PowerExpansion::computeCoefficientsHermConj, basis not initialised.");
+
+    BasisExpansion::coeff_t &coeff1 = basex1->getCoefficients();
+    BasisExpansion::coeff_t &coeff2 = basex2->getCoefficients();
+    for (int n = 0; n < _N; ++n) {
+        for (int k = 0; k < _N; ++k) {
+            for (int l = 0; l < (_L+1); ++l) {
+                //std::cout << n << " " << k << " " << l << " : " << std::flush;
+                dtype_t c_nkl = 0.0;
+                for (int m = -l; m <= l; ++m) {
+                    //std::cout << m << " " << std::flush;
+                    c_nkl += coeff1(n, l*l+l+m)*std::conj(coeff2(k, l*l+l+m));
+                }
+                //c_nkl = 0.5*(c_nkl + std::conj(c_nkl)); // = c_nkl.real()
+                double prefac_2l_1 = (_with_sqrt_2l_1_norm) ? 2.*sqrt(2.)*M_PI/sqrt(2.*l+1) : 1.; // Normalization = sqrt(8\pi^2/(2l+1))
+                _coeff(n*_N+k, l) = prefac_2l_1*scale*c_nkl;
+                //std::cout << std::endl;
+            }
+        }
+    }
+    //throw soap::base::APIError("");
+    return;
+}
+
 void PowerExpansion::computeCoefficients(BasisExpansion *basex1, BasisExpansion *basex2) {
     if (!_basis) throw soap::base::APIError("PowerExpansion::computeCoefficients, basis not initialised.");
     //assert(basex1->hasGradients() == false); // <- Not a requirement, just to check this function is used in the intended manner
@@ -234,4 +259,3 @@ void PowerExpansion::registerPython() {
 }
 
 }
-

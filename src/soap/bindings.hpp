@@ -4,6 +4,7 @@
 #include "soap/structure.hpp"
 #include "soap/options.hpp"
 #include "soap/spectrum.hpp"
+#include "soap/contraction.hpp"
 
 namespace soap {
 
@@ -11,4 +12,3 @@ namespace soap {
 
 
 #endif
-
