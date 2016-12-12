@@ -190,7 +190,7 @@ class KernelAdaptorSpecificUnique(object):
     def adaptScalar(self, atomic, epsilon=1e-20):
         X = reduce_xnklab_atomic(atomic, self.types)
         X_mag = np.dot(X,X)**0.5
-        if X_mag < epsilon: 
+        if X_mag < epsilon:
             X_mag = 1.
         X_norm = X/X_mag
         return X, X_norm
@@ -222,6 +222,37 @@ class KernelAdaptorSpecific(object):
         X = xnklab_atomic.reduce()
         X_norm = X/np.dot(X,X)**0.5
         return X, X_norm
+
+class KernelAdaptorGlobalSpecificEnergy(object):
+    def __init__(self, options, types_global):
+        self.types_global = types_global
+        return
+    def adapt(self, espectrum, return_pos_matrix=False, dtype='float64'):
+        dim_linear_ab = None
+        dim_linear_total = None
+        S = len(self.types_global)
+        X = None
+        for sa in self.types_global:
+            for sb in self.types_global:
+                powspec_ab = energy_spectrum.getPowerGlobal(sa, sb)
+                if powspec_ab != None:
+                    xab = powspec_ab.array.real.flatten()
+                    if not dim_linear_ab:
+                        dim_linear_ab = xab.shape[0]
+                        dim_linear_total = S**2*dim_linear_ab
+                        X = np.zeros((S, S*dim_linear_ab), dtype=dtype)
+                    else: assert dim_linear_ab == xab.shape[0]
+                    isa = self.types_global.index(sa)
+                    isb = self.types_global.index(sb)
+                    i0 = isa
+                    i1 = isa+1
+                    j0 = isb*dim_linear_ab
+                    j1 = j0+dim_linear_ab
+                    X[i0:i1,j0:j1] = xab
+        X = X/np.dot(X,X)**0.5
+        if return_pos_matrix:
+            return X, np.array([[0.,0.,0.]]), ["global"]
+        else: return X.flatten()
 
 class KernelAdaptorGlobalSpecific(object):
     def __init__(self, options, types_global=None):
@@ -270,13 +301,13 @@ class KernelAdaptorGeneric(object):
             #    if not pid in pid_list:
             #        logging.debug("Skip, adapt atomic, pid = %d" % pid)
             #        continue
-            
+
             Xi_unnorm, Xi_norm = self.adaptScalar(atomic_i)
             dimX = Xi_norm.shape[0]
             #Xi = np.real(atomic_i.getPower("","").array)
             #dimX = Xi.shape[0]*Xi.shape[1]
             #Xi = Xi.reshape((dimX))
-            
+
             #print "dim(X) =", dimX
             if not IX.any():
                 IX = np.copy(Xi_norm) # TODO Is this necessary?
@@ -299,7 +330,7 @@ class KernelAdaptorGeneric(object):
         dxnkl_pid = atomic.getPowerGradGeneric(nb_pid)
         dX_dx = dxnkl_pid.getArrayGradX()
         dX_dy = dxnkl_pid.getArrayGradY()
-        dX_dz = dxnkl_pid.getArrayGradZ()        
+        dX_dz = dxnkl_pid.getArrayGradZ()
         dimX = dX_dx.shape[0]*dX_dx.shape[1]
         dX_dx = np.real(dX_dx.reshape((dimX)))
         dX_dy = np.real(dX_dy.reshape((dimX)))
@@ -310,7 +341,7 @@ class KernelAdaptorGeneric(object):
         dX_dy = dX_dy/mag_X - np.dot(X, dX_dy)/mag_X**3 * X
         dX_dz = dX_dz/mag_X - np.dot(X, dX_dz)/mag_X**3 * X
         return dX_dx, dX_dy, dX_dz
-        
+
 class KernelAdaptorGlobalGeneric(object):
     def __init__(self, options, types_global=None):
         return
@@ -341,7 +372,7 @@ class KernelAdaptorGlobalGeneric(object):
         dxnkl_pid = atomic.getPowerGradGeneric(nb_pid)
         dX_dx = dxnkl_pid.getArrayGradX()
         dX_dy = dxnkl_pid.getArrayGradY()
-        dX_dz = dxnkl_pid.getArrayGradZ()        
+        dX_dz = dxnkl_pid.getArrayGradZ()
         dimX = dX_dx.shape[0]*dX_dx.shape[1]
         dX_dx = np.real(dX_dx.reshape((dimX)))
         dX_dy = np.real(dX_dy.reshape((dimX)))
@@ -352,7 +383,6 @@ class KernelAdaptorGlobalGeneric(object):
         dX_dy = dX_dy/mag_X - np.dot(X, dX_dy)/mag_X**3 * X
         dX_dz = dX_dz/mag_X - np.dot(X, dX_dz)/mag_X**3 * X
         return dX_dx, dX_dy, dX_dz
-
 
 class KernelFunctionGaussianDiff(object):
     def __init__(self, options):
@@ -393,7 +423,7 @@ class KernelFunctionDot(object):
     def computeDot(self, IX, X, xi, delta):
         return delta**2 * np.dot(IX,X)**xi
     def compute(self, IX, X):
-        return self.computeDot(IX, X, self.xi, self.delta)    
+        return self.computeDot(IX, X, self.xi, self.delta)
     def computeDerivativeOuter(self, IX, X):
         c = self.computeDot(IX, X, self.xi-1, self.delta)
         return self.xi*np.diag(c).dot(IX)
@@ -450,7 +480,7 @@ class KernelFunctionDotHarmonicDist(object):
         D = (1.-C+self.eps)**0.5
         IC = self.kfctdot.computeDerivativeOuter(IX, X)
         return 2*(D-self.d0)*0.5/D*(-1.)*IC
-        
+
 class KernelFunctionDotLj(object):
     def __init__(self, options):
         self.sigma = float(options.get('kernel.lj_sigma'))
@@ -466,7 +496,7 @@ class KernelFunctionDotLj(object):
         IC = self.kfctdot.computeDerivativeOuter(IX, X)
         return (-6.*self.sigma**12*(1./D)**7 + 3.*self.sigma**6*(1./D)**4)*IC
     def computeBlockDot(self, IX, return_distance=False):
-        return self.kfctdot.computeBlock(IX, return_distance)        
+        return self.kfctdot.computeBlock(IX, return_distance)
 
 class KernelFunctionDot3Harmonic(object):
     def __init__(self, options):
@@ -521,21 +551,22 @@ class KernelFunctionDot3HarmonicDist(object):
         return 2*(D_A - D_B)*(0.5/D_A*(-1.)*IC_A - 0.5/D_B*(-1.)*IC_B) + 2*(D_A - D_AB)*0.5/D_A*(-1.)*IC_A + 2*(D_B - D_AB)*0.5/D_B*(-1.)*IC_B + 2*(D_A-self.d0)*1./D_A*(-1.)*IC_A + 2*(D_B-self.d0)*1./D_B*(-1.)*IC_B
 
 KernelAdaptorFactory = {
-'generic': KernelAdaptorGeneric, 
+'generic': KernelAdaptorGeneric,
 'specific': KernelAdaptorSpecific,
 'specific-unique': KernelAdaptorSpecificUnique,
 'global-generic': KernelAdaptorGlobalGeneric,
-'global-specific': KernelAdaptorGlobalSpecific
+'global-specific': KernelAdaptorGlobalSpecific,
+'global-specific-energy': KernelAdaptorGlobalSpecificEnergy
 }
 
-KernelFunctionFactory = { 
+KernelFunctionFactory = {
 'gaussian-diff': KernelFunctionGaussianDiff,
-'dot': KernelFunctionDot, 
+'dot': KernelFunctionDot,
 'dot-shifted': KernelFunctionDotShifted,
-'dot-harmonic': KernelFunctionDotHarmonic, 
+'dot-harmonic': KernelFunctionDotHarmonic,
 'dot-harmonic-dist': KernelFunctionDotHarmonicDist,
 'dot-lj': KernelFunctionDotLj,
-'dot-3-harmonic': KernelFunctionDot3Harmonic, 
+'dot-3-harmonic': KernelFunctionDot3Harmonic,
 'dot-3-harmonic-dist': KernelFunctionDot3HarmonicDist
 }
 
@@ -543,7 +574,7 @@ class KernelPotential(object):
     def __init__(self, options):
         logging.info("Construct kernel potential ...")
         self.basis = soap.Basis(options)
-        self.options = options        
+        self.options = options
         # CORE DATA
         self.IX = None
         self.alpha = None
@@ -551,7 +582,7 @@ class KernelPotential(object):
         self.labels = []
         # KERNEL
         logging.info("Choose kernel function ...")
-        self.kernelfct = KernelFunctionFactory[options.get('kernel.type')](options)   
+        self.kernelfct = KernelFunctionFactory[options.get('kernel.type')](options)
         # ADAPTOR
         logging.info("Choose adaptor ...")
         self.adaptor = KernelAdaptorFactory[options.get('kernel.adaptor')](options)
@@ -562,7 +593,7 @@ class KernelPotential(object):
     def computeKernelMatrix(self, return_distance=False):
         return self.kernelfct.computeBlock(self.IX, return_distance)
     def computeDotKernelMatrix(self, return_distance=False):
-        # Even if the, e.g., dot-harmonic kernel is used for optimization, 
+        # Even if the, e.g., dot-harmonic kernel is used for optimization,
         # the dot-product based kernel matrix may still be relevant
         return self.kernelfct.computeBlockDot(self.IX, return_distance)
     def nConfigs(self):
@@ -635,7 +666,7 @@ class KernelPotential(object):
         # TODO The kernel policy should take care of this:
         if self.use_global_spectrum:
             spectrum.computeGlobal()
-        IX_acqu = self.adaptor.adapt(spectrum)        
+        IX_acqu = self.adaptor.adapt(spectrum)
         n_acqu = IX_acqu.shape[0]
         dim_acqu = IX_acqu.shape[1]
         logging.info("Compute energy from %d atomic environments ..." % n_acqu)
@@ -684,18 +715,18 @@ class KernelPotential(object):
                 # Force on neighbour
                 logging.info("    -> Nb %d" % (nb_pid))
                 dX_dx, dX_dy, dX_dz = self.adaptor.adaptGradients(atomic, nb_pid, X_unnorm)
-                
+
                 force_x = -alpha_dIC.dot(dX_dx)
                 force_y = -alpha_dIC.dot(dX_dy)
                 force_z = -alpha_dIC.dot(dX_dz)
-                
+
                 forces[nb_pid-1][0] += force_x
                 forces[nb_pid-1][1] += force_y
                 forces[nb_pid-1][2] += force_z
                 #print forces
                 #raw_input('...')
         return forces
-        
+
 def restore_positions(structure, positions):
     idx = 0
     for part in structure:
@@ -711,7 +742,7 @@ def perturb_positions(structure, exclude_pid=[]):
         dz = np.random.uniform(-1.,1.)
         part.pos = part.pos + 0.1*np.array([dx,dy,dz])
     return [ part.pos for part in structure ]
-    
+
 def random_positions(structure, exclude_pid=[], b0=-1., b1=1., x=True, y=True, z=True):
     for part in structure:
         if part.id in exclude_pid: continue
@@ -733,7 +764,7 @@ def apply_force_step(structure, forces, scale, constrain_particles=[]):
     idx = -1
     for part in structure:
         idx += 1
-        if part.id in constrain_particles: 
+        if part.id in constrain_particles:
             print "Skip force step, pid =", part.id
             continue
         #if np.random.uniform(0.,1.) > 0.5: continue
@@ -750,7 +781,7 @@ def apply_force_norm_step(structure, forces, scale, constrain_particles=[]):
     idx = -1
     for part in structure:
         idx += 1
-        if part.id in constrain_particles: 
+        if part.id in constrain_particles:
             print "Skip force step, pid =", part.id
             continue
         #if np.random.uniform(0.,1.) > 0.5: continue
@@ -763,8 +794,8 @@ def evaluate_energy(positions, structure, kernelpot, opt_pids, verbose=False, of
     pid_pos = positions.reshape((opt_pids.shape[0],3))
     for pidx, pid in enumerate(opt_pids):
         pos = pid_pos[pidx,:]
-        particle = structure.getParticle(pid)        
-        particle.pos = pos        
+        particle = structure.getParticle(pid)
+        particle.pos = pos
     for part in structure:
         if verbose: print part.id, part.type, part.pos
     # Evaluate energy function
@@ -782,8 +813,8 @@ def evaluate_energy_gradient(positions, structure, kernelpot, opt_pids, verbose=
     pid_pos = positions.reshape((opt_pids.shape[0],3))
     for pidx, pid in enumerate(opt_pids):
         pos = pid_pos[pidx,:]
-        particle = structure.getParticle(pid)        
-        particle.pos = pos        
+        particle = structure.getParticle(pid)
+        particle.pos = pos
     for part in structure:
         if verbose: print part.id, part.type, part.pos
     # Evaluate forces
@@ -797,4 +828,3 @@ def evaluate_energy_gradient(positions, structure, kernelpot, opt_pids, verbose=
     if verbose: print gradients_short
     #forces[2] = 0. # CONSTRAIN TO Z=0 PLANE
     return gradients_short
-
