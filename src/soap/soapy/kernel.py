@@ -227,7 +227,7 @@ class KernelAdaptorGlobalSpecificEnergy(object):
     def __init__(self, options, types_global):
         self.types_global = types_global
         return
-    def adapt(self, espectrum, return_pos_matrix=False, dtype='float64'):
+    def adapt(self, energy_spectrum, return_pos_matrix=False, dtype='float64'):
         dim_linear_ab = None
         dim_linear_total = None
         S = len(self.types_global)
@@ -249,10 +249,11 @@ class KernelAdaptorGlobalSpecificEnergy(object):
                     j0 = isb*dim_linear_ab
                     j1 = j0+dim_linear_ab
                     X[i0:i1,j0:j1] = xab
+        X = X.flatten()
         X = X/np.dot(X,X)**0.5
         if return_pos_matrix:
             return X, np.array([[0.,0.,0.]]), ["global"]
-        else: return X.flatten()
+        else: return X
 
 class KernelAdaptorGlobalSpecific(object):
     def __init__(self, options, types_global=None):
@@ -261,7 +262,7 @@ class KernelAdaptorGlobalSpecific(object):
         return
     def getListAtomic(self, spectrum):
         return [ spectrum.getGlobal() ]
-    def adapt(self, spectrum):
+    def adapt(self, spectrum, return_pos_matrix=False):
         # EXTRACT A SET OF CENTER-BASED POWER EXPANSIONS
         # Here: only global
         IX = np.zeros((0,0), dtype='complex128')
@@ -271,7 +272,9 @@ class KernelAdaptorGlobalSpecific(object):
         dimX = Xi_norm.shape[0]
         IX = np.copy(Xi_norm)
         IX.resize((1,dimX))
-        return IX
+        if return_pos_matrix:
+            return IX, np.array([0.,0.,0.]), ["global"]
+        else: return IX
     def adaptScalar(self, atomic):
         xnklab_atomic = Xnklab(atomic, self.types)
         X = xnklab_atomic.reduce()

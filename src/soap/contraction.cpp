@@ -11,7 +11,7 @@ EnergySpectrum::EnergySpectrum(Spectrum &spectrum, Options &options) : _global_m
     options_tmp.set("radialcutoff.Rc", _options->get<std::string>("energyspectrum.radialcutoff.Rc"));
     options_tmp.set("radialcutoff.Rc_width", _options->get<std::string>("energyspectrum.radialcutoff.Rc_width"));
     options_tmp.set("radialcutoff.center_weight", _options->get<std::string>("energyspectrum.radialcutoff.center_weight"));
-    if (_options->hasKey("radialcutoff.Rc_heaviside")) {
+    if (_options->hasKey("energyspectrum.radialcutoff.Rc_heaviside")) {
         options_tmp.set("radialcutoff.Rc_heaviside", _options->get<std::string>("energyspectrum.radialcutoff.Rc_heaviside"));
     }
     _cutoff = CutoffFunctionOutlet().create(_options->get<std::string>("energyspectrum.radialcutoff.type"));
