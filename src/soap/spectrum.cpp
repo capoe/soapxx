@@ -414,4 +414,3 @@ void Spectrum::registerPython() {
  */
 
 }
-

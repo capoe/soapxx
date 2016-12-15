@@ -247,8 +247,118 @@ std::complex<double> pow_nnan(std::complex<double> z, double a) {
     }
 }
 
-int factorial(int n) {
-    return (n == 1 || n == 0) ? 1 : factorial(n - 1) * n;
+const int FACTORIAL_CACHE_SIZE = 16;
+const long int FACTORIAL_CACHE[] = {
+  1,
+  1, 2, 6,
+  24, 120, 720,
+  5040, 40320, 362880,
+  3628800, 39916800, 479001600,
+  6227020800, 87178291200, 1307674368000 };
+
+long int factorial(int x) {
+    if (x < FACTORIAL_CACHE_SIZE) {
+        return FACTORIAL_CACHE[x];
+    }
+    else {
+        assert(false && "Computing factorial from scratch - not desirable");
+        long int s = 1.0;
+        for (int n = 2; n <= x; n++) {
+          s *= n;
+        }
+        return s;
+    }
+}
+
+void calculate_solidharm_rlm_ilm(
+        vec d,
+        double r,
+        int L,
+        std::vector<std::complex<double>> &rlm,
+        std::vector<std::complex<double>> &ilm) {
+
+    std::vector<double> plm;
+    double theta = 0.0;
+    double phi = 0.0;
+
+    // Compute Associated Legendre Polynomials
+    if (r < 1e-10) { // TODO Define SPACE-QUANTUM
+        assert(false && "Should not calculate irregular spherical harmonics with r=0");
+        plm.resize(L*(L+1)/2+L+1, 0.0);
+        plm[0] = boost::math::legendre_p(0, 0, 0);
+    }
+    else {
+		theta = acos(d.getZ());
+		phi = atan2(d.getY(), d.getX());
+		if (phi < 0.) phi += 2*M_PI; // <- Shift [-pi, -0] to [pi, 2*pi]
+		calculate_legendre_plm(L, d.getZ(), plm);
+    }
+
+    std::cout << "phi = " << phi << std::endl;
+
+    rlm.clear();
+    rlm.resize((L+1)*(L+1), 0.0);
+    for (int l = 0; l <= L; ++l) {
+        for (int m = 0; m <= l; ++m) {
+            rlm[l*l+l+m] =
+                  pow(-1, l-m)
+                * pow(r, l)
+                / factorial(l+m)
+                * std::exp(std::complex<double>(0.,m*phi))
+                * plm[l*(l+1)/2+m];
+        }
+        for (int m = -l; m < 0; ++m) {
+            rlm[l*l+l+m] = pow(-1, m)*std::conj(rlm[l*l+l-m]);
+        }
+    }
+
+    ilm.clear();
+    ilm.resize((L+1)*(L+1), 0.0);
+    for (int l = 0; l <= L; ++l) {
+        for (int m = 0; m <= l; ++m) {
+            ilm[l*l+l+m] =
+                  pow(-1, l-m)
+                * pow(r, -l-1)
+                * factorial(l-m)
+                * std::exp(std::complex<double>(0.,m*phi))
+                * plm[l*(l+1)/2+m];
+        }
+        for (int m = -l; m < 0; ++m) {
+            ilm[l*l+l+m] = pow(-1, m)*std::conj(ilm[l*l+l-m]);
+        }
+    }
+
+    return;
+}
+
+void calculate_legendre_plm(int L, double x, std::vector<double> &plm_out) {
+    // See 'Numerical Recipes' - Chapter on Special Functions
+    plm_out.clear();
+    plm_out.resize(L*(L+1)/2+L+1, 0.0);
+    // Pll / Pmm
+    for (int l = 0; l <= L; ++l) {
+        plm_out[l*(l+1)/2+l] = boost::math::legendre_p(l, l, x);
+        //GLOG() << l << ":" << l << std::endl;
+    }
+    // Pmm => Pm+1m
+    for (int l = 0; l < L; ++l) {
+        int m = l;
+        int ll = l+1;
+        plm_out[ll*(ll+1)/2+l] = x*(2*m+1)*plm_out[l*(l+1)/2+m];
+        //GLOG() << ll << ":" << l << std::endl;
+    }
+    // Pl-1m,Pl-2m => Plm
+    for (int m = 0; m <= L; ++m) {
+        for (int l2 = m+2; l2 <= L; ++l2) {
+            int l0 = l2-2;
+            int l1 = l2-1;
+            int lm0 = l0*(l0+1)/2+m;
+            int lm1 = l1*(l1+1)/2+m;
+            int lm2 = l2*(l2+1)/2+m;
+            //GLOG() << l2 << ":" << m << " from " << lm1 << "," << lm0 << std::endl;
+            plm_out[lm2] = (x*(2*l2-1)*plm_out[lm1] - (l2+m-1)*plm_out[lm0])/(l2-m);
+        }
+    }
 }
 
 } /* CLOSE NAMESPACE */

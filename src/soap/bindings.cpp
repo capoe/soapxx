@@ -1,5 +1,6 @@
 #include "bindings.hpp"
 #include "coulomb.hpp"
+#include "fieldtensor.hpp"
 
 namespace soap {
 
@@ -23,6 +24,8 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::EnergySpectrum::registerPython();
     soap::HierarchicalCoulomb::registerPython();
     soap::AtomicSpectrumHC::registerPython();
+    soap::FTSpectrum::registerPython();
+    soap::AtomicSpectrumFT::registerPython();
 
     soap::RadialBasisFactory::registerAll();
     soap::AngularBasisFactory::registerAll();

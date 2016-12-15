@@ -67,7 +67,22 @@ struct GradSphericalYlm
 };
 
 std::complex<double> pow_nnan(std::complex<double> z, double a);
-int factorial(int n);
+
+extern const int FACTORIAL_CACHE_SIZE;
+extern const long int FACTORIAL_CACHE[];
+long int factorial(int n);
+
+void calculate_solidharm_rlm_ilm(
+        vec d,
+        double r,
+        int L,
+        std::vector<std::complex<double>> &rlm,
+        std::vector<std::complex<double>> &ilm);
+
+void calculate_legendre_plm(
+        int L,
+        double x,
+        std::vector<double> &plm_out);
 
 }
 
