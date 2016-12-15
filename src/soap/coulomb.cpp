@@ -75,7 +75,8 @@ void AtomicSpectrumHC::registerPython() {
         .def("getArray_k1", &AtomicSpectrumHC::getCoefficientsNumpy_k1)
         .def("getArray_k2", &AtomicSpectrumHC::getCoefficientsNumpy_k2)
         .def("getArray_k3", &AtomicSpectrumHC::getCoefficientsNumpy_k3)
-        .def("getArray_k4", &AtomicSpectrumHC::getCoefficientsNumpy_k4);
+        .def("getArray_k4", &AtomicSpectrumHC::getCoefficientsNumpy_k4)
+        .def("getCenter", &AtomicSpectrumHC::getCenter, return_value_policy<reference_existing_object>());
 }
 
 // =============================
