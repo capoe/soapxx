@@ -270,6 +270,70 @@ long int factorial(int x) {
     }
 }
 
+const int FACTORIAL2_CACHE_SIZE = 16;
+const long int FACTORIAL2_CACHE[] = {
+    1,
+    1, 2, 3,
+    8, 15, 48,
+    105, 384, 945,
+    3840, 10395, 46080,
+    135135, 645120, 2027025 };
+
+long int factorial2(int x) {
+    if (x < 0) {
+        assert(x == -1);
+        return 1;
+    }
+    else if (x < FACTORIAL2_CACHE_SIZE) {
+        return FACTORIAL2_CACHE[x];
+    }
+    else {
+        assert(false && "Computing factorial from scratch - not desirable");
+        long int s = 1;
+        for (int n = x; n > 0; n -= 2) {
+            s *= n;
+        }
+        return s;
+    }
+}
+
+void calculate_solidharm_Rlm(
+    vec d,
+    double r,
+    int L,
+    std::vector<std::complex<double>> &rlm) {
+    // Initialise
+    rlm.clear();
+    rlm.resize((L+1)*(L+1), 0.0);
+    // Treat r=0
+    if (r < 1e-10) { // TODO Define SPACE-QUANTUM
+        //throw soap::base::APIError("Rlm(r=0) disabled by design: Handle r=0-case manually.");
+        rlm[0] = 1.;
+        return;
+    }
+    // Proceed with r != 0: Compute Associated Legendre Polynomials
+    std::vector<double> plm;
+	double theta = acos(d.getZ());
+	double phi = atan2(d.getY(), d.getX());
+	if (phi < 0.) phi += 2*M_PI; // <- Shift [-pi, -0] to [pi, 2*pi]
+	calculate_legendre_plm(L, d.getZ(), plm);
+    // Add radial component, phase factors, normalization
+    for (int l = 0; l <= L; ++l) {
+        for (int m = 0; m <= l; ++m) {
+            rlm[l*l+l+m] =
+                  pow(-1, l-m)
+                * pow(r, l)
+                / factorial(l+m)
+                * std::exp(std::complex<double>(0.,m*phi))
+                * plm[l*(l+1)/2+m];
+        }
+        for (int m = -l; m < 0; ++m) {
+            rlm[l*l+l+m] = pow(-1, m)*std::conj(rlm[l*l+l-m]);
+        }
+    }
+    return;
+}
+
 void calculate_solidharm_rlm_ilm(
         vec d,
         double r,

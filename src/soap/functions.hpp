@@ -72,6 +72,16 @@ extern const int FACTORIAL_CACHE_SIZE;
 extern const long int FACTORIAL_CACHE[];
 long int factorial(int n);
 
+extern const int FACTORIAL2_CACHE_SIZE;
+extern const long int FACTORIAL2_CACHE[];
+long int factorial2(int n);
+
+void calculate_solidharm_Rlm(
+        vec d,
+        double r,
+        int L,
+        std::vector<std::complex<double>> &rlm);
+
 void calculate_solidharm_rlm_ilm(
         vec d,
         double r,
