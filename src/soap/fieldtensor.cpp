@@ -12,27 +12,20 @@ namespace ub = boost::numeric::ublas;
 
 const std::string AtomicSpectrumFT::_numpy_t = "float64";
 
-AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int S)
-    : _center(center), _S(S) {
-    this->_Q0 = coeff_zero_t(S,1);
-    this->_Q1 = coeff_zero_t(S,S);
-    this->_Q2 = coeff_zero_t(S,S*S);
-    this->_Q3 = coeff_zero_t(S,S*S*S);
-
+AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int L, int S)
+    : _center(center), _L(L), _S(S) {
     this->_s = center->getTypeId()-1;
     assert(_s >= 0 && "Type-IDs should start from 1");
 }
 
 AtomicSpectrumFT::~AtomicSpectrumFT() {
-    _Q0.clear();
-    _Q1.clear();
-    _Q2.clear();
-    _Q3.clear();
+    // TODO Deallocate arrays
+
 }
 
 void AtomicSpectrumFT::registerPython() {
     using namespace boost::python;
-    class_<AtomicSpectrumFT, AtomicSpectrumFT*>("AtomicSpectrumFT", init<Particle*, int>())
+    class_<AtomicSpectrumFT, AtomicSpectrumFT*>("AtomicSpectrumFT", init<Particle*, int, int>())
         .def("getCenter", &AtomicSpectrumFT::getCenter, return_value_policy<reference_existing_object>());
 }
 
@@ -113,6 +106,10 @@ public:
     }
 
     void computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_t &T) {
+        // TODO This can be sped up by using Tl1m1l2m2 = (-1)^(l1+l2) Tl2m2l1m1
+        // TODO Properties to test:
+        //      Tl1l2 ~ (l-1)! * 1/r^{l1+l2+1} for large r
+        //      Tl1l2 = (-1)^{l1+l2} Tl2l1 and T(-r) = (-1)^{l1+l2} T(r)
         T.clear();
         T = coeff_zero_t((L1+1)*(L1+1), (L2+1)*(L2+1));
 
@@ -151,7 +148,7 @@ public:
 
             tlm1lm2 *=
                 Alm[lm1]*Alm[lm1] * Alm[lm2]*Alm[lm2]
-              / factorial2(2*l1-1)*factorial2(2*l2-1);
+              / (factorial2(2*l1-1)*factorial2(2*l2-1));
 
              // TODO Assert .imag() == zero // TODO Does not actually need to be zero!?
              T(lm1,lm2) = tlm1lm2;
@@ -215,6 +212,7 @@ void FTSpectrum::compute() {
 
     int L = 3; // TODO
     int S = 4;
+    Tlmlm T12(L);
 
     // CREATE ATOMIC SPECTRA
     for (auto it = _atomic_array.begin(); it != _atomic_array.end(); ++it) {
@@ -222,31 +220,124 @@ void FTSpectrum::compute() {
     }
     _atomic_array.clear();
     for (auto pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
-        atomic_t *new_atomic = new atomic_t(*pit, S);
+        atomic_t *new_atomic = new atomic_t(*pit, L, S);
         _atomic_array.push_back(new_atomic);
     }
 
+    // COMPUTE INTERACTION TENSORS
+    std::map<int, std::map<int, Tlmlm::coeff_t>> i1_i2_T12;
     for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
+        // Particle 1
         atomic_t *a = *it1;
-        int sa = a->getTypeIdx();
-        vec ra = a->getCenter()->getPos();
-        for (auto it2 = beginAtomic(); it2 != endAtomic(); ++it2) {
+        int id1 = a->getCenter()->getId();
+        int s1 = a->getTypeIdx();
+        vec r1 = a->getCenter()->getPos();
+        double sigma1 = a->getCenter()->getSigma();
+        // Init. map
+        i1_i2_T12[id1] = std::map<int, Tlmlm::coeff_t>();
+        for (auto it2 = it1; it2 != endAtomic(); ++it2) {
+            // Particle 2
             atomic_t *b = *it2;
-            int sb = b->getTypeIdx();
-            vec rb = b->getCenter()->getPos();
-            // Apply weight function
-            vec dr_ab = _structure->connect(ra, rb);
-            double R_ab = soap::linalg::abs(dr_ab);
-            vec d_ab = dr_ab/R_ab;
-            if (! _cutoff->isWithinCutoff(R_ab)) continue;
-            double w_ab = _cutoff->calculateWeight(R_ab);
-            GLOG() << "    " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << R_ab << " w=" << w_ab << std::endl;
+            int id2 = b->getCenter()->getId();
+            int s2 = b->getTypeIdx();
+            vec r2 = b->getCenter()->getPos();
+            double sigma2 = b->getCenter()->getSigma();
+            // Find connection, apply weight function
+            vec dr12 = _structure->connect(r1, r2);
+            double r12 = soap::linalg::abs(dr12);
+            vec d12 = dr12/r12;
+            if (! _cutoff->isWithinCutoff(r12)) continue;
+            double w12 = _cutoff->calculateWeight(r12);
+            double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
+            GLOG() << "    " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
             // Interact
-            // ...
+            T12.computeTlmlm(d12, r12, a12, L, L, i1_i2_T12[id1][id2]);
         }
     }
 
-    GLOG() << "Factorial2 ..." << std::endl;
+
+
+    // COMPUTE INTERACTION TENSORS
+    // Initialise fields (0)
+    for (auto it = beginAtomic(); it != endAtomic(); ++it) {
+        atomic_t *a = *it;
+        (*a)._f0 = AtomicSpectrumFT::field_coeff_zero_t(S, (L+1)*(L+1));
+    }
+    for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
+        // Particle 1
+        atomic_t *a = *it1;
+        int id1 = a->getCenter()->getId();
+        int s1 = a->getTypeIdx();
+        vec r1 = a->getCenter()->getPos();
+        double sigma1 = a->getCenter()->getSigma();
+        double w1 = a->getCenter()->getWeight();
+        for (auto it2 = it1; it2 != endAtomic(); ++it2) {
+            // Particle 2
+            atomic_t *b = *it2;
+            int id2 = b->getCenter()->getId();
+            int s2 = b->getTypeIdx();
+            vec r2 = b->getCenter()->getPos();
+            double sigma2 = b->getCenter()->getSigma();
+            double w2 = b->getCenter()->getWeight();
+            // Find connection, apply weight function
+            vec dr12 = _structure->connect(r1, r2);
+            double r12 = soap::linalg::abs(dr12);
+            vec d12 = dr12/r12;
+            if (! _cutoff->isWithinCutoff(r12)) continue;
+            double w12 = _cutoff->calculateWeight(r12);
+            double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
+            GLOG() << "    " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
+            // Compute fields
+            if (a == b) {
+                for (int l = 0; l <= L; ++l) {
+                    double parity = pow(-1,l);
+                    for (int m = -l; m <= l; ++m) {
+                        int lm = l*l+l+m;
+                        (*a)._f0(s2, lm) += w12*w2*i1_i2_T12[id1][id2](0, lm);
+                        GLOG() << l << " " << m << " self-interaction " << "s=" << s1 << s2 << " " << i1_i2_T12[id1][id2](0, lm) << std::endl;
+                    }
+                }
+            }
+            else {
+                for (int l = 0; l <= L; ++l) {
+                    double parity = pow(-1,l);
+                    for (int m = -l; m <= l; ++m) {
+                        int lm = l*l+l+m;
+                        (*a)._f0(s2, lm) += w12*w2*i1_i2_T12[id1][id2](0, lm);
+                        (*b)._f0(s1, lm) += w12*w1*i1_i2_T12[id1][id2](0, lm) * parity;
+                    }
+                }
+            }
+        }
+    }
+
+
+
+
+    //Tlmlm T12(L);
+    vec d12(0.,0.,1.);
+    double a12 = 0.5;
+    int L1 = 2;
+    int L2 = 2;
+    for (double r12 = 0.; r12 <= 10.; r12 += 0.05) {
+        Tlmlm::coeff_t T_mat;
+        T12.computeTlmlm(d12, r12, a12, L1, L2, T_mat);
+
+        int l1 = 1;
+        int m1 = 0;
+        int l2 = 1;
+        int m2 = 0;
+
+        int lm1 = l1*l1+l1+m1;
+        int lm2 = l2*l2+l2+m2;
+        GLOG() << r12 << " " << T_mat(lm1,lm2).real() << " " << T_mat(lm2,lm1).real()
+        << " " << T_mat(lm1,lm2).imag() << " " << T_mat(lm2,lm1).imag() << std::endl;
+    }
+
+
+
+
+    /*GLOG() << "Factorial2 ..." << std::endl;
     for (int n = 0; n < 16; ++n) {
         GLOG() << n << "!! = " << factorial2(n) << std::endl;
     }
@@ -297,7 +388,7 @@ void FTSpectrum::compute() {
         }
     }
 
-    /*GLOG() << "Legendre ..." << std::endl;
+    GLOG() << "Legendre ..." << std::endl;
     std::vector<double> plm;
     calculate_legendre_plm(L, 0.3, plm);
     for (int l = 0; l <= L; ++l) {

@@ -4,6 +4,7 @@
 #include "soap/structure.hpp"
 #include "soap/options.hpp"
 #include "soap/cutoff.hpp"
+#include "boost/multi_array.hpp"
 
 namespace soap {
 
@@ -15,20 +16,44 @@ public:
     typedef ub::zero_matrix<dtype_t> coeff_zero_t;
     static const std::string _numpy_t;
 
-    AtomicSpectrumFT(Particle *center, int S);
+    AtomicSpectrumFT(Particle *center, int L, int S);
    ~AtomicSpectrumFT();
     Particle *getCenter() { return _center; }
     int getTypeIdx() { return _s; }
 
     static void registerPython();
 
-    coeff_t _Q0;
-    coeff_t _Q1;
-    coeff_t _Q2;
-    coeff_t _Q3;
+    typedef ub::matrix<std::complex<double>> field_coeff_t;
+    typedef ub::zero_matrix<std::complex<double>> field_coeff_zero_t;
+    typedef field_coeff_t field0_t;
+    typedef boost::multi_array<field0_t, 1> field1_t;
+    typedef boost::multi_array<field0_t, 2> field2_t;
+    typedef boost::multi_array<field0_t, 3> field3_t;
+    //typedef std::vector< field0_t* > fieldn_t;
+
+    typedef field0_t moment0_t;
+    typedef field1_t moment1_t;
+    typedef field2_t moment2_t;
+    typedef field3_t moment3_t;
+
+    field0_t _f0; // alm
+    field1_t _f1; // l',alm
+    field2_t _f2; // l''l',alm
+    field3_t _f3; // l'''l''l',alm
+
+    moment0_t _q0;
+    moment1_t _q1;
+    moment2_t _q2;
+    moment3_t _q3;
+
+    coeff_t _p0; // l,aa'
+    coeff_t _p1; // ll',aa'
+    coeff_t _p2; // ll'l'',aa'
+    coeff_t _p3; // ll'l''l''',aa'
 
 private:
     Particle *_center;
+    int _L; // <- Angular momentum cutoff
     int _S; // <- Number of distinct types
     int _s; // <- Type index
 };
