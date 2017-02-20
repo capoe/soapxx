@@ -56,6 +56,7 @@ public:
 	AtomicSpectrum *getAtomic(int slot_idx, std::string center_type);
 	AtomicSpectrum *getGlobal() { assert(_global_atomic && "Compute first"); return _global_atomic; }
 	void writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type);
+    void writeDensityCubeFile(int atom_idx, std::string density_type, std::string filename, bool from_expansion);
 	void writeDensityOnGridInverse(int slot_idx, std::string center_type, std::string type1, std::string type2);
 	void writeDensity(int slot_idx, std::string center_type, std::string density_type);
 	void writePowerDensity(int slot_idx, std::string center_type, std::string type1, std::string type2);

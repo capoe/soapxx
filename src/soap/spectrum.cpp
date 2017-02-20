@@ -209,12 +209,24 @@ void Spectrum::writeDensityOnGrid(int slot_idx, std::string center_type, std::st
 	AtomicSpectrum *atomic_spectrum = this->getAtomic(slot_idx, center_type);
 	// WRITE CUBE FILES
 	if (atomic_spectrum) {
-		atomic_spectrum->getQnlm(density_type)->writeDensityOnGrid(
-			"density.expanded.cube", _options, _structure, atomic_spectrum->getCenter(), true);
+		//atomic_spectrum->getQnlm(density_type)->writeDensityOnGrid(
+	    //	"density.expanded.cube", _options, _structure, atomic_spectrum->getCenter(), true);
 		atomic_spectrum->getQnlm(density_type)->writeDensityOnGrid(
 			"density.explicit.cube", _options, _structure, atomic_spectrum->getCenter(), false);
 	}
 	return;
+}
+
+void Spectrum::writeDensityCubeFile(int atom_idx, std::string density_type, std::string filename, bool from_expansion) {
+    if (atom_idx < _atomspec_array.size()) {
+        AtomicSpectrum *atomic_spectrum = this->_atomspec_array[atom_idx];
+		atomic_spectrum->getQnlm(density_type)->writeDensityOnGrid(
+			filename, _options, _structure, atomic_spectrum->getCenter(), from_expansion);
+    }
+    else {
+        throw soap::base::OutOfRange("Spectrum::writeDensityCubeFile");
+    }
+    return;
 }
 
 void Spectrum::writeDensityOnGridInverse(int slot_idx, std::string center_type, std::string type1, std::string type2) {
@@ -301,6 +313,7 @@ void Spectrum::registerPython() {
 		.def("save", &Spectrum::save)
 		.def("load", &Spectrum::load)
         .def("writeDensityOnGrid", &Spectrum::writeDensityOnGrid)
+        .def("writeDensityCubeFile", &Spectrum::writeDensityCubeFile)
 		.def("writeDensity", &Spectrum::writeDensity)
 		.def("writePowerDensity", &Spectrum::writePowerDensity)
 		.def("writeDensityOnGridInverse", &Spectrum::writeDensityOnGridInverse)
