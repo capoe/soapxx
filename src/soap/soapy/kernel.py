@@ -14,6 +14,82 @@ from momo import osio, endl, flush
 # TODO PCA + identification of eigenstructures
 # TODO Sample Bethe tree
 
+class DescriptorMap(object):
+    """
+    Structured data type that stores 
+    descriptors as key-value pairs
+    and emulates basic algebraic properties
+    """
+    def __init__(self):
+        self.dmap = {}
+        self.T = self # Transpose
+    def dot(self, other):
+        dot = 0.0
+        for key in self.dmap:
+            if key in other.dmap:
+                dot += self[key].dot(other[key])
+        return dot
+    def add(self, other):
+        for key in other:
+            if key in self:
+                self.dmap[key] = self.dmap[key] + other[key]
+            else:
+                self.dmap[key] = other[key]
+        return
+    def normalise(self):
+        norm = self.dot(self)**0.5
+        for key in self.dmap:
+            self.dmap[key] = self.dmap[key] / norm
+        return
+    def __div__(self, scalar):
+        for k in self:
+            self[k] = self[k]/scalar
+        return self
+    def __mul__(self, scalar):
+        for k in self:
+            self[k] = self[k]*scalar
+        return self
+    def __getitem__(self, key):
+        return self.dmap[key]
+    def __setitem__(self, key, value):
+        self.dmap[key] = value
+    def __iter__(self):
+        return iter(self.dmap)
+    def __len__(self):
+        return len(self.dmap)
+    def __contains__(self, key):
+        return key in self.dmap
+
+class DescriptorMapMatrix(object):
+    """
+    List of <DescriptorMap>s
+    """
+    def __init__(self):
+        self.mat = []
+        self.T = self # Transpose
+    def append(self, other):
+        self.mat.append(other)
+    def dot(self, other, dtype='float64'):
+        n = len(self)
+        m = len(other)
+        k = np.zeros((n,m), dtype=dtype)
+        for i in range(n):
+            for j in range(m):
+                k[i,j] = self[i].dot(other[j])
+        return k
+    def sum(self, axis=0):
+        assert axis == 0
+        dmap_summed = soap.soapy.DescriptorMap()
+        for dmap in self:
+            dmap_summed.add(dmap)
+        return dmap_summed
+    def __len__(self):
+        return len(self.mat)
+    def __getitem__(self, i):
+        return self.mat[i]
+    def __iter__(self):
+        return iter(self.mat)
+
 class TrajectoryLogger(object):
     def __init__(self, outfile, mode='w'):
         self.ofs = open(outfile, mode)
@@ -151,6 +227,53 @@ def reduce_xnklab_atomic(atomic, types_global, verbose=False):
             #raw_input('...')
             #print a,b,sa,sb,i0,i1
     return X
+
+class KernelAdaptorSpecificUniqueDMap(object):
+    def __init__(self, options, types_global):
+        return
+    def adapt(self, spectrum, return_pos_matrix=False):
+        IDMap = DescriptorMapMatrix() # List of <DescriptorMaps>
+        dimX = -1
+        IR = np.zeros((len(spectrum),3), dtype='float64') # position matrix
+        types = []
+        for idx, atomic_i in enumerate(spectrum):
+            IDMap.append(self.adaptScalar(atomic_i))
+            Ri = atomic_i.getCenter().pos
+            types.append(atomic_i.getCenter().type)
+            IR[idx,:] = Ri
+        if return_pos_matrix:
+            return IDMap, IR, types
+        else:
+            return IDMap
+    def adaptScalar(self, atomic, epsilon=1e-20):
+        dmap = DescriptorMap()
+        types_atomic = atomic.getTypes()
+        S = len(types_atomic)
+        N = atomic.basis.N
+        L = atomic.basis.L
+        # SPECIES a = b
+        for i in range(S):
+            a = types_atomic[i]
+            xnklaa = atomic.getPower(a,a).array.real
+            xnklaa_red = np.zeros(((N*N+N)/2, L+1))
+            # Select where n <= k
+            for i in range(N):
+                for j in range(i, N):
+                    ij_red = i*N - (i*i-i)/2 + j-i
+                    xnklaa_red[ij_red] = xnklaa[i*N+j]
+            dmap['%s:%s' % (a,a)] = xnklaa_red.flatten()
+        # SPECIES a != b
+        for i in range(S):
+            for j in range(i+1, S):
+                # Select all
+                a = types_atomic[i]
+                b = types_atomic[j]
+                xnklab = atomic.getPower(a,b).array.real
+                xnklab_red = xnklab
+                pair_ab = '%s:%s' % ((a,b) if a < b else (b,a))
+                dmap[pair_ab] = xnklab_red.flatten()
+        dmap.normalise()
+        return dmap
 
 class KernelAdaptorSpecificUnique(object):
     """
@@ -557,6 +680,7 @@ KernelAdaptorFactory = {
 'generic': KernelAdaptorGeneric,
 'specific': KernelAdaptorSpecific,
 'specific-unique': KernelAdaptorSpecificUnique,
+'specific-unique-dmap': KernelAdaptorSpecificUniqueDMap,
 'global-generic': KernelAdaptorGlobalGeneric,
 'global-specific': KernelAdaptorGlobalSpecific,
 'global-specific-energy': KernelAdaptorGlobalSpecificEnergy

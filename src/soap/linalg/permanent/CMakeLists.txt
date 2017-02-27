@@ -9,7 +9,7 @@ endforeach()
 # ADD & LINK LIBRARY
 add_library(_permanent ${LOCAL_SOURCES})
 target_compile_options(_permanent PRIVATE "-O3" PRIVATE "-Ofast" PRIVATE "-march=native")
-target_link_libraries(_permanent ${PYTHON_LIBRARIES})
+target_link_libraries(_permanent ${Boost_LIBRARIES} ${PYTHON_LIBRARIES})
 set_target_properties(_permanent PROPERTIES PREFIX "" SUFFIX ".so" LIBRARY_OUTPUT_DIRECTORY .)
 
 # INSTALL

@@ -12,12 +12,15 @@
 #include <random>
 #include <cmath>
 #include <iostream>
+#include "../numpy.hpp"
 // Array access macros.
 
 #define SM(x0, x1) (*(npy_double*) (( (char*) PyArray_DATA(matrix) + \
                     (x0) * PyArray_STRIDES(matrix)[0] +  \
                     (x1) * PyArray_STRIDES(matrix)[1])))
 #define SM_shape(x0) (int) PyArray_DIM(matrix, x0)
+
+namespace ub = boost::numeric::ublas;
 
 template <typename T>
 class Matrix
@@ -243,4 +246,15 @@ static PyObject *regmatch(PyObject *self, PyObject *args) {
   // Compute the permanent
   npy_double p = _shmatch(matrix,gamma,eps);
   return PyFloat_FromDouble(p);
+}
+
+char const* greet()
+{
+   return "hello, world";
+}
+
+BOOST_PYTHON_MODULE(_reboost)
+{
+    using namespace boost::python;
+    def("greet", greet);
 }

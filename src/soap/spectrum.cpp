@@ -107,9 +107,9 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
     int nb_max = na_nb_nc[1];
     int nc_max = na_nb_nc[2];
 
-    GLOG() << box_a << " " << box_b << " " << box_c << std::endl;
-    GLOG() << rc << std::endl;
-    GLOG() << na_max << " " << nb_max << " " << nc_max << std::endl;
+    //GLOG() << box_a << " " << box_b << " " << box_c << std::endl;
+    //GLOG() << rc << std::endl;
+    //GLOG() << na_max << " " << nb_max << " " << nc_max << std::endl;
 
     // CREATE BLANK
     AtomicSpectrum *atomic_spectrum = new AtomicSpectrum(center, this->_basis);
@@ -299,6 +299,7 @@ void Spectrum::registerPython() {
     	.def(init<Structure &, Options &, Basis &>())
     	.def(init<std::string>())
     	.def("__iter__", range<return_value_policy<reference_existing_object> >(&Spectrum::beginAtomic, &Spectrum::endAtomic))
+        .def("__len__", &Spectrum::length)
 	    .def("compute", computeAll)
         .def("compute", computeSeg)
 	    .def("compute", computeSegPair)

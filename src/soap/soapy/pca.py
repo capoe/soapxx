@@ -17,6 +17,7 @@ def pca_compute(IX, eps=0., log=None, norm_div_std=True, norm_sub_mean=True):
     """
     # Normalize: mean, std
     if log: log << "PCA: Normalize ..." << log.endl
+    IX_norm = IX
     if norm_sub_mean:
         IX_norm = IX - IX.mean(0)
     if norm_div_std:

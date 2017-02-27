@@ -159,3 +159,34 @@ GraphKernelFactory = {
 'laplacian': lagraph.compare_graphs_laplacian_kernelized
 }
 
+# =====================
+# NOMAD Structure Tools
+# =====================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

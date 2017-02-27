@@ -44,6 +44,7 @@ public:
 	void save(std::string archfile);
 	void load(std::string archfile);
 	void clean();
+    int length() { return _atomspec_array.size(); }
 
 	void compute();
     void compute(Segment *centers);

@@ -4,9 +4,12 @@ import sklearn.manifold
 import sklearn.decomposition
 
 def dimred_matrix(method, kmat=None, distmat=None, outfile=None, ix=None, symmetrize=False, prj_dimension=2):
+    dmat = distmat
     if symmetrize:
-        kmat = 0.5*(kmat+kmat.T)
-        dmat = 0.5*(dmat+dmat.T)
+        if type(kmat) != type(None):
+            kmat = 0.5*(kmat+kmat.T)
+        if type(dmat) != type(None):
+            dmat = 0.5*(dmat+dmat.T)
     if method == 'mds':
         # MDS
         # http://scikit-learn.org/stable/modules/generated/sklearn.manifold.MDS.html#sklearn.manifold.MDS
