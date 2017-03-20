@@ -2,8 +2,11 @@
 
 ### Installation
 $ git clone https://github.com/capoe/soapxx.git
+
 $ cd soapxx
+
 $ ./build.sh
+
 $ source soap/SOAPRC
 
 ### Dependencies
