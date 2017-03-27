@@ -12,15 +12,150 @@ namespace ub = boost::numeric::ublas;
 
 const std::string AtomicSpectrumFT::_numpy_t = "float64";
 
-AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int L, int S)
-    : _center(center), _L(L), _S(S) {
+AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int K, int L)
+    : _center(center), _K(K), _L(L) {
     this->_s = center->getTypeId()-1;
+    this->_type = center->getType();
+    GLOG() << "Created FT particle: " << _type << " " << center->getId() << " @ " << _center->getPos() << std::endl;
     assert(_s >= 0 && "Type-IDs should start from 1");
+
+    // Body-order storage
+    assert(K >= 0);
+    _body_map.resize(K+1);
 }
 
 AtomicSpectrumFT::~AtomicSpectrumFT() {
-    // TODO Deallocate arrays
+    GLOG() << "[~] Destruct " << this->getCenter()->getId() << std::endl;
+    // Deallocate body-order terms
+    for (int k=0; k <= _K; ++k) {
+        field_map_t &fm = _body_map[k];
+        GLOG() << "[~]   Deallocating k=" << k<< std::endl;
+        // Deallocate field terms for each type channel
+        for (auto it=fm.begin(); it != fm.end(); ++it) {
+            GLOG() << "[~]     Deallocating type=" <<  it->first << std::endl;
+            delete it->second;
+        }
+    }
+}
 
+void AtomicSpectrumFT::addField(int k, std::string type, field_t &flm) {
+    field_t &f = *(this->getCreateField(k, type, flm.size1(), flm.size2()));
+    f = f + flm;
+    return;
+}
+
+AtomicSpectrumFT::field_t *AtomicSpectrumFT::getCreateField(int k, std::string type, int s1, int s2) {
+    assert(k <= _K);
+    auto it = _body_map[k].find(type);
+    if (it == _body_map[k].end()) {
+        GLOG() << "[AtomicSpectrumFT::getCreateField]" << " Allocate k " << k << " type '" << type << "' [" << s1 << "x" << s2 << "]" << std::endl;
+        _body_map[k][type] = new field_t(
+            field_zero_t(s1, s2)
+        );
+        it = _body_map[k].find(type);
+    }
+    return it->second;
+}
+
+AtomicSpectrumFT::coeff_t *AtomicSpectrumFT::getCreateContraction(channel_t &channel, int size1, int size2) {
+    // size1 -> trail dimension lambda_total
+    // size2 -> L+1
+    auto it = _coeff_map.find(channel);
+    if (it == _coeff_map.end()) {
+        GLOG() << "[AtomicSpectrumFT::getCreateContraction] Allocate " << channel.first << ":" << channel.second << " " << size1 << "x" << size2 << std::endl;
+        _coeff_map[channel] = new coeff_t(
+            coeff_zero_t(size1, size2)
+        );
+        it = _coeff_map.find(channel);
+    }
+    return it->second;
+}
+
+AtomicSpectrumFT::field_t *AtomicSpectrumFT::getField(int k, std::string type) {
+    assert(k <= _K);
+    auto it = _body_map[k].find(type);
+    if (it == _body_map[k].end()) {
+        return NULL;
+    }
+    else {
+        return it->second;
+    }
+}
+
+void AtomicSpectrumFT::contract() {
+    int k = 0;
+    int Lambda_total = (1 - pow(_L+1, _K))/(1 - (_L+1)); // from geometric series
+    int LambdaLambda_total = (1 - pow(_L+1, 2*_K))/(1 - pow(_L+1, 2));
+
+    GLOG() << "Centre: " << this->getCenter()->getId() << ":" << this->getType() << std::endl;
+    GLOG() << "Trail length total: " << Lambda_total << std::endl;
+    GLOG() << "Trail length total - contracted: " << LambdaLambda_total << std::endl;
+    for (k=1; k<=_K; ++k) { // TODO Mix different k-channels?
+
+        int Lambda_off_k = (1 - pow(_L+1, k-1))/(1 - (_L+1));
+        int LambdaLambda_off_k = (1 - pow(_L+1, 2*(k-1)))/(1 - pow(_L+1, 2));
+        int Lambda_k = pow(_L+1, k-1);
+        int L_k = _L;
+
+        GLOG()
+            << "L_k= " << _L
+            << " Lambda_k= " << Lambda_k
+            << " Lambda_off_k= " << Lambda_off_k
+            << " LambdaLambda_off_k= " << LambdaLambda_off_k
+        << std::endl;
+
+        field_map_t &field_map = _body_map[k];
+        for (auto it = field_map.begin(); it != field_map.end(); ++it) {
+            std::string type = it->first;
+            field_t &field = *(it->second);
+            GLOG() << " k= " << k  << " type= " << type << " ||lambda||= " << field.size1() << " ||L||= " << field.size2() << std::endl;
+        }
+        // Contract channels
+        for (auto it1 = field_map.begin(); it1 != field_map.end(); ++it1) {
+            std::string s1 = it1->first;
+            field_t &f1 = *(it1->second);
+            for (auto it2 = field_map.begin(); it2 != field_map.end(); ++it2) {
+                std::string s2 = it2->first;
+                field_t &f2 = *(it2->second);
+                GLOG() << " " << s1 << ":" << s2 << std::flush;
+                // Size sanity checks
+                int Lambda1 = f1.size1();
+                int Lambda2 = f2.size1();
+                int L1 = f1.size2();
+                int L2 = f2.size2();
+                assert(L1 == (_L+1)*(_L+1));
+                assert(L2 == (_L+1)*(_L+1));
+                assert(Lambda1 == Lambda_k);
+                assert(Lambda2 == Lambda_k);
+                // Allocate channel if necessary
+                channel_t channel(s1, s2);
+                coeff_t &coeffs = *(this->getCreateContraction(channel, LambdaLambda_total, _L+1)); // TODO Does not work with k-dependent L-cutoff
+                GLOG() << "Coefficient matrix for this channel: " << coeffs.size1() << "x" << coeffs.size2() << std::endl;
+                for (int lambda1 = 0; lambda1 < Lambda1; ++lambda1) {
+                    for (int lambda2 = 0; lambda2 < Lambda2; ++lambda2) {
+                        for (int l = 0; l <= L_k; ++l) {
+                            // Polarizability
+                            double inv_alpha = pow(this->getCenter()->getSigma(), -2*l-1); // TODO Initialise in constructor
+                            cmplx_t phi_l_s1s2_l1l2 = 0.0;
+                            for (int m = -l; m <= l; ++m) {
+                                int lm = l*l+l+m;
+                                phi_l_s1s2_l1l2 += f1(lambda1, lm)*std::conj(f2(lambda2, lm));
+                            }
+                            int l1l2 = LambdaLambda_off_k+lambda1*Lambda1 + lambda2;
+                            GLOG() << " Store " << lambda1 << ":" << lambda2 << ":" << l << " @ " << l1l2 << ":" << l << " = " << phi_l_s1s2_l1l2 <<  std::endl;
+                            coeffs(l1l2, l) = inv_alpha*phi_l_s1s2_l1l2;
+                        }
+                    }
+                }
+
+
+            }
+        }
+        GLOG() << std::endl;
+
+
+
+    }
 }
 
 void AtomicSpectrumFT::registerPython() {
@@ -204,14 +339,98 @@ FTSpectrum::FTSpectrum(Structure &structure, Options &options)
 }
 
 FTSpectrum::~FTSpectrum() {
+    for (auto it = _atomic_array.begin(); it != _atomic_array.end(); ++it) {
+        delete *it;
+    }
+    return;
+}
+
+void InteractUpdateSourceTarget(
+        AtomicSpectrumFT *a, // <- source
+        AtomicSpectrumFT *b, // <- target
+        Tlmlm::coeff_t &T_ab,
+        double sigma1,
+        double sigma2,
+        double w12,
+        double w2,
+        int k,
+        int L_in,
+        int L_out,
+        int Lambda_in,
+        int Lambda_out,
+        int LM_in,
+        int LM_out,
+        bool apply_parity) {
+
+    GLOG() << "[update] " << "w " << w12 << " " << w2 << std::endl;
+    GLOG() << "[update] " << "k " << k << " L-in " << L_in << " L-out " << L_out << std::endl;
+    GLOG() << "[update] " << "Lambda-in " << Lambda_in << " Lambda-out " << Lambda_out << std::endl;
+    GLOG() << "[update] " << "LM-in " << LM_in << " LM-out " << LM_out << std::endl;
+    GLOG() << "[update] " << "Parity " << apply_parity << std::endl;
+
+    for (int l1=0; l1 <= L_out; ++l1) {
+        for (int m1=-l1; m1 <= l1; ++m1) {
+            int lm1 = l1*l1+l1+m1;
+            for (int l2=0; l2 <= L_out; ++l2) {
+                for (int m2=-l2; m2 <= l2; ++m2) {
+                    int lm2 = l2*l2+l2+m2;
+                    GLOG() << l1 << "," << m1 << "   " << l2 << "," << m2 << "   " << T_ab(lm1,lm2) << std::endl;
+                }
+            }
+        }
+    }
+
+    // Retrieve field maps for iteration k-1
+    AtomicSpectrumFT::field_map_t &fmap_a = a->getFieldMap(k-1);
+    AtomicSpectrumFT::field_map_t &fmap_b = b->getFieldMap(k-1);
+    // TARGET: MOMENTS ON 'b'
+    // Loop over field channels/types: a
+    for (auto it_a = fmap_a.begin(); it_a != fmap_a.end(); ++it_a) {
+        std::string type = it_a->first;
+        AtomicSpectrumFT::field_t &f_a = *(it_a->second);
+        AtomicSpectrumFT::field_t &f_b = *(b->getCreateField(k, type, Lambda_out, LM_out));
+        GLOG() << "[increment]   a: source: type: " << type << " size: " << f_a.size1() << " x " << f_a.size2() << std::endl;
+        GLOG() << "[increment]   b: target: size: " << f_b.size1() << " x " << f_b.size2() << std::endl;
+        // lm-out
+        for (int l1=0; l1<=L_out; ++l1) {
+            GLOG() << "l_out " << l1 << std::endl;
+            // Polarizability
+            double alpha = pow(sigma2, 2*l1+1);
+            for (int m1=-l1; m1<=l1; ++m1) {
+                GLOG() << " m_out " << m1 << std::endl;
+                int lm_out = l1*l1+l1+m1;
+                // lambda-in
+                for (int lambda_in=0; lambda_in<Lambda_in; ++lambda_in) {
+                    GLOG() << "  lambda_in " << lambda_in << std::endl;
+                    // lm-in
+                    for (int l2=0; l2<=L_in; ++l2) {
+                        GLOG() << "    l_in " << l2 << std::endl;
+                        double parity = (apply_parity) ? pow(-1,l1+l2) : 1;
+                        int lambda_out = lambda_in*Lambda_in+l2;
+                        AtomicSpectrumFT::cmplx_t q_lambda_lm_out = 0.0;
+                        for (int m2=-l2; m2<=l2; ++m2) {
+                            GLOG() << "     m_in " << m2 << std::endl;
+                            int lm_in = l2*l2+l2+m2;
+                            q_lambda_lm_out += T_ab(lm_out, lm_in)*f_a(lambda_in, lm_in);
+                        }
+                        // Apply weight and parity
+                        q_lambda_lm_out *= alpha*w12*w2*parity;
+                        // Add to fields on b
+                        GLOG() << "      => (" << lambda_out << "," << lm_out << ")"  << " : " << q_lambda_lm_out << std::endl;
+                        f_b(lambda_out, lm_out) += q_lambda_lm_out;
+                    } // End loop over l_in
+                } // End loop over lambda_in
+            } // End loop over m_out
+        } // End loop over l_out
+    } // End loop over types on a
     return;
 }
 
 void FTSpectrum::compute() {
     GLOG() << "Computing FTSpectrum ..." << std::endl;
 
+    int K = 3; // TODO
     int L = 3; // TODO
-    int S = 4;
     Tlmlm T12(L);
 
     // CREATE ATOMIC SPECTRA
@@ -220,7 +439,7 @@ void FTSpectrum::compute() {
     }
     _atomic_array.clear();
     for (auto pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
-        atomic_t *new_atomic = new atomic_t(*pit, L, S);
+        atomic_t *new_atomic = new atomic_t(*pit, K, L);
         _atomic_array.push_back(new_atomic);
     }
 
@@ -249,14 +468,114 @@ void FTSpectrum::compute() {
             if (! _cutoff->isWithinCutoff(r12)) continue;
             double w12 = _cutoff->calculateWeight(r12);
             double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
-            GLOG() << "    " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
+            GLOG() << "[field-tensor] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
             // Interact
             T12.computeTlmlm(d12, r12, a12, L, L, i1_i2_T12[id1][id2]);
         }
     }
 
+    // INITIALISE FIELD MOMENTS (k=0)
+    int k = 0;
+    int L_k_in = 0;  // lm
+    int L_k_out = 0;
+    int Lambda_flat_k_in = 1;
+    int Lambda_flat_k_out = 1; // || l'l''... ||
+    GLOG() << "Initialise fields (k=0) ..." << std::endl;
+    for (auto it = beginAtomic(); it != endAtomic(); ++it) {
+        atomic_t *a = *it;
+        std::string s = a->getType();
+        AtomicSpectrumFT::field_t flm
+            = AtomicSpectrumFT::field_zero_t(Lambda_flat_k_out, (L_k_in+1)*(L_k_in+1));
+        GLOG() << "[init] Center:" << a->getCenter()->getId() << std::endl;
+        GLOG() << "[init]   k = " << k << std::endl;
+        GLOG() << "[init]   s = " << s << std::endl;
+        GLOG() << "[init]   F : " << flm.size1() << " x " << flm.size2() << std::endl;
+        flm(0,0) = 1.0;
+        a->addField(k, s, flm);
+    }
 
+    // PROPAGATE FIELD MOMENTS (k>0)
+    for (int k = 1; k <= K; ++k) {
 
+        GLOG() << "=====" << std::endl;
+        GLOG() << "k = " << k << std::endl;
+        GLOG() << "=====" << std::endl;
+        // Update out-going ranges
+        L_k_out = L;
+        Lambda_flat_k_out = Lambda_flat_k_out*(L_k_in+1);
+        GLOG() << "[iter] L-in " << L_k_in << " L-out " << L_k_out << " Lambda-in " << Lambda_flat_k_in << " Lambda-out " << Lambda_flat_k_out << std::endl;
+        int LM_in = (L_k_in+1)*(L_k_in+1);
+        int LM_out = (L_k_out+1)*(L_k_out+1);
+        GLOG() << "[iter] Rank: " << L << " (LM-in = " << LM_in << ")" << " (LM-out = " << LM_out << ")" << std::endl;
+
+        for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
+            // Particle 1
+            atomic_t *a = *it1;
+            int id1 = a->getCenter()->getId();
+            std::string s1 = a->getType();
+            vec r1 = a->getCenter()->getPos();
+            double sigma1 = a->getCenter()->getSigma();
+            double w1 = a->getCenter()->getWeight();
+            for (auto it2 = it1; it2 != endAtomic(); ++it2) {
+                // Particle 2
+                atomic_t *b = *it2;
+                int id2 = b->getCenter()->getId();
+                std::string s2 = b->getType();
+                vec r2 = b->getCenter()->getPos();
+                double sigma2 = b->getCenter()->getSigma();
+                double w2 = b->getCenter()->getWeight();
+                // Find connection, apply weight function
+                vec dr12 = _structure->connect(r1, r2);
+                double r12 = soap::linalg::abs(dr12);
+                vec d12 = dr12/r12;
+                if (! _cutoff->isWithinCutoff(r12)) continue;
+                double w12 = _cutoff->calculateWeight(r12);
+                double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
+                GLOG() << "[interact] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
+                // Look up interaction tensors for pair (a,b)
+                auto T_ab = i1_i2_T12[id1][id2];
+                // Self-interaction a <> a
+                if (a == b) {
+                    // Source 'a', target 'a'
+                    InteractUpdateSourceTarget(a, b, T_ab,
+                        sigma1, sigma2,
+                        w12, w2,
+                        k, L_k_in, L_k_out,
+                        Lambda_flat_k_in, Lambda_flat_k_out,
+                        LM_in, LM_out,
+                        false);
+                }
+                // Cross-interaction a <> b
+                else {
+                    // Source 'a', target 'b'
+                    InteractUpdateSourceTarget(a, b, T_ab,
+                        sigma1, sigma2,
+                        w12, w2,
+                        k, L_k_in, L_k_out,
+                        Lambda_flat_k_in, Lambda_flat_k_out,
+                        LM_in, LM_out,
+                        true);
+                    // Source 'b', target 'a'
+                    InteractUpdateSourceTarget(b, a, T_ab,
+                        sigma1, sigma2,
+                        w12, w1,
+                        k, L_k_in, L_k_out,
+                        Lambda_flat_k_in, Lambda_flat_k_out,
+                        LM_in, LM_out,
+                        false);
+                }
+            }
+        }
+        // Update dimension of flat indices
+        Lambda_flat_k_in = Lambda_flat_k_in*(L_k_in+1);
+        L_k_in = L;
+    }
+
+    for (auto it = beginAtomic(); it != endAtomic(); ++it) {
+        (*it)->contract();
+    }
+
+    /*
     // COMPUTE INTERACTION TENSORS
     // Initialise fields (0)
     for (auto it = beginAtomic(); it != endAtomic(); ++it) {
@@ -310,10 +629,10 @@ void FTSpectrum::compute() {
             }
         }
     }
+    */
 
 
-
-
+    /*
     //Tlmlm T12(L);
     vec d12(0.,0.,1.);
     double a12 = 0.5;
@@ -333,7 +652,7 @@ void FTSpectrum::compute() {
         GLOG() << r12 << " " << T_mat(lm1,lm2).real() << " " << T_mat(lm2,lm1).real()
         << " " << T_mat(lm1,lm2).imag() << " " << T_mat(lm2,lm1).imag() << std::endl;
     }
-
+    */
 
 
 

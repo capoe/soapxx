@@ -11,51 +11,47 @@ namespace soap {
 class AtomicSpectrumFT
 {
 public:
-    typedef double dtype_t;
-    typedef ub::matrix<dtype_t> coeff_t;
-    typedef ub::zero_matrix<dtype_t> coeff_zero_t;
+
     static const std::string _numpy_t;
 
-    AtomicSpectrumFT(Particle *center, int L, int S);
+    // FIELD MOMENTS
+    typedef std::complex<double> cmplx_t;
+    typedef ub::matrix<cmplx_t> field_t; // (l'l'', lm)
+    typedef ub::zero_matrix<cmplx_t> field_zero_t;
+    typedef std::map<std::string, field_t*> field_map_t; // (type)->(l'l''..., lm)
+    typedef std::vector<field_map_t> body_map_t; // (k)->(type)->(l'l''..., lm)
+
+    // CONTRACTIONS
+    typedef std::pair<std::string, std::string> channel_t;
+    typedef ub::matrix<cmplx_t> coeff_t; // (k=1:0 k=1:l' k=2:l'l'', l)
+    typedef ub::zero_matrix<cmplx_t> coeff_zero_t;
+    typedef std::map<channel_t, coeff_t*> coeff_map_t;
+
+    AtomicSpectrumFT(Particle *center, int K, int L);
    ~AtomicSpectrumFT();
     Particle *getCenter() { return _center; }
+    std::string getType() { return _type; }
     int getTypeIdx() { return _s; }
 
     static void registerPython();
 
-    typedef ub::matrix<std::complex<double>> field_coeff_t;
-    typedef ub::zero_matrix<std::complex<double>> field_coeff_zero_t;
-    typedef field_coeff_t field0_t;
-    typedef boost::multi_array<field0_t, 1> field1_t;
-    typedef boost::multi_array<field0_t, 2> field2_t;
-    typedef boost::multi_array<field0_t, 3> field3_t;
-    //typedef std::vector< field0_t* > fieldn_t;
+    body_map_t _body_map;
+    coeff_map_t _coeff_map;
 
-    typedef field0_t moment0_t;
-    typedef field1_t moment1_t;
-    typedef field2_t moment2_t;
-    typedef field3_t moment3_t;
-
-    field0_t _f0; // alm
-    field1_t _f1; // l',alm
-    field2_t _f2; // l''l',alm
-    field3_t _f3; // l'''l''l',alm
-
-    moment0_t _q0;
-    moment1_t _q1;
-    moment2_t _q2;
-    moment3_t _q3;
-
-    coeff_t _p0; // l,aa'
-    coeff_t _p1; // ll',aa'
-    coeff_t _p2; // ll'l'',aa'
-    coeff_t _p3; // ll'l''l''',aa'
+    void addField(int k, std::string type, field_t &flm);
+    field_t *getField(int k, std::string type);
+    field_t *getCreateField(int k, std::string type, int s1, int s2);
+    field_map_t &getFieldMap(int k) { return _body_map[k]; }
+    coeff_t *getCreateContraction(channel_t &channel, int size1, int size2);
+    coeff_map_t &getCoeffMap() { return _coeff_map; }
+    void contract();
 
 private:
     Particle *_center;
+    int _K; // <- Body-order cutoff
     int _L; // <- Angular momentum cutoff
-    int _S; // <- Number of distinct types
     int _s; // <- Type index
+    std::string _type; // <- Type string
 };
 
 class FTSpectrum
