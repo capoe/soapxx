@@ -16,7 +16,7 @@ from momo import osio, endl, flush
 
 class DescriptorMap(object):
     """
-    Structured data type that stores 
+    Structured data type that stores
     descriptors as key-value pairs
     and emulates basic algebraic properties
     """
@@ -103,6 +103,71 @@ class TrajectoryLogger(object):
     def close(self):
         self.ofs.close()
         return
+
+class KernelAdaptorFTD(object):
+    def __init__(self, options, types_global):
+        self.types = types_global
+        self.S = len(types_global)
+        return
+    def adapt(self, spectrum, return_pos_matrix=False):
+        IX = np.zeros((0,0), dtype='float64') # feature matrix
+        dimX = -1
+        IR = np.zeros((0,0), dtype='float64') # position matrix
+        types = []
+        for atomic_i in spectrum:
+            Xi_unnorm, Xi_norm = self.adaptScalar(atomic_i)
+            Ri = atomic_i.getCenter().pos
+            types.append(atomic_i.getCenter().type)
+            dimX = Xi_norm.shape[0]
+            if not IX.any():
+                IX = np.copy(Xi_norm) # TODO Is this necessary?
+                IX.resize((1, dimX))
+                IR = np.copy(Ri)
+                IR.resize((1, 3))
+            else:
+                i = IX.shape[0]
+                IX.resize((i+1, dimX))
+                IX[-1,:] = Xi_norm
+                IR.resize((i+1, 3))
+                IR[-1,:] = Ri
+        if return_pos_matrix:
+            return IX, IR, types
+        else:
+            return IX
+    def adaptScalar(self, atomic, epsilon=1e-20):
+        X = self.reduce(atomic, self.types)
+        X_mag = np.dot(X,X)**0.5
+        if X_mag < epsilon:
+            X_mag = 1.
+        X_norm = X/X_mag
+        return X, X_norm
+    def reduce(self, atomic, types_global, verbose=False):
+        types_atomic = atomic.getTypes()
+        S = len(types_global)
+        SS = S*S
+        S_atomic = len(types_atomic)
+        X = None
+        dim_ab = -1
+        dim_total = -1
+        # Channel - type a
+        for i in range(S_atomic):
+            a = types_atomic[i]
+            sa = types_global.index(a)
+            # Channel - type b
+            for j in range(S_atomic):
+                b = types_atomic[j]
+                sb = types_global.index(b)
+                x = atomic.getPower(a,b)
+                # Initialize aggregated array
+                if i == 0 and j == 0:
+                    dim_ab = x.shape[0]*x.shape[1]
+                    dim_total = SS*dim_ab
+                    X = np.zeros((dim_total,), dtype='float64')
+                # Locate in super-array X
+                i0 = (sa*S+sb)*dim_ab
+                i1 = i0 + dim_ab
+                X[i0:i1] = x.flatten()
+        return X
 
 class Xnklab(object):
     def __init__(self, atomic, types_global):
@@ -683,7 +748,8 @@ KernelAdaptorFactory = {
 'specific-unique-dmap': KernelAdaptorSpecificUniqueDMap,
 'global-generic': KernelAdaptorGlobalGeneric,
 'global-specific': KernelAdaptorGlobalSpecific,
-'global-specific-energy': KernelAdaptorGlobalSpecificEnergy
+'global-specific-energy': KernelAdaptorGlobalSpecificEnergy,
+'ftd-specific': KernelAdaptorFTD
 }
 
 KernelFunctionFactory = {

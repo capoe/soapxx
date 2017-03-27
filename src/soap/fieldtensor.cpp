@@ -1,5 +1,6 @@
 #include "soap/fieldtensor.hpp"
 #include "soap/functions.hpp"
+#include "soap/linalg/numpy.hpp"
 #include <boost/math/special_functions/legendre.hpp>
 
 namespace soap {
@@ -26,7 +27,7 @@ AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int K, int L)
 
 AtomicSpectrumFT::~AtomicSpectrumFT() {
     GLOG() << "[~] Destruct " << this->getCenter()->getId() << std::endl;
-    // Deallocate body-order terms
+    // Deallocate body-order field terms
     for (int k=0; k <= _K; ++k) {
         field_map_t &fm = _body_map[k];
         GLOG() << "[~]   Deallocating k=" << k<< std::endl;
@@ -36,6 +37,27 @@ AtomicSpectrumFT::~AtomicSpectrumFT() {
             delete it->second;
         }
     }
+    // Deallocate contraction coefficients
+    for (auto it = _coeff_map.begin(); it != _coeff_map.end(); ++it) {
+        GLOG() << "[~]   Deallocating s1:s2 = " <<  it->first.first << ":" << it->first.second << std::endl;
+        delete it->second;
+    }
+}
+
+boost::python::list AtomicSpectrumFT::getTypes() {
+    boost::python::list types;
+    // The highest-body-order term should have the complete set
+    for (auto it = _body_map[_K].begin(); it != _body_map[_K].end(); ++it) {
+        std::string type = it->first;
+        types.append(type);
+    }
+    return types;
+}
+
+boost::python::object AtomicSpectrumFT::getCoefficientsNumpy(std::string s1, std::string s2) {
+    soap::linalg::numpy_converter npc(_numpy_t.c_str());
+    channel_t channel(s1, s2);
+    return npc.ublas_to_numpy< dtype_t >(*_coeff_map[channel]);
 }
 
 void AtomicSpectrumFT::addField(int k, std::string type, field_t &flm) {
@@ -143,24 +165,22 @@ void AtomicSpectrumFT::contract() {
                             }
                             int l1l2 = LambdaLambda_off_k+lambda1*Lambda1 + lambda2;
                             GLOG() << " Store " << lambda1 << ":" << lambda2 << ":" << l << " @ " << l1l2 << ":" << l << " = " << phi_l_s1s2_l1l2 <<  std::endl;
-                            coeffs(l1l2, l) = inv_alpha*phi_l_s1s2_l1l2;
-                        }
-                    }
-                }
-
-
-            }
-        }
+                            coeffs(l1l2, l) = inv_alpha*phi_l_s1s2_l1l2.real();
+                        } // l
+                    } // lambda 2
+                } // lambda 1
+            } // Channel type 2
+        } // Channel type 1
         GLOG() << std::endl;
-
-
-
     }
+    return;
 }
 
 void AtomicSpectrumFT::registerPython() {
     using namespace boost::python;
     class_<AtomicSpectrumFT, AtomicSpectrumFT*>("AtomicSpectrumFT", init<Particle*, int, int>())
+        .def("getTypes", &AtomicSpectrumFT::getTypes)
+        .def("getPower", &AtomicSpectrumFT::getCoefficientsNumpy)
         .def("getCenter", &AtomicSpectrumFT::getCenter, return_value_policy<reference_existing_object>());
 }
 
@@ -335,6 +355,8 @@ FTSpectrum::FTSpectrum(Structure &structure, Options &options)
     : _structure(&structure), _options(&options) {
     _cutoff = CutoffFunctionOutlet().create(_options->get<std::string>("radialcutoff.type"));
 	_cutoff->configure(*_options);
+    _L = _options->get<int>("fieldtensor.L");
+    _K = _options->get<int>("fieldtensor.K");
     return;
 }
 
@@ -429,8 +451,8 @@ void InteractUpdateSourceTarget(
 void FTSpectrum::compute() {
     GLOG() << "Computing FTSpectrum ..." << std::endl;
 
-    int K = 3; // TODO
-    int L = 3; // TODO
+    int K = _K;
+    int L = _L;
     Tlmlm T12(L);
 
     // CREATE ATOMIC SPECTRA
