@@ -1,5 +1,4 @@
 #include "soap/fieldtensor.hpp"
-#include "soap/functions.hpp"
 #include "soap/linalg/numpy.hpp"
 #include <boost/math/special_functions/legendre.hpp>
 
@@ -157,7 +156,7 @@ void AtomicSpectrumFT::contract() {
                     for (int lambda2 = 0; lambda2 < Lambda2; ++lambda2) {
                         for (int l = 0; l <= L_k; ++l) {
                             // Polarizability
-                            double inv_alpha = pow(this->getCenter()->getSigma(), -2*l-1); // TODO Initialise in constructor
+                            double inv_alpha = pow(this->getCenter()->getSigma(), -2*l-1); // TODO Initialise in constructor HACK 1./(2*l+1)
                             cmplx_t phi_l_s1s2_l1l2 = 0.0;
                             for (int m = -l; m <= l; ++m) {
                                 int lm = l*l+l+m;
@@ -244,112 +243,114 @@ void calculate_Fl(double r, double a, int L, std::vector<double> &fl) {
             fl[l] = -1./r2 * ( (2*l-1)*fl[l-1] + pow(-1,l)*tl*al*r_sqrt_pi_exp_a2r2 );
         }
     }
-
     return;
 }
 
-class Tlmlm
-{
-public:
-    typedef std::complex<double> dtype_t;
-    typedef ub::matrix< dtype_t > coeff_t;
-    typedef ub::zero_matrix< dtype_t > coeff_zero_t;
+void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_t &T) {
+    // TODO This can be sped up by using Tl1m1l2m2 = (-1)^(l1+l2) Tl2m2l1m1
+    // TODO Properties to test:
+    //      Tl1l2 ~ (l-1)! * 1/r^{l1+l2+1} for large r
+    //      Tl1l2 = (-1)^{l1+l2} Tl2l1 and T(-r) = (-1)^{l1+l2} T(r)
+    T.clear();
+    T = coeff_zero_t((L1+1)*(L1+1), (L2+1)*(L2+1));
 
-    Tlmlm(int L) {
-        Alm = calculate_Alm(L);
-        Blm = calculate_Blm(L);
-    }
+    int Lg = (L1 > L2) ? L1 : L2;
+    int L12 = L1+L2;
+    // Compute Rlm's
+    std::vector<std::complex<double>> Rlm;
+    calculate_solidharm_Rlm(d12, r12, Lg, Rlm);
+    // Compute Fl's
+    std::vector<double> Fl;
+    calculate_Fl(r12, a12, L12, Fl);
 
-    void computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_t &T) {
-        // TODO This can be sped up by using Tl1m1l2m2 = (-1)^(l1+l2) Tl2m2l1m1
-        // TODO Properties to test:
-        //      Tl1l2 ~ (l-1)! * 1/r^{l1+l2+1} for large r
-        //      Tl1l2 = (-1)^{l1+l2} Tl2l1 and T(-r) = (-1)^{l1+l2} T(r)
-        T.clear();
-        T = coeff_zero_t((L1+1)*(L1+1), (L2+1)*(L2+1));
+    /*// >>> MAJOR-HACK 1
+    // >>> HACK
+    Rlm.clear();
+    calculate_solidharm_Rlm(d12, r12, L12, Rlm);
+    for (int l1 = 0; l1 <= L1; ++l1) {
+    for (int m1 = -l1; m1 <= l1; ++m1) {
+        int lm1 = l1*l1+l1+m1;
+    for (int l2 = 0; l2 <= L2; ++l2) {
+    for (int m2 = -l2; m2 <= l2; ++m2) {
+        int lm2 = l2*l2+l2+m2;
+        //if (m1 == 0 && m2 == 0)
+        //    T(lm1,lm2) = Fl[l1+l2];
+        int lm12 = (l1+l2)*(l1+l2)+(l1+l2)+m1+m2;
+        //T(lm1,lm2) = std::Rlm[lm12];
+        //T(lm1,lm2) = std::conj( Rlm[lm1] ) * std::conj( Rlm[lm2] );
+        T(lm1,lm2) = std::conj(Rlm[lm1]) * std::conj(Rlm[lm2]);
+    }}}}
+    // <<< HACK
 
-        int Lg = (L1 > L2) ? L1 : L2;
-        int L12 = L1+L2;
-        // Compute Rlm's
-        std::vector<std::complex<double>> Rlm;
-        calculate_solidharm_Rlm(d12, r12, Lg, Rlm);
-        // Compute Fl's
-        std::vector<double> Fl;
-        calculate_Fl(r12, a12, L12, Fl);
-
-        for (int l1 = 0; l1 <= L1; ++l1) {
+    // >>> HACK
+    for (int l1 = 0; l1 <= Lg; ++l1) {
+        std::complex<double> sum_l = 0.0;
         for (int m1 = -l1; m1 <= l1; ++m1) {
             int lm1 = l1*l1+l1+m1;
-        for (int l2 = 0; l2 <= L2; ++l2) {
+            GLOG() << "[Rlm] " << " m1 " << l1 << " : " << Rlm[lm1] << std::endl;
+            sum_l += Rlm[lm1]*std::conj(Rlm[lm1]);
+        }
+        GLOG() << "[Rlm]             " << r12 << " l " << l1 << " : " << sum_l << std::endl;
+    }
+
+    for (int l1 = 0; l1 <= L1; ++l1) {
+    for (int l2 = 0; l2 <= L2; ++l2) {
+        std::complex<double> sum_l1_l2 = 0.0;
+        for (int m1 = -l1; m1 <= l1; ++m1) {
+            int lm1 = l1*l1+l1+m1;
         for (int m2 = -l2; m2 <= l2; ++m2) {
             int lm2 = l2*l2+l2+m2;
-
-            std::complex<double> tlm1lm2 = 0.0;
-            int lg = (l1 > l2) ? l1 : l2;
-
-            for (int l = 0; l <= lg; ++l) {
-            for (int m = -l; m <= l; ++m) {
-
-                if (std::abs(m2+m) > l2-l) continue;
-                if (std::abs(m1-m) > l1-l) continue;
-                int lm = l*l+l+m;
-                tlm1lm2 +=
-                    pow(-1, l1+m)*factorial2(2*l-1)/(Alm[lm]*Alm[lm])
-                  * std::conj( Rlm[ (l2-l)*(l2-l) + (l2-l) + m2+m ] )
-                  * std::conj( Rlm[ (l1-l)*(l1-l) + (l1-l) + m1-m ] )
-                  * Fl[ l1+l2-l ];
-
-            }} // l m
-
-            tlm1lm2 *=
-                Alm[lm1]*Alm[lm1] * Alm[lm2]*Alm[lm2]
-              / (factorial2(2*l1-1)*factorial2(2*l2-1));
-
-             // TODO Assert .imag() == zero // TODO Does not actually need to be zero!?
-             T(lm1,lm2) = tlm1lm2;
-        }}}} // l1 m1 l2 m2
-        return;
-    }
-
-    double computeTl1m1l2m2(double d12, double r12, double a12, int l1, int l2) {
-
-    }
-private:
-    std::vector<double> Alm;
-    std::vector<double> Blm;
-};
+            sum_l1_l2 += T(lm1,lm2)*std::conj(T(lm1,lm2));
+        }}
+        GLOG() << "[Tlmlm] " << l1 << ":" << l2 << " sum " << sum_l1_l2 << std::endl;
+    }}
+    return;
+    // <<< HACK
+    // <<< MAJOR-HACK*/
 
 
-void calculate_r_dr_erfar_r(double r, double a, int L, bool normalise, std::vector<double> &cl) {
-    // Derivatives (1/r d/dr)^l (erf(ar)/r) for 0 <= l <= L
-    cl.clear();
-    cl.resize(L+1, 0.0);
-    // Initialise
-    cl[0] = std::erf(a*r)/r;
-    double r2 = r*r;
-    double a2 = a*a;
-    double r_sqrt_pi_exp_a2r2 = 1./sqrt(M_PI) * exp(-a2*r2);
-    double al = 1./a;
-    double tl = 1.;
-    // Compute
-    for (int l = 1; l <= L; ++l) {
-        al *= a2;
-        tl *= 2;
-        cl[l] = 1./r2 * ( (2*l-1)*cl[l-1] - tl*al*r_sqrt_pi_exp_a2r2 );
-    }
 
-    if (normalise) {
-        double rl = r;
-        cl[0] *= rl; // * factorial2(-1), which equals 1
-        for (int l = 1; l <= L; ++l) {
-            rl *= r2;
-            cl[l] *= rl / factorial2(2*l-1);
-        }
-    }
+    for (int l1 = 0; l1 <= L1; ++l1) {
+    for (int m1 = -l1; m1 <= l1; ++m1) {
+        int lm1 = l1*l1+l1+m1;
+    for (int l2 = 0; l2 <= L2; ++l2) {
+    for (int m2 = -l2; m2 <= l2; ++m2) {
+        int lm2 = l2*l2+l2+m2;
 
+        std::complex<double> tlm1lm2 = 0.0;
+        int lg = (l1 > l2) ? l1 : l2;
+
+        for (int l = 0; l <= lg; ++l) {
+        for (int m = -l; m <= l; ++m) {
+
+            if (std::abs(m2+m) > l2-l) continue;
+            if (std::abs(m1-m) > l1-l) continue;
+            int lm = l*l+l+m;
+            tlm1lm2 +=
+              pow(-1, l1+m)*factorial2(2*l-1)/(Alm[lm]*Alm[lm])
+              * std::conj( Rlm[ (l2-l)*(l2-l) + (l2-l) + m2+m ] )
+              * std::conj( Rlm[ (l1-l)*(l1-l) + (l1-l) + m1-m ] )
+              * Fl[ l1+l2-l ];
+
+            //tlm1lm2 +=
+            //      pow(-1, l2+m)*1./(Alm[lm]*Blm[lm])
+            //    * std::conj( Rlm[ (l2-l)*(l2-l) + (l2-l) + m2+m ] )    / Alm[(l2-l)*(l2-l) + (l2-l) + m2+m ]
+            //    * std::conj( Rlm[ (l1-l)*(l1-l) + (l1-l) + m1-m ] )    / Alm[(l1-l)*(l1-l) + (l1-l) + m1-m ]
+            //    * Fl[ l1+l2-l ];
+
+        }} // l m
+
+        tlm1lm2 *=
+              Alm[lm1]*Alm[lm1] * Alm[lm2]*Alm[lm2]
+           / (factorial2(2*l1-1)*factorial2(2*l2-1));
+        //tlm1lm2 *=
+        //    Blm[lm1]*Blm[lm2];
+
+         // TODO Assert .imag() == zero // TODO Does not actually need to be zero!?
+         T(lm1,lm2) = tlm1lm2;
+    }}}} // l1 m1 l2 m2
     return;
 }
-
 
 FTSpectrum::FTSpectrum(Structure &structure, Options &options)
     : _structure(&structure), _options(&options) {
@@ -417,7 +418,7 @@ void InteractUpdateSourceTarget(
         for (int l1=0; l1<=L_out; ++l1) {
             GLOG() << "l_out " << l1 << std::endl;
             // Polarizability
-            double alpha = pow(sigma2, 2*l1+1);
+            double alpha = (2*l1+1)*pow(sigma2, 2*l1+1); // TODO HACK: 2*l1+1
             for (int m1=-l1; m1<=l1; ++m1) {
                 GLOG() << " m_out " << m1 << std::endl;
                 int lm_out = l1*l1+l1+m1;
@@ -448,25 +449,10 @@ void InteractUpdateSourceTarget(
     return;
 }
 
-void FTSpectrum::compute() {
-    GLOG() << "Computing FTSpectrum ..." << std::endl;
-
+void FTSpectrum::computeFieldTensors(std::map<int, std::map<int, Tlmlm::coeff_t>> &i1_i2_T12) {
     int K = _K;
     int L = _L;
     Tlmlm T12(L);
-
-    // CREATE ATOMIC SPECTRA
-    for (auto it = _atomic_array.begin(); it != _atomic_array.end(); ++it) {
-        delete *it;
-    }
-    _atomic_array.clear();
-    for (auto pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
-        atomic_t *new_atomic = new atomic_t(*pit, K, L);
-        _atomic_array.push_back(new_atomic);
-    }
-
-    // COMPUTE INTERACTION TENSORS
-    std::map<int, std::map<int, Tlmlm::coeff_t>> i1_i2_T12;
     for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
         // Particle 1
         atomic_t *a = *it1;
@@ -495,10 +481,174 @@ void FTSpectrum::compute() {
             T12.computeTlmlm(d12, r12, a12, L, L, i1_i2_T12[id1][id2]);
         }
     }
+    return;
+}
+
+void FTSpectrum::createAtomic() {
+    for (auto it = _atomic_array.begin(); it != _atomic_array.end(); ++it) {
+        delete *it;
+    }
+    _atomic_array.clear();
+    for (auto pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
+        atomic_t *new_atomic = new atomic_t(*pit, _K, _L);
+        _atomic_array.push_back(new_atomic);
+    }
+}
+
+void FTSpectrum::energySCF(int k, std::map<int, std::map<int, Tlmlm::coeff_t> > &i1_i2_T12) {
+    std::complex<double> energy_total;
+    for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
+        // Particle 1
+        atomic_t *a = *it1;
+        int id1 = a->getCenter()->getId();
+        std::string s1 = a->getType();
+        vec r1 = a->getCenter()->getPos();
+        double sigma1 = a->getCenter()->getSigma();
+        double w1 = a->getCenter()->getWeight();
+        for (auto it2 = it1; it2 != endAtomic(); ++it2) {
+            // Particle 2
+            atomic_t *b = *it2;
+            int id2 = b->getCenter()->getId();
+            std::string s2 = b->getType();
+            vec r2 = b->getCenter()->getPos();
+            double sigma2 = b->getCenter()->getSigma();
+            double w2 = b->getCenter()->getWeight();
+            // Find connection, apply weight function
+            vec dr12 = _structure->connect(r1, r2);
+            double r12 = soap::linalg::abs(dr12);
+            vec d12 = dr12/r12;
+            if (! _cutoff->isWithinCutoff(r12)) continue;
+            double w12 = _cutoff->calculateWeight(r12);
+            double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
+            // Look up interaction tensors for pair (a,b)
+            auto T_ab = i1_i2_T12[id1][id2];
+            // Self-interaction a <> a
+            if (a == b) {
+                ;
+            }
+            // Cross-interaction a <> b
+            else {
+                std::complex<double> energy = 0.0;
+                for (int l1=0; l1<=_L; ++l1) {
+                    for (int m1=-l1; m1<=l1; ++m1) {
+                        int lm1 = l1*l1+l1+m1;
+                        for (int l2=0; l2<=_L; ++l2) {
+                            for (int m2=-l2; m2<=l2; ++m2) {
+                                int lm2 = l2*l2+l2+m2;
+                                energy += a->_M(k, lm1)*T_ab(lm1, lm2)*b->_M(k, lm2);
+                            }
+                        }
+                    }
+                }
+                energy_total += energy;
+                GLOG() << "[energy] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " " << energy << std::endl;
+            }
+        } // Particle b
+    } // Particle a
+    GLOG() << "[energy, total] " << "(k=" << k << ")" << energy_total << std::endl;
+    return;
+}
+
+void FTSpectrum::polarize() {
+    this->createAtomic();
+    std::map<int, std::map<int, Tlmlm::coeff_t>> i1_i2_T12;
+    this->computeFieldTensors(i1_i2_T12);
+
+    // Initialise moments
+    for (auto it = beginAtomic(); it != endAtomic(); ++it) {
+        atomic_t *a = *it;
+        a->_M = AtomicSpectrumFT::field_zero_t(_K+1,(_L+1)*(_L+1));
+        a->_F = AtomicSpectrumFT::field_zero_t(_K+1,(_L+1)*(_L+1));
+        a->_M(0,0) = 1.0;
+    }
+    this->energySCF(0, i1_i2_T12);
+
+    for (int k = 1; k <= _K; ++k) {
+        // UPDATE FIELDS
+        for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
+            // Particle 1
+            atomic_t *a = *it1;
+            int id1 = a->getCenter()->getId();
+            std::string s1 = a->getType();
+            vec r1 = a->getCenter()->getPos();
+            double sigma1 = a->getCenter()->getSigma();
+            double w1 = a->getCenter()->getWeight();
+            for (auto it2 = it1; it2 != endAtomic(); ++it2) {
+                // Particle 2
+                atomic_t *b = *it2;
+                int id2 = b->getCenter()->getId();
+                std::string s2 = b->getType();
+                vec r2 = b->getCenter()->getPos();
+                double sigma2 = b->getCenter()->getSigma();
+                double w2 = b->getCenter()->getWeight();
+                // Find connection, apply weight function
+                vec dr12 = _structure->connect(r1, r2);
+                double r12 = soap::linalg::abs(dr12);
+                vec d12 = dr12/r12;
+                if (! _cutoff->isWithinCutoff(r12)) continue;
+                double w12 = _cutoff->calculateWeight(r12);
+                double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
+                GLOG() << "[interact] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
+                // Look up interaction tensors for pair (a,b)
+                auto T_ab = i1_i2_T12[id1][id2];
+                // Self-interaction a <> a
+                if (a == b) {
+                    ;
+                }
+                // Cross-interaction a <> b
+                else {
+                    for (int l1=0; l1<=_L; ++l1) {
+                        for (int m1=-l1; m1<=l1; ++m1) {
+                            int lm1 = l1*l1+l1+m1;
+                            for (int l2=0; l2<=_L; ++l2) {
+                                double parity = pow(-1,l1+l2);
+                                for (int m2=-l2; m2<=l2; ++m2) {
+                                    int lm2 = l2*l2+l2+m2;
+                                    a->_F(k, lm1) += T_ab(lm1, lm2)*b->_M(k-1, lm2);
+                                    b->_F(k, lm2) += T_ab(lm1, lm2)*a->_M(k-1, lm1)*parity;
+                                }
+                            }
+                        }
+                    }
+                }
+            } // Particle b
+        } // Particle a
+        // INDUCE
+        for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
+            atomic_t *a = *it1;
+            double sigma1 = a->getCenter()->getSigma();
+            for (int l1=0; l1<=_L; ++l1) {
+                std::complex<double> sum_l = 0.0;
+                double alpha = pow(sigma1, 2*l1+1);
+                for (int m1=-l1; m1<=l1; ++m1) {
+                    int lm1 = l1*l1+l1+m1;
+                    a->_M(k, lm1) = std::conj(alpha*a->_F(k, lm1)); // HACK added conj
+                    sum_l += a->_F(k, lm1)*std::conj(a->_F(k, lm1));
+                }
+                GLOG() << "[induced] @ " << a->getCenter()->getId() << " l " << l1 << " : " << sum_l << std::endl;
+            }
+        }
+        // ENERGY
+        this->energySCF(k, i1_i2_T12);
+    } // Iterations k
+    return;
+}
+
+void FTSpectrum::compute() {
+    GLOG() << "Computing FTSpectrum ..." << std::endl;
+
+    // CREATE ATOMIC SPECTRA
+    this->createAtomic();
+
+    // COMPUTE INTERACTION TENSORS
+    std::map<int, std::map<int, Tlmlm::coeff_t>> i1_i2_T12;
+    this->computeFieldTensors(i1_i2_T12);
 
     // INITIALISE FIELD MOMENTS (k=0)
+    int K = _K;
+    int L = _L;
     int k = 0;
-    int L_k_in = 0;  // lm
+    int L_k_in = 0;
     int L_k_out = 0;
     int Lambda_flat_k_in = 1;
     int Lambda_flat_k_out = 1; // || l'l''... ||
@@ -558,6 +708,7 @@ void FTSpectrum::compute() {
                 auto T_ab = i1_i2_T12[id1][id2];
                 // Self-interaction a <> a
                 if (a == b) {
+                    w12 *= _cutoff->getCenterWeight();
                     // Source 'a', target 'a'
                     InteractUpdateSourceTarget(a, b, T_ab,
                         sigma1, sigma2,
@@ -772,6 +923,7 @@ void FTSpectrum::registerPython() {
     using namespace boost::python;
     class_<FTSpectrum>("FTSpectrum", init<Structure &, Options &>())
         .def("__iter__", range<return_value_policy<reference_existing_object> >(&FTSpectrum::beginAtomic, &FTSpectrum::endAtomic))
+        .def("polarize", &FTSpectrum::polarize)
         .def("compute", &FTSpectrum::compute);
     return;
 }

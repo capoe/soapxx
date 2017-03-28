@@ -4,6 +4,7 @@
 #include "soap/structure.hpp"
 #include "soap/options.hpp"
 #include "soap/cutoff.hpp"
+#include "soap/functions.hpp"
 #include "boost/multi_array.hpp"
 
 namespace soap {
@@ -26,6 +27,10 @@ public:
     typedef ub::matrix<dtype_t> coeff_t; // (k=1:0 k=1:l' k=2:l'l'', l)
     typedef ub::zero_matrix<dtype_t> coeff_zero_t;
     typedef std::map<channel_t, coeff_t*> coeff_map_t;
+
+    // PHYSICAL
+    field_t _F;
+    field_t _M;
 
     AtomicSpectrumFT(Particle *center, int K, int L);
    ~AtomicSpectrumFT();
@@ -67,6 +72,62 @@ private:
     int _L;
 };
 
+std::vector<double> calculate_Alm(int L);
+std::vector<double> calculate_Blm(int L);
+void calculate_Fl(double r, double a, int L, std::vector<double> &fl);
+
+class Tlmlm
+{
+public:
+    typedef std::complex<double> dtype_t;
+    typedef ub::matrix< dtype_t > coeff_t;
+    typedef ub::zero_matrix< dtype_t > coeff_zero_t;
+
+    Tlmlm(int L) {
+        Alm = calculate_Alm(L);
+        Blm = calculate_Blm(L);
+    }
+
+    void computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_t &T);
+
+    double computeTl1m1l2m2(double d12, double r12, double a12, int l1, int l2) {
+
+    }
+private:
+    std::vector<double> Alm;
+    std::vector<double> Blm;
+};
+
+/*void calculate_r_dr_erfar_r(double r, double a, int L, bool normalise, std::vector<double> &cl) {
+    // Derivatives (1/r d/dr)^l (erf(ar)/r) for 0 <= l <= L
+    cl.clear();
+    cl.resize(L+1, 0.0);
+    // Initialise
+    cl[0] = std::erf(a*r)/r;
+    double r2 = r*r;
+    double a2 = a*a;
+    double r_sqrt_pi_exp_a2r2 = 1./sqrt(M_PI) * exp(-a2*r2);
+    double al = 1./a;
+    double tl = 1.;
+    // Compute
+    for (int l = 1; l <= L; ++l) {
+        al *= a2;
+        tl *= 2;
+        cl[l] = 1./r2 * ( (2*l-1)*cl[l-1] - tl*al*r_sqrt_pi_exp_a2r2 );
+    }
+
+    if (normalise) {
+        double rl = r;
+        cl[0] *= rl; // * factorial2(-1), which equals 1
+        for (int l = 1; l <= L; ++l) {
+            rl *= r2;
+            cl[l] *= rl / factorial2(2*l-1);
+        }
+    }
+
+    return;
+}*/
+
 class FTSpectrum
 {
 public:
@@ -77,8 +138,12 @@ public:
     FTSpectrum(Structure &structure, Options &options);
    ~FTSpectrum();
     void compute();
+    void computeFieldTensors(std::map<int, std::map<int, Tlmlm::coeff_t> > &i1_i2_T12);
+    void createAtomic();
     atomic_it_t beginAtomic() { return _atomic_array.begin(); }
     atomic_it_t endAtomic() { return _atomic_array.end(); }
+    void energySCF(int k, std::map<int, std::map<int, Tlmlm::coeff_t> > &i1_i2_T12);
+    void polarize();
 
     static void registerPython();
 
