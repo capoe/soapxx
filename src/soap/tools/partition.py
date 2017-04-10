@@ -1,5 +1,6 @@
 #! /usr/bin/env python
-from momo import sys, np, osio, endl, flush
+#from momo import sys, np, osio, endl, flush
+from ..soapy.momo import sys, np, osio, endl, flush
 try:
     from __qmshell__ import e_xyz_from_xyz
     from __molecules__ import Atom, Molecule
