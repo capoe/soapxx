@@ -160,7 +160,8 @@ void AtomicSpectrumFT::contract() {
                             cmplx_t phi_l_s1s2_l1l2 = 0.0;
                             for (int m = -l; m <= l; ++m) {
                                 int lm = l*l+l+m;
-                                phi_l_s1s2_l1l2 += f1(lambda1, lm)*std::conj(f2(lambda2, lm));
+                                phi_l_s1s2_l1l2 += f1(lambda1, lm)*std::conj(f2(lambda2, lm)); // HACK?
+                                //phi_l_s1s2_l1l2 += f1(lambda1, lm)*f2(lambda2, lm); // <- FIX?
                             }
                             int l1l2 = LambdaLambda_off_k+lambda1*Lambda1 + lambda2;
                             GLOG() << " Store " << lambda1 << ":" << lambda2 << ":" << l << " @ " << l1l2 << ":" << l << " = " << phi_l_s1s2_l1l2 <<  std::endl;
@@ -192,8 +193,9 @@ std::vector<double> calculate_Alm(int L) {
     std::vector<double> out;
     out.resize((L+1)*(L+1), 0.0);
     for (int l = 0; l <= L; ++l) {
-        for (int m = -l; m <= L; ++m) {
+        for (int m = -l; m <= l; ++m) {
             out[l*l+l+m] = sqrt(factorial(l+m)*factorial(l-m));
+            GLOG() << "[A]" << l << "," << m << " : " << out[l*l+l+m] << std::endl;
         }
     }
     return out;
@@ -204,8 +206,9 @@ std::vector<double> calculate_Blm(int L) {
     std::vector<double> out;
     out.resize((L+1)*(L+1), 0.0);
     for (int l = 0; l <= L; ++l) {
-        for (int m = -l; m <= L; ++m) {
+        for (int m = -l; m <= l; ++m) {
             out[l*l+l+m] = sqrt(factorial(l+m)*factorial(l-m))/factorial2(2*l-1);
+            GLOG() << "[B]" << l << "," << m << " : " << out[l*l+l+m] << std::endl;
         }
     }
     return out;
@@ -244,6 +247,18 @@ void calculate_Fl(double r, double a, int L, std::vector<double> &fl) {
         }
     }
     return;
+}
+
+double lm_gauge(int l, int m) {
+    if (m == 0) {
+        return 1.;
+    }
+    else if (m < 0) {
+        return sqrt((double)factorial(l+m)/factorial(l-m));
+    }
+    else {
+        return sqrt((double)factorial(l-m)/factorial(l+m));
+    }
 }
 
 void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_t &T) {
@@ -308,8 +323,6 @@ void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_
     // <<< HACK
     // <<< MAJOR-HACK*/
 
-
-
     for (int l1 = 0; l1 <= L1; ++l1) {
     for (int m1 = -l1; m1 <= l1; ++m1) {
         int lm1 = l1*l1+l1+m1;
@@ -343,8 +356,8 @@ void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_
         tlm1lm2 *=
               Alm[lm1]*Alm[lm1] * Alm[lm2]*Alm[lm2]
            / (factorial2(2*l1-1)*factorial2(2*l2-1));
-        //tlm1lm2 *=
-        //    Blm[lm1]*Blm[lm2];
+        tlm1lm2 /=               // HACK Is that the fix? Yes. TODO Adjust scaling
+            Blm[lm1]*Blm[lm2];   // HACK Is that the fix? Yes. TODO Adjust scaling
 
          // TODO Assert .imag() == zero // TODO Does not actually need to be zero!?
          T(lm1,lm2) = tlm1lm2;
@@ -440,7 +453,8 @@ void InteractUpdateSourceTarget(
                         q_lambda_lm_out *= alpha*w12*w2*parity;
                         // Add to fields on b
                         GLOG() << "      => (" << lambda_out << "," << lm_out << ")"  << " : " << q_lambda_lm_out << std::endl;
-                        f_b(lambda_out, lm_out) += q_lambda_lm_out;
+                        //f_b(lambda_out, lm_out) += q_lambda_lm_out;            // HACK?
+                        f_b(lambda_out, lm_out) += std::conj(q_lambda_lm_out); // FIX? Added conj
                     } // End loop over l_in
                 } // End loop over lambda_in
             } // End loop over m_out
@@ -591,6 +605,17 @@ void FTSpectrum::polarize() {
                 GLOG() << "[interact] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
                 // Look up interaction tensors for pair (a,b)
                 auto T_ab = i1_i2_T12[id1][id2];
+                for (int l1=0; l1 <= _L; ++l1) {
+                    for (int m1=-l1; m1 <= l1; ++m1) {
+                        int lm1 = l1*l1+l1+m1;
+                        for (int l2=0; l2 <= _L; ++l2) {
+                            for (int m2=-l2; m2 <= l2; ++m2) {
+                                int lm2 = l2*l2+l2+m2;
+                                GLOG() << "[FT] " << id1<<":"<<id2 << " " << l1 << "," << m1 << "   " << l2 << "," << m2 << "   " << T_ab(lm1,lm2) << std::endl;
+                            }
+                        }
+                    }
+                }
                 // Self-interaction a <> a
                 if (a == b) {
                     ;
@@ -604,8 +629,12 @@ void FTSpectrum::polarize() {
                                 double parity = pow(-1,l1+l2);
                                 for (int m2=-l2; m2<=l2; ++m2) {
                                     int lm2 = l2*l2+l2+m2;
+                                    GLOG() << "@ " << id1 << " ~" << id2 << " " << l1 << m1 << "|" << l2 << m2 << " : " << T_ab(lm1, lm2)*b->_M(k-1, lm2) << std::endl;
                                     a->_F(k, lm1) += T_ab(lm1, lm2)*b->_M(k-1, lm2);
-                                    b->_F(k, lm2) += T_ab(lm1, lm2)*a->_M(k-1, lm1)*parity;
+                                    GLOG() << "@ " << id2 << " ~" << id1 << " " << l1 << m1 << "|" << l2 << m2 << " : " << T_ab(lm1, lm2)*a->_M(k-1, lm2)*parity << std::endl;
+                                    b->_F(k, lm1) += T_ab(lm1, lm2)*a->_M(k-1, lm2)*parity;
+                                    //GLOG() << "@ " << id2 << " ~" << id1 << " " << l2 << m2 << "|" << l1 << m1 << " : " << T_ab(lm1, lm2)*a->_M(k-1, lm1)*parity << std::endl; // WRONG
+                                    //b->_F(k, lm2) += T_ab(lm1, lm2)*a->_M(k-1, lm1)*parity; // WRONG
                                 }
                             }
                         }
@@ -624,6 +653,7 @@ void FTSpectrum::polarize() {
                     int lm1 = l1*l1+l1+m1;
                     a->_M(k, lm1) = std::conj(alpha*a->_F(k, lm1)); // HACK added conj
                     sum_l += a->_F(k, lm1)*std::conj(a->_F(k, lm1));
+                    GLOG() << "[induced] " << "l " << l1 << " m " << m1 << " lm " << lm1 <<  " : "  << a->_F(k, lm1) << std::endl;
                 }
                 GLOG() << "[induced] @ " << a->getCenter()->getId() << " l " << l1 << " : " << sum_l << std::endl;
             }
