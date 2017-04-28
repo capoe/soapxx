@@ -62,7 +62,7 @@ private:
     std::list<std::string> _nb_types;
 };
 
-class FTBasis // TODO
+class FTBasis
 {
 public:
     FTBasis(Options &options) : _K(-1), _L(-1) {};
@@ -90,9 +90,6 @@ public:
 
     void computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_t &T);
 
-    double computeTl1m1l2m2(double d12, double r12, double a12, int l1, int l2) {
-
-    }
 private:
     std::vector<double> Alm;
     std::vector<double> Blm;

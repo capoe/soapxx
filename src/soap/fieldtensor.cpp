@@ -14,31 +14,44 @@ const std::string AtomicSpectrumFT::_numpy_t = "float64";
 
 AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int K, int L)
     : _center(center), _K(K), _L(L) {
-    this->_s = center->getTypeId()-1;
+    this->_s = center->getTypeId()-1; // TODO No longer used, using string labels as map keys instead
     this->_type = center->getType();
-    GLOG() << "Created FT particle: " << _type << " " << center->getId() << " @ " << _center->getPos() << std::endl;
+    if (GLOG.verbose())
+        GLOG() << "Created FT particle: " << _type
+            << " " << center->getId()
+            << " @ " << _center->getPos()
+            << std::endl;
     assert(_s >= 0 && "Type-IDs should start from 1");
-
     // Body-order storage
     assert(K >= 0);
     _body_map.resize(K+1);
 }
 
 AtomicSpectrumFT::~AtomicSpectrumFT() {
-    GLOG() << "[~] Destruct " << this->getCenter()->getId() << std::endl;
+    #ifdef DBG
+        GLOG() << "[~] Destruct " << this->getCenter()->getId() << std::endl;
+    #endif
     // Deallocate body-order field terms
     for (int k=0; k <= _K; ++k) {
         field_map_t &fm = _body_map[k];
-        GLOG() << "[~]   Deallocating k=" << k<< std::endl;
+        #ifdef DBG
+            GLOG() << "[~]   Deallocating k=" << k<< std::endl;
+        #endif
         // Deallocate field terms for each type channel
         for (auto it=fm.begin(); it != fm.end(); ++it) {
-            GLOG() << "[~]     Deallocating type=" <<  it->first << std::endl;
+            #ifdef DBG
+                GLOG() << "[~]     Deallocating type=" <<  it->first << std::endl;
+            #endif
             delete it->second;
         }
     }
     // Deallocate contraction coefficients
     for (auto it = _coeff_map.begin(); it != _coeff_map.end(); ++it) {
-        GLOG() << "[~]   Deallocating s1:s2 = " <<  it->first.first << ":" << it->first.second << std::endl;
+        #ifdef DBG
+            GLOG() << "[~]   Deallocating s1:s2 = "
+                <<  it->first.first << ":" << it->first.second
+                << std::endl;
+        #endif
         delete it->second;
     }
 }
@@ -69,7 +82,13 @@ AtomicSpectrumFT::field_t *AtomicSpectrumFT::getCreateField(int k, std::string t
     assert(k <= _K);
     auto it = _body_map[k].find(type);
     if (it == _body_map[k].end()) {
-        GLOG() << "[AtomicSpectrumFT::getCreateField]" << " Allocate k " << k << " type '" << type << "' [" << s1 << "x" << s2 << "]" << std::endl;
+        #ifdef DBG
+            GLOG() << "[AtomicSpectrumFT::getCreateField]"
+                << " Allocate k " << k
+                << " type '" << type
+                << "' [" << s1 << "x" << s2 << "]"
+                << std::endl;
+        #endif
         _body_map[k][type] = new field_t(
             field_zero_t(s1, s2)
         );
@@ -83,7 +102,12 @@ AtomicSpectrumFT::coeff_t *AtomicSpectrumFT::getCreateContraction(channel_t &cha
     // size2 -> L+1
     auto it = _coeff_map.find(channel);
     if (it == _coeff_map.end()) {
-        GLOG() << "[AtomicSpectrumFT::getCreateContraction] Allocate " << channel.first << ":" << channel.second << " " << size1 << "x" << size2 << std::endl;
+        #ifdef DBG
+            GLOG() << "[AtomicSpectrumFT::getCreateContraction]"
+                << " Allocate " << channel.first << ":" << channel.second
+                << " " << size1 << "x" << size2
+                << std::endl;
+        #endif
         _coeff_map[channel] = new coeff_t(
             coeff_zero_t(size1, size2)
         );
@@ -108,35 +132,46 @@ void AtomicSpectrumFT::contract() {
     int Lambda_total = (1 - pow(_L+1, _K))/(1 - (_L+1)); // from geometric series
     int LambdaLambda_total = (1 - pow(_L+1, 2*_K))/(1 - pow(_L+1, 2));
 
-    GLOG() << "Centre: " << this->getCenter()->getId() << ":" << this->getType() << std::endl;
-    GLOG() << "Trail length total: " << Lambda_total << std::endl;
-    GLOG() << "Trail length total - contracted: " << LambdaLambda_total << std::endl;
-    for (k=1; k<=_K; ++k) { // TODO Mix different k-channels?
+    GLOG() << "[contract] Centre: " << this->getCenter()->getId() << ":" << this->getType() << std::flush;
+    #ifdef DBG
+        GLOG() << std::endl;
+        GLOG() << "[contract] Trail length total: " << Lambda_total << std::endl;
+        GLOG() << "[contract] Trail length total - contracted: " << LambdaLambda_total << std::endl;
+    #endif
+    for (k=1; k<=_K; ++k) { // TODO Mix different k-channels? That would increase descriptor length if affordable/required.
 
         int Lambda_off_k = (1 - pow(_L+1, k-1))/(1 - (_L+1));
         int LambdaLambda_off_k = (1 - pow(_L+1, 2*(k-1)))/(1 - pow(_L+1, 2));
         int Lambda_k = pow(_L+1, k-1);
         int L_k = _L;
 
-        GLOG()
-            << "L_k= " << _L
-            << " Lambda_k= " << Lambda_k
-            << " Lambda_off_k= " << Lambda_off_k
-            << " LambdaLambda_off_k= " << LambdaLambda_off_k
-        << std::endl;
+        #ifdef DBG
+            GLOG()
+                << "[contract] L_k= " << _L
+                << " Lambda_k= " << Lambda_k
+                << " Lambda_off_k= " << Lambda_off_k
+                << " LambdaLambda_off_k= " << LambdaLambda_off_k
+                << std::endl;
+        #endif
 
         field_map_t &field_map = _body_map[k];
-        for (auto it = field_map.begin(); it != field_map.end(); ++it) {
-            std::string type = it->first;
-            field_t &field = *(it->second);
-            GLOG() << " k= " << k  << " type= " << type << " ||lambda||= " << field.size1() << " ||L||= " << field.size2() << std::endl;
-        }
+        #ifdef DBG
+            for (auto it = field_map.begin(); it != field_map.end(); ++it) {
+                std::string type = it->first;
+                field_t &field = *(it->second);
+                GLOG() << "[contract]  k= " << k
+                    << " type= " << type
+                    << " ||lambda||= " << field.size1()
+                    << " ||L||= " << field.size2()
+                    << std::endl;
+            }
+        #endif
         // Contract channels
         for (auto it1 = field_map.begin(); it1 != field_map.end(); ++it1) {
-            std::string s1 = it1->first;
+            std::string s1 = it1->first; // <- Channel 1 (e.g., 'C')
             field_t &f1 = *(it1->second);
             for (auto it2 = field_map.begin(); it2 != field_map.end(); ++it2) {
-                std::string s2 = it2->first;
+                std::string s2 = it2->first; // <- Channel 2 (e.g., 'O')
                 field_t &f2 = *(it2->second);
                 GLOG() << " " << s1 << ":" << s2 << std::flush;
                 // Size sanity checks
@@ -150,8 +185,12 @@ void AtomicSpectrumFT::contract() {
                 assert(Lambda2 == Lambda_k);
                 // Allocate channel if necessary
                 channel_t channel(s1, s2);
-                coeff_t &coeffs = *(this->getCreateContraction(channel, LambdaLambda_total, _L+1)); // TODO Does not work with k-dependent L-cutoff
-                GLOG() << "Coefficient matrix for this channel: " << coeffs.size1() << "x" << coeffs.size2() << std::endl;
+                coeff_t &coeffs = *(this->getCreateContraction(channel, LambdaLambda_total, _L+1)); // TODO Will not work with k-dependent L-cutoff
+                #ifdef DBG
+                    GLOG() << "Coefficient matrix for this channel: "
+                        << coeffs.size1() << "x" << coeffs.size2()
+                        << std::endl;
+                #endif
                 for (int lambda1 = 0; lambda1 < Lambda1; ++lambda1) {
                     for (int lambda2 = 0; lambda2 < Lambda2; ++lambda2) {
                         for (int l = 0; l <= L_k; ++l) {
@@ -160,19 +199,24 @@ void AtomicSpectrumFT::contract() {
                             cmplx_t phi_l_s1s2_l1l2 = 0.0;
                             for (int m = -l; m <= l; ++m) {
                                 int lm = l*l+l+m;
-                                phi_l_s1s2_l1l2 += f1(lambda1, lm)*std::conj(f2(lambda2, lm)); // HACK?
-                                //phi_l_s1s2_l1l2 += f1(lambda1, lm)*f2(lambda2, lm); // <- FIX?
+                                phi_l_s1s2_l1l2 += f1(lambda1, lm)*std::conj(f2(lambda2, lm));
                             }
                             int l1l2 = LambdaLambda_off_k+lambda1*Lambda1 + lambda2;
-                            GLOG() << " Store " << lambda1 << ":" << lambda2 << ":" << l << " @ " << l1l2 << ":" << l << " = " << phi_l_s1s2_l1l2 <<  std::endl;
+                            #ifdef DBG
+                                GLOG() << " Store "
+                                    << lambda1 << ":" << lambda2 << ":" << l
+                                    << " @ " << l1l2 << ":" << l
+                                    << " = " << phi_l_s1s2_l1l2
+                                    <<  std::endl;
+                            #endif
                             coeffs(l1l2, l) = inv_alpha*phi_l_s1s2_l1l2.real();
                         } // l
                     } // lambda 2
                 } // lambda 1
             } // Channel type 2
         } // Channel type 1
-        GLOG() << std::endl;
     }
+    GLOG() << std::endl;
     return;
 }
 
@@ -195,7 +239,9 @@ std::vector<double> calculate_Alm(int L) {
     for (int l = 0; l <= L; ++l) {
         for (int m = -l; m <= l; ++m) {
             out[l*l+l+m] = sqrt(factorial(l+m)*factorial(l-m));
-            GLOG() << "[A]" << l << "," << m << " : " << out[l*l+l+m] << std::endl;
+            #ifdef DBG // TODO Outsource to tests
+                GLOG() << "[A]" << l << "," << m << " : " << out[l*l+l+m] << std::endl;
+            #endif
         }
     }
     return out;
@@ -208,7 +254,9 @@ std::vector<double> calculate_Blm(int L) {
     for (int l = 0; l <= L; ++l) {
         for (int m = -l; m <= l; ++m) {
             out[l*l+l+m] = sqrt(factorial(l+m)*factorial(l-m))/factorial2(2*l-1);
-            GLOG() << "[B]" << l << "," << m << " : " << out[l*l+l+m] << std::endl;
+            #ifdef DBG // TODO Outsource to tests
+                GLOG() << "[B]" << l << "," << m << " : " << out[l*l+l+m] << std::endl;
+            #endif
         }
     }
     return out;
@@ -216,6 +264,7 @@ std::vector<double> calculate_Blm(int L) {
 
 void calculate_Fl(double r, double a, int L, std::vector<double> &fl) {
     // See Elking et al.: "Gaussian Multipole Model", JCTC (2010), Eq. 15a++
+    // (which does not however mention the recursive form used here)
     fl.clear();
     fl.resize(L+1, 0.0);
     if (r < 1e-10) { // TODO Define space quantum
@@ -249,18 +298,6 @@ void calculate_Fl(double r, double a, int L, std::vector<double> &fl) {
     return;
 }
 
-double lm_gauge(int l, int m) {
-    if (m == 0) {
-        return 1.;
-    }
-    else if (m < 0) {
-        return sqrt((double)factorial(l+m)/factorial(l-m));
-    }
-    else {
-        return sqrt((double)factorial(l-m)/factorial(l+m));
-    }
-}
-
 void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_t &T) {
     // TODO This can be sped up by using Tl1m1l2m2 = (-1)^(l1+l2) Tl2m2l1m1
     // TODO Properties to test:
@@ -278,26 +315,7 @@ void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_
     std::vector<double> Fl;
     calculate_Fl(r12, a12, L12, Fl);
 
-    /*// >>> MAJOR-HACK 1
-    // >>> HACK
-    Rlm.clear();
-    calculate_solidharm_Rlm(d12, r12, L12, Rlm);
-    for (int l1 = 0; l1 <= L1; ++l1) {
-    for (int m1 = -l1; m1 <= l1; ++m1) {
-        int lm1 = l1*l1+l1+m1;
-    for (int l2 = 0; l2 <= L2; ++l2) {
-    for (int m2 = -l2; m2 <= l2; ++m2) {
-        int lm2 = l2*l2+l2+m2;
-        //if (m1 == 0 && m2 == 0)
-        //    T(lm1,lm2) = Fl[l1+l2];
-        int lm12 = (l1+l2)*(l1+l2)+(l1+l2)+m1+m2;
-        //T(lm1,lm2) = std::Rlm[lm12];
-        //T(lm1,lm2) = std::conj( Rlm[lm1] ) * std::conj( Rlm[lm2] );
-        T(lm1,lm2) = std::conj(Rlm[lm1]) * std::conj(Rlm[lm2]);
-    }}}}
-    // <<< HACK
-
-    // >>> HACK
+    /*
     for (int l1 = 0; l1 <= Lg; ++l1) {
         std::complex<double> sum_l = 0.0;
         for (int m1 = -l1; m1 <= l1; ++m1) {
@@ -305,9 +323,8 @@ void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_
             GLOG() << "[Rlm] " << " m1 " << l1 << " : " << Rlm[lm1] << std::endl;
             sum_l += Rlm[lm1]*std::conj(Rlm[lm1]);
         }
-        GLOG() << "[Rlm]             " << r12 << " l " << l1 << " : " << sum_l << std::endl;
+        GLOG() << "[Rlm] => " << r12 << " l " << l1 << " : " << sum_l << std::endl;
     }
-
     for (int l1 = 0; l1 <= L1; ++l1) {
     for (int l2 = 0; l2 <= L2; ++l2) {
         std::complex<double> sum_l1_l2 = 0.0;
@@ -317,11 +334,9 @@ void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_
             int lm2 = l2*l2+l2+m2;
             sum_l1_l2 += T(lm1,lm2)*std::conj(T(lm1,lm2));
         }}
-        GLOG() << "[Tlmlm] " << l1 << ":" << l2 << " sum " << sum_l1_l2 << std::endl;
+        GLOG() << "[Tlmlm] => " << l1 << ":" << l2 << " sum " << sum_l1_l2 << std::endl;
     }}
-    return;
-    // <<< HACK
-    // <<< MAJOR-HACK*/
+    */
 
     for (int l1 = 0; l1 <= L1; ++l1) {
     for (int m1 = -l1; m1 <= l1; ++m1) {
@@ -347,8 +362,8 @@ void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_
 
             //tlm1lm2 +=
             //      pow(-1, l2+m)*1./(Alm[lm]*Blm[lm])
-            //    * std::conj( Rlm[ (l2-l)*(l2-l) + (l2-l) + m2+m ] )    / Alm[(l2-l)*(l2-l) + (l2-l) + m2+m ]
-            //    * std::conj( Rlm[ (l1-l)*(l1-l) + (l1-l) + m1-m ] )    / Alm[(l1-l)*(l1-l) + (l1-l) + m1-m ]
+            //    * std::conj( Rlm[ (l2-l)*(l2-l) + (l2-l) + m2+m ] ) / Alm[(l2-l)*(l2-l) + (l2-l) + m2+m ]
+            //    * std::conj( Rlm[ (l1-l)*(l1-l) + (l1-l) + m1-m ] ) / Alm[(l1-l)*(l1-l) + (l1-l) + m1-m ]
             //    * Fl[ l1+l2-l ];
 
         }} // l m
@@ -358,15 +373,16 @@ void Tlmlm::computeTlmlm(vec d12, double r12, double a12, int L1, int L2, coeff_
            / (factorial2(2*l1-1)*factorial2(2*l2-1));
         tlm1lm2 /=               // HACK Is that the fix? Yes. TODO Adjust scaling
             Blm[lm1]*Blm[lm2];   // HACK Is that the fix? Yes. TODO Adjust scaling
-
-         // TODO Assert .imag() == zero // TODO Does not actually need to be zero!?
-         T(lm1,lm2) = tlm1lm2;
+        T(lm1,lm2) = tlm1lm2;
     }}}} // l1 m1 l2 m2
     return;
 }
 
 FTSpectrum::FTSpectrum(Structure &structure, Options &options)
     : _structure(&structure), _options(&options) {
+    #ifdef DBG
+        GLOG() << "FTSPECTRUM: DEBUG MODE ENABLED" << std::endl;
+    #endif
     _cutoff = CutoffFunctionOutlet().create(_options->get<std::string>("radialcutoff.type"));
 	_cutoff->configure(*_options);
     _L = _options->get<int>("fieldtensor.L");
@@ -382,39 +398,41 @@ FTSpectrum::~FTSpectrum() {
 }
 
 void InteractUpdateSourceTarget(
-        AtomicSpectrumFT *a, // <- source
-        AtomicSpectrumFT *b, // <- target
-        Tlmlm::coeff_t &T_ab,
-        double sigma1,
-        double sigma2,
-        double w12,
-        double w2,
-        int k,
-        int L_in,
-        int L_out,
-        int Lambda_in,
-        int Lambda_out,
-        int LM_in,
-        int LM_out,
-        bool apply_parity) {
+        AtomicSpectrumFT *a, // <- source particle
+        AtomicSpectrumFT *b, // <- target particle
+        Tlmlm::coeff_t &T_ab, // <- field tensors
+        double sigma1,      // <- atomic width source
+        double sigma2,      // <- atomic width target
+        double w12,         // <- pair weight
+        double w2,          // <- target weight
+        int k,              // <- Body-order cutoff
+        int L_in,           // <- Incoming moments: cutoff
+        int L_out,          // <- Outgoing moments: cutoff
+        int Lambda_in,      // <- Trace memory length in
+        int Lambda_out,     // <- Trace memory length out
+        int LM_in,          // <- (no longer used)
+        int LM_out,         // <- Allocation size out
+        bool apply_parity) { // <- apply parity to field tensors
 
-    GLOG() << "[update] " << "w " << w12 << " " << w2 << std::endl;
-    GLOG() << "[update] " << "k " << k << " L-in " << L_in << " L-out " << L_out << std::endl;
-    GLOG() << "[update] " << "Lambda-in " << Lambda_in << " Lambda-out " << Lambda_out << std::endl;
-    GLOG() << "[update] " << "LM-in " << LM_in << " LM-out " << LM_out << std::endl;
-    GLOG() << "[update] " << "Parity " << apply_parity << std::endl;
-
-    for (int l1=0; l1 <= L_out; ++l1) {
+    #ifdef DBG
+        GLOG() << "[update] " << "w " << w12 << " " << w2 << std::endl;
+        GLOG() << "[update] " << "k " << k << " L-in " << L_in << " L-out " << L_out << std::endl;
+        GLOG() << "[update] " << "Lambda-in " << Lambda_in << " Lambda-out " << Lambda_out << std::endl;
+        GLOG() << "[update] " << "LM-in " << LM_in << " LM-out " << LM_out << std::endl;
+        GLOG() << "[update] " << "Parity " << apply_parity << std::endl;
+        for (int l1=0; l1 <= L_out; ++l1) {
         for (int m1=-l1; m1 <= l1; ++m1) {
             int lm1 = l1*l1+l1+m1;
             for (int l2=0; l2 <= L_out; ++l2) {
-                for (int m2=-l2; m2 <= l2; ++m2) {
-                    int lm2 = l2*l2+l2+m2;
-                    GLOG() << l1 << "," << m1 << "   " << l2 << "," << m2 << "   " << T_ab(lm1,lm2) << std::endl;
-                }
-            }
-        }
-    }
+            for (int m2=-l2; m2 <= l2; ++m2) {
+                int lm2 = l2*l2+l2+m2;
+                GLOG() << l1 << "," << m1
+                    << " " << l2 << "," << m2
+                    << " " << T_ab(lm1,lm2)
+                    << std::endl;
+            }}
+        }}
+    #endif
 
     // Retrieve field maps for iteration k-1
     AtomicSpectrumFT::field_map_t &fmap_a = a->getFieldMap(k-1);
@@ -425,36 +443,48 @@ void InteractUpdateSourceTarget(
         std::string type = it_a->first;
         AtomicSpectrumFT::field_t &f_a = *(it_a->second);
         AtomicSpectrumFT::field_t &f_b = *(b->getCreateField(k, type, Lambda_out, LM_out));
-        GLOG() << "[increment]   a: source: type: " << type << " size: " << f_a.size1() << " x " << f_a.size2() << std::endl;
-        GLOG() << "[increment]   b: target: size: " << f_b.size1() << " x " << f_b.size2() << std::endl;
+        #ifdef DBG
+            GLOG() << "[increment]   a: source: type: "
+                << type << " size: " << f_a.size1()
+                << " x " << f_a.size2()
+                << std::endl;
+            GLOG() << "[increment]   b: target: size: "
+                << f_b.size1() << " x " << f_b.size2() << std::endl;
+        #endif
         // lm-out
         for (int l1=0; l1<=L_out; ++l1) {
-            GLOG() << "l_out " << l1 << std::endl;
             // Polarizability
             double alpha = (2*l1+1)*pow(sigma2, 2*l1+1); // TODO HACK: 2*l1+1
             for (int m1=-l1; m1<=l1; ++m1) {
-                GLOG() << " m_out " << m1 << std::endl;
                 int lm_out = l1*l1+l1+m1;
                 // lambda-in
                 for (int lambda_in=0; lambda_in<Lambda_in; ++lambda_in) {
-                    GLOG() << "  lambda_in " << lambda_in << std::endl;
                     // lm-in
                     for (int l2=0; l2<=L_in; ++l2) {
-                        GLOG() << "    l_in " << l2 << std::endl;
                         double parity = (apply_parity) ? pow(-1,l1+l2) : 1;
                         int lambda_out = lambda_in*Lambda_in+l2;
                         AtomicSpectrumFT::cmplx_t q_lambda_lm_out = 0.0;
                         for (int m2=-l2; m2<=l2; ++m2) {
-                            GLOG() << "     m_in " << m2 << std::endl;
+                            #ifdef DBG
+                                GLOG() << "l_out " << l1
+                                    << " m_out " << m1
+                                    << " lambda_in " << lambda_in
+                                    << " l_in " << l2
+                                    << " m_in " << m2
+                                    << std::endl;
+                            #endif
                             int lm_in = l2*l2+l2+m2;
                             q_lambda_lm_out += T_ab(lm_out, lm_in)*f_a(lambda_in, lm_in);
                         }
                         // Apply weight and parity
                         q_lambda_lm_out *= alpha*w12*w2*parity;
                         // Add to fields on b
-                        GLOG() << "      => (" << lambda_out << "," << lm_out << ")"  << " : " << q_lambda_lm_out << std::endl;
-                        //f_b(lambda_out, lm_out) += q_lambda_lm_out;            // HACK?
-                        f_b(lambda_out, lm_out) += std::conj(q_lambda_lm_out); // FIX? Added conj
+                        #ifdef DBG
+                            GLOG() << "    => (" << lambda_out << "," << lm_out << ")"
+                                << " : " << q_lambda_lm_out
+                                << std::endl;
+                        #endif
+                        f_b(lambda_out, lm_out) += std::conj(q_lambda_lm_out); // FIXED Added conj
                     } // End loop over l_in
                 } // End loop over lambda_in
             } // End loop over m_out
@@ -464,6 +494,7 @@ void InteractUpdateSourceTarget(
 }
 
 void FTSpectrum::computeFieldTensors(std::map<int, std::map<int, Tlmlm::coeff_t>> &i1_i2_T12) {
+    GLOG() << "Computing field tensors ..." << std::endl;
     int K = _K;
     int L = _L;
     Tlmlm T12(L);
@@ -474,7 +505,7 @@ void FTSpectrum::computeFieldTensors(std::map<int, std::map<int, Tlmlm::coeff_t>
         int s1 = a->getTypeIdx();
         vec r1 = a->getCenter()->getPos();
         double sigma1 = a->getCenter()->getSigma();
-        // Init. map
+        // Initialise map
         i1_i2_T12[id1] = std::map<int, Tlmlm::coeff_t>();
         for (auto it2 = it1; it2 != endAtomic(); ++it2) {
             // Particle 2
@@ -490,7 +521,14 @@ void FTSpectrum::computeFieldTensors(std::map<int, std::map<int, Tlmlm::coeff_t>
             if (! _cutoff->isWithinCutoff(r12)) continue;
             double w12 = _cutoff->calculateWeight(r12);
             double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
-            GLOG() << "[field-tensor] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
+            #ifdef DBG
+                GLOG() << "[field-tensor] " << a->getCenter()->getId()
+                    << ":" << b->getCenter()->getId()
+                    << " R=" << r12
+                    << " w=" << w12
+                    << " a=" << a12
+                    << std::endl;
+            #endif
             // Interact
             T12.computeTlmlm(d12, r12, a12, L, L, i1_i2_T12[id1][id2]);
         }
@@ -555,7 +593,9 @@ void FTSpectrum::energySCF(int k, std::map<int, std::map<int, Tlmlm::coeff_t> > 
                     }
                 }
                 energy_total += energy;
-                GLOG() << "[energy] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " " << energy << std::endl;
+                GLOG() << "[energy] " << a->getCenter()->getId()
+                    << ":" << b->getCenter()->getId() << " " << energy
+                    << std::endl;
             }
         } // Particle b
     } // Particle a
@@ -602,7 +642,12 @@ void FTSpectrum::polarize() {
                 if (! _cutoff->isWithinCutoff(r12)) continue;
                 double w12 = _cutoff->calculateWeight(r12);
                 double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
-                GLOG() << "[interact] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
+                GLOG() << "[interact] " << a->getCenter()->getId()
+                    << ":" << b->getCenter()->getId()
+                    << " R=" << r12
+                    << " w=" << w12
+                    << " a=" << a12
+                    << std::endl;
                 // Look up interaction tensors for pair (a,b)
                 auto T_ab = i1_i2_T12[id1][id2];
                 for (int l1=0; l1 <= _L; ++l1) {
@@ -611,7 +656,13 @@ void FTSpectrum::polarize() {
                         for (int l2=0; l2 <= _L; ++l2) {
                             for (int m2=-l2; m2 <= l2; ++m2) {
                                 int lm2 = l2*l2+l2+m2;
-                                GLOG() << "[FT] " << id1<<":"<<id2 << " " << l1 << "," << m1 << "   " << l2 << "," << m2 << "   " << T_ab(lm1,lm2) << std::endl;
+                                #ifdef DBG
+                                    GLOG() << "[FT] " << id1<<":"<<id2
+                                        << " " << l1 << "," << m1
+                                        << " " << l2 << "," << m2
+                                        << " " << T_ab(lm1,lm2)
+                                        << std::endl;
+                                #endif
                             }
                         }
                     }
@@ -629,12 +680,18 @@ void FTSpectrum::polarize() {
                                 double parity = pow(-1,l1+l2);
                                 for (int m2=-l2; m2<=l2; ++m2) {
                                     int lm2 = l2*l2+l2+m2;
-                                    GLOG() << "@ " << id1 << " ~" << id2 << " " << l1 << m1 << "|" << l2 << m2 << " : " << T_ab(lm1, lm2)*b->_M(k-1, lm2) << std::endl;
                                     a->_F(k, lm1) += T_ab(lm1, lm2)*b->_M(k-1, lm2);
-                                    GLOG() << "@ " << id2 << " ~" << id1 << " " << l1 << m1 << "|" << l2 << m2 << " : " << T_ab(lm1, lm2)*a->_M(k-1, lm2)*parity << std::endl;
                                     b->_F(k, lm1) += T_ab(lm1, lm2)*a->_M(k-1, lm2)*parity;
-                                    //GLOG() << "@ " << id2 << " ~" << id1 << " " << l2 << m2 << "|" << l1 << m1 << " : " << T_ab(lm1, lm2)*a->_M(k-1, lm1)*parity << std::endl; // WRONG
-                                    //b->_F(k, lm2) += T_ab(lm1, lm2)*a->_M(k-1, lm1)*parity; // WRONG
+                                    #ifdef DBG
+                                        GLOG() << "@ " << id1 << " ~" << id2
+                                            << " " << l1 << m1 << "|" << l2 << m2 << " : "
+                                            << T_ab(lm1, lm2)*b->_M(k-1, lm2)
+                                            << std::endl;
+                                        GLOG() << "@ " << id2 << " ~" << id1
+                                            << " " << l1 << m1 << "|" << l2 << m2 << " : "
+                                            << T_ab(lm1, lm2)*a->_M(k-1, lm2)*parity
+                                            << std::endl;
+                                    #endif
                                 }
                             }
                         }
@@ -651,11 +708,17 @@ void FTSpectrum::polarize() {
                 double alpha = pow(sigma1, 2*l1+1);
                 for (int m1=-l1; m1<=l1; ++m1) {
                     int lm1 = l1*l1+l1+m1;
-                    a->_M(k, lm1) = std::conj(alpha*a->_F(k, lm1)); // HACK added conj
+                    a->_M(k, lm1) = std::conj(alpha*a->_F(k, lm1)); // FIXED added conj
                     sum_l += a->_F(k, lm1)*std::conj(a->_F(k, lm1));
-                    GLOG() << "[induced] " << "l " << l1 << " m " << m1 << " lm " << lm1 <<  " : "  << a->_F(k, lm1) << std::endl;
+                    #ifdef DBG
+                        GLOG() << "[induced] " << "l " << l1 << " m " << m1
+                            << " lm " << lm1 <<  " : "  << a->_F(k, lm1)
+                            << std::endl;
+                    #endif
                 }
-                GLOG() << "[induced] @ " << a->getCenter()->getId() << " l " << l1 << " : " << sum_l << std::endl;
+                GLOG() << "[induced] @ " << a->getCenter()->getId()
+                    << " l " << l1 << " : " << sum_l
+                    << std::endl;
             }
         }
         // ENERGY
@@ -688,10 +751,12 @@ void FTSpectrum::compute() {
         std::string s = a->getType();
         AtomicSpectrumFT::field_t flm
             = AtomicSpectrumFT::field_zero_t(Lambda_flat_k_out, (L_k_in+1)*(L_k_in+1));
-        GLOG() << "[init] Center:" << a->getCenter()->getId() << std::endl;
-        GLOG() << "[init]   k = " << k << std::endl;
-        GLOG() << "[init]   s = " << s << std::endl;
-        GLOG() << "[init]   F : " << flm.size1() << " x " << flm.size2() << std::endl;
+        #ifdef DBG
+            GLOG() << "[init] Center:" << a->getCenter()->getId() << std::endl;
+            GLOG() << "[init]   k = " << k << std::endl;
+            GLOG() << "[init]   s = " << s << std::endl;
+            GLOG() << "[init]   F : " << flm.size1() << " x " << flm.size2() << std::endl;
+        #endif
         flm(0,0) = 1.0;
         a->addField(k, s, flm);
     }
@@ -699,17 +764,23 @@ void FTSpectrum::compute() {
     // PROPAGATE FIELD MOMENTS (k>0)
     for (int k = 1; k <= K; ++k) {
 
-        GLOG() << "=====" << std::endl;
-        GLOG() << "k = " << k << std::endl;
-        GLOG() << "=====" << std::endl;
-        // Update out-going ranges
+        GLOG() << "Starting iteration: k = " << k << std::endl;
+        // Update out-going index ranges
         L_k_out = L;
         Lambda_flat_k_out = Lambda_flat_k_out*(L_k_in+1);
-        GLOG() << "[iter] L-in " << L_k_in << " L-out " << L_k_out << " Lambda-in " << Lambda_flat_k_in << " Lambda-out " << Lambda_flat_k_out << std::endl;
         int LM_in = (L_k_in+1)*(L_k_in+1);
         int LM_out = (L_k_out+1)*(L_k_out+1);
-        GLOG() << "[iter] Rank: " << L << " (LM-in = " << LM_in << ")" << " (LM-out = " << LM_out << ")" << std::endl;
-
+        #ifdef DBG
+            GLOG() << "[iter] L-in " << L_k_in
+                << " L-out " << L_k_out
+                << " Lambda-in " << Lambda_flat_k_in
+                << " Lambda-out " << Lambda_flat_k_out
+                << std::endl;
+            GLOG() << "[iter] Rank: " << L
+                << " (LM-in = " << LM_in << ")"
+                << " (LM-out = " << LM_out << ")"
+                << std::endl;
+        #endif
         for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
             // Particle 1
             atomic_t *a = *it1;
@@ -733,7 +804,13 @@ void FTSpectrum::compute() {
                 if (! _cutoff->isWithinCutoff(r12)) continue;
                 double w12 = _cutoff->calculateWeight(r12);
                 double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
-                GLOG() << "[interact] " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
+                if (GLOG.verbose())
+                    GLOG() << "[interact] " << a->getCenter()->getId()
+                        << ":" << b->getCenter()->getId()
+                        << " R=" << r12
+                        << " w=" << w12
+                        << " a=" << a12
+                        << std::endl;
                 // Look up interaction tensors for pair (a,b)
                 auto T_ab = i1_i2_T12[id1][id2];
                 // Self-interaction a <> a
@@ -779,63 +856,6 @@ void FTSpectrum::compute() {
     }
 
     /*
-    // COMPUTE INTERACTION TENSORS
-    // Initialise fields (0)
-    for (auto it = beginAtomic(); it != endAtomic(); ++it) {
-        atomic_t *a = *it;
-        (*a)._f0 = AtomicSpectrumFT::field_coeff_zero_t(S, (L+1)*(L+1));
-    }
-    for (auto it1 = beginAtomic(); it1 != endAtomic(); ++it1) {
-        // Particle 1
-        atomic_t *a = *it1;
-        int id1 = a->getCenter()->getId();
-        int s1 = a->getTypeIdx();
-        vec r1 = a->getCenter()->getPos();
-        double sigma1 = a->getCenter()->getSigma();
-        double w1 = a->getCenter()->getWeight();
-        for (auto it2 = it1; it2 != endAtomic(); ++it2) {
-            // Particle 2
-            atomic_t *b = *it2;
-            int id2 = b->getCenter()->getId();
-            int s2 = b->getTypeIdx();
-            vec r2 = b->getCenter()->getPos();
-            double sigma2 = b->getCenter()->getSigma();
-            double w2 = b->getCenter()->getWeight();
-            // Find connection, apply weight function
-            vec dr12 = _structure->connect(r1, r2);
-            double r12 = soap::linalg::abs(dr12);
-            vec d12 = dr12/r12;
-            if (! _cutoff->isWithinCutoff(r12)) continue;
-            double w12 = _cutoff->calculateWeight(r12);
-            double a12 = 1./sqrt(2*(sigma1*sigma1 + sigma2*sigma2));
-            GLOG() << "    " << a->getCenter()->getId() << ":" << b->getCenter()->getId() << " R=" << r12 << " w=" << w12 << " a=" << a12 << std::endl;
-            // Compute fields
-            if (a == b) {
-                for (int l = 0; l <= L; ++l) {
-                    double parity = pow(-1,l);
-                    for (int m = -l; m <= l; ++m) {
-                        int lm = l*l+l+m;
-                        (*a)._f0(s2, lm) += w12*w2*i1_i2_T12[id1][id2](0, lm);
-                        GLOG() << l << " " << m << " self-interaction " << "s=" << s1 << s2 << " " << i1_i2_T12[id1][id2](0, lm) << std::endl;
-                    }
-                }
-            }
-            else {
-                for (int l = 0; l <= L; ++l) {
-                    double parity = pow(-1,l);
-                    for (int m = -l; m <= l; ++m) {
-                        int lm = l*l+l+m;
-                        (*a)._f0(s2, lm) += w12*w2*i1_i2_T12[id1][id2](0, lm);
-                        (*b)._f0(s1, lm) += w12*w1*i1_i2_T12[id1][id2](0, lm) * parity;
-                    }
-                }
-            }
-        }
-    }
-    */
-
-
-    /*
     //Tlmlm T12(L);
     vec d12(0.,0.,1.);
     double a12 = 0.5;
@@ -856,8 +876,6 @@ void FTSpectrum::compute() {
         << " " << T_mat(lm1,lm2).imag() << " " << T_mat(lm2,lm1).imag() << std::endl;
     }
     */
-
-
 
     /*GLOG() << "Factorial2 ..." << std::endl;
     for (int n = 0; n < 16; ++n) {
@@ -942,8 +960,6 @@ void FTSpectrum::compute() {
             GLOG() << l << " " << m << " " << rlm[lm] << "  " << ilm[lm] << std::endl;
         }
     }
-
-
     */
 
     return;
@@ -952,11 +968,11 @@ void FTSpectrum::compute() {
 void FTSpectrum::registerPython() {
     using namespace boost::python;
     class_<FTSpectrum>("FTSpectrum", init<Structure &, Options &>())
-        .def("__iter__", range<return_value_policy<reference_existing_object> >(&FTSpectrum::beginAtomic, &FTSpectrum::endAtomic))
+        .def("__iter__", range<return_value_policy<reference_existing_object> >(
+            &FTSpectrum::beginAtomic, &FTSpectrum::endAtomic))
         .def("polarize", &FTSpectrum::polarize)
         .def("compute", &FTSpectrum::compute);
     return;
 }
 
-
-}
+} // Namespace

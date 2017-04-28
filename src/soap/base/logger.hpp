@@ -4,12 +4,12 @@
 #include <sstream>
 #include <iostream>
 
-namespace soap { 
+namespace soap {
 
 
 
 enum TLogLevel {logERROR, logWARNING, logINFO, logDEBUG};
- 
+
 /*
  * Macros to use the Logger: LOG(level,logger) << message
  */
@@ -33,19 +33,19 @@ public:
                 _writePreface(true) {}
 
     void silence() { _silent = true; }
-        
+
         // sets the log level (needed for output)
 	void setLogLevel(TLogLevel LogLevel) { _LogLevel = LogLevel; }
-        
+
         // sets Multithreading (buffering required)
         void setMultithreading( bool maverick ) { _maverick = maverick; }
-        
+
         // sets preface strings for logERROR, logWARNING, ...
-        void setPreface(TLogLevel level, std::string preface) {            
+        void setPreface(TLogLevel level, std::string preface) {
             switch ( level )
             {
 
-                case logERROR: 
+                case logERROR:
                     _errorPreface = preface;
                     break;
                 case logWARNING:
@@ -59,61 +59,61 @@ public:
                     break;
             }
         }
-        
+
         void EnablePreface() { _writePreface = true; }
         void DisablePreface() { _writePreface = false; }
-        
+
         // flushes all collected messages
         void FlushBuffer(){ std::cout << _stringStream.str(); _stringStream.str(""); }
-        
+
         // returns the pointer to the collected messages
-        std::string Messages() { 
-            std::string _messages = _stringStream.str(); 
+        std::string Messages() {
+            std::string _messages = _stringStream.str();
             _stringStream.str("");
-            return _messages; 
+            return _messages;
         }
 
 private:
-  
-  // Log Level (WARNING, INFO, etc) 
+
+  // Log Level (WARNING, INFO, etc)
   TLogLevel _LogLevel;
-  
+
   // temporary buffer to store messages
   std::ostringstream _stringStream;
-  
+
   // Multithreading
   bool _maverick;
   bool _writePreface;
   bool _silent;
-  
+
   std::string _timePreface;
   std::string _errorPreface;
   std::string _warnPreface;
   std::string _infoPreface;
   std::string _dbgPreface;
-  
+
 
 protected:
 	virtual int sync() {
             if (_silent) return 0;
-            
+
             std::ostringstream _message;
 
             if (_writePreface) {
                 switch ( _LogLevel )
                 {
-                    case logERROR: 
+                    case logERROR:
                         _message << _errorPreface;
                         break;
                     case logWARNING:
                         _message << _warnPreface;
-                        break;      
+                        break;
                     case logINFO:
                         _message << _infoPreface;
-                        break;      
+                        break;
                     case logDEBUG:
                         _message << _dbgPreface;
-                        break;      
+                        break;
                 }
             }
 
@@ -128,16 +128,16 @@ protected:
 	    str("");
 	    return 0;
 	}
-      
+
 };
 
 
 /** \class Logger
 *   \brief Logger is used for thread-safe output of messages
 *
-*  Logger writes messages into LogBuffer. 
+*  Logger writes messages into LogBuffer.
 *  Inheritance from ostream allows to use overloaded << and >> for writing.
-*  Example:  
+*  Example:
 *
 *  \code
 *  #include <votca/ctp/logger.h>
@@ -155,11 +155,12 @@ class Logger : public std::ostream {
            out << logger.Messages();
            return out;
        }
-    
+
 public:
 	Logger( TLogLevel ReportLevel) : std::ostream(new LogBuffer()) {
-            _ReportLevel = ReportLevel; 
+            _ReportLevel = ReportLevel;
             _maverick = true;
+            _verbose = false;
      }
 
 	 Logger() : std::ostream(new LogBuffer()) {
@@ -167,63 +168,68 @@ public:
 		 _maverick = true;
 		 dynamic_cast<LogBuffer *>( rdbuf() )->setMultithreading(_maverick);
 	 }
-        
+
 	~Logger() {
             //dynamic_cast<LogBuffer *>( rdbuf())->FlushBuffer();
             delete rdbuf();
             rdbuf(NULL);
 	}
-        
+
 	Logger &operator()( TLogLevel LogLevel = logINFO) {
 		//rdbuf()->pubsync();
 		dynamic_cast<LogBuffer *>( rdbuf() )->setLogLevel(LogLevel);
 		return *this;
 	}
-        
+
         void setReportLevel( TLogLevel ReportLevel ) { _ReportLevel = ReportLevel; }
         void silence() {
             _silent = true;
             dynamic_cast<LogBuffer*>(rdbuf())->silence();
         }
-        void setMultithreading( bool maverick ) { 
+        void setVerbose(bool verbose) {
+            _verbose = verbose;
+        }
+        bool verbose() { return _verbose; }
+        void setMultithreading( bool maverick ) {
             _maverick = maverick;
             dynamic_cast<LogBuffer *>( rdbuf() )->setMultithreading( _maverick );
         }
         bool isMaverick() { return _maverick; }
-        
+
         TLogLevel getReportLevel( ) { return _ReportLevel; }
-        
-        void setPreface(TLogLevel level, std::string preface) {            
+
+        void setPreface(TLogLevel level, std::string preface) {
             dynamic_cast<LogBuffer *>( rdbuf() )->setPreface(level, preface);
         }
-        
+
         void EnablePreface() {
             dynamic_cast<LogBuffer *>( rdbuf() )->EnablePreface();
         }
-        
+
         void DisablePreface() {
             dynamic_cast<LogBuffer *>( rdbuf() )->DisablePreface();
         }
-        
+
 private:
     // at what level of detail output messages
     TLogLevel _ReportLevel;
-    
+
     // if true, only a single processor job is executed
     bool      _maverick;
     bool      _silent;
-    
+    bool      _verbose;
+
     std::string Messages() {
         return dynamic_cast<LogBuffer *>( rdbuf() )->Messages();
     }
-        
+
 };
 
 /**
 *   \brief Timestamp returns the current time as a string
 *  Example: cout << TimeStamp()
 */
-class TimeStamp 
+class TimeStamp
 {
   public:
     friend std::ostream & operator<<(std::ostream &os, const TimeStamp& ts)
@@ -234,15 +240,15 @@ class TimeStamp
         timeinfo = localtime( &rawtime );
         os  << (timeinfo->tm_year)+1900
             << "-" << timeinfo->tm_mon + 1
-            << "-" << timeinfo->tm_mday 
+            << "-" << timeinfo->tm_mday
             << " " << timeinfo->tm_hour
-            << ":" << timeinfo->tm_min 
+            << ":" << timeinfo->tm_min
             << ":"  << timeinfo->tm_sec;
-         return os;    
+         return os;
     }
-    
+
     explicit TimeStamp() {};
-    
+
 };
 
 }

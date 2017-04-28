@@ -33,4 +33,5 @@ BOOST_PYTHON_MODULE(_soapxx)
 
 
     boost::python::def("silence", &soap::GLOG_SILENCE);
+    boost::python::def("verbose", &soap::GLOG_VERBOSE);
 }

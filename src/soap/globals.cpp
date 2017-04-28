@@ -10,5 +10,9 @@ void GLOG_SILENCE() {
     return;
 }
 
+void GLOG_VERBOSE(bool verbose) {
+    GLOG.setVerbose(verbose);
+    return;
 }
 
+}

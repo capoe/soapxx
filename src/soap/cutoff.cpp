@@ -12,9 +12,10 @@ void CutoffFunction::configure(Options &options) {
     _Rc_width = options.get<double>("radialcutoff.Rc_width");
     _center_weight = options.get<double>("radialcutoff.center_weight");
 
-    GLOG() << "Weighting function with "
-    	<< "Rc = " << _Rc
-    	<< ", _Rc_width = " << _Rc_width
+    GLOG() << "Weighting function: "
+        << "'" << _type << "'"
+    	<< ", Rc = " << _Rc
+    	<< ", Rc_width = " << _Rc_width
 		<< ", central weight = " << _center_weight << std::endl;
 }
 
@@ -84,4 +85,3 @@ void CutoffFunctionFactory::registerAll(void) {
 }
 
 BOOST_CLASS_EXPORT_IMPLEMENT(soap::CutoffFunctionHeaviside);
-
