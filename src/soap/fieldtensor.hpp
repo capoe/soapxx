@@ -31,6 +31,7 @@ public:
     // PHYSICAL
     field_t _F;
     field_t _M;
+    std::vector<double> _alpha;
 
     AtomicSpectrumFT(Particle *center, int K, int L);
    ~AtomicSpectrumFT();

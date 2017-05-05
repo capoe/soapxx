@@ -25,6 +25,14 @@ AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int K, int L)
     // Body-order storage
     assert(K >= 0);
     _body_map.resize(K+1);
+    // Linear field responses
+    _alpha.clear();
+    for (int l = 0; l <= _L; ++l) {
+        //double alpha_l = factorial(l)*pow(2*l+1,0.0)*pow(_center->getSigma(), 2*l+1); // HACK
+        double alpha_l = pow(2*l+1,1.0)*pow(_center->getSigma(), 2*l+1);
+        if (l == 0) alpha_l *= 0.5;
+        _alpha.push_back(alpha_l);
+    }
 }
 
 AtomicSpectrumFT::~AtomicSpectrumFT() {
@@ -195,7 +203,10 @@ void AtomicSpectrumFT::contract() {
                     for (int lambda2 = 0; lambda2 < Lambda2; ++lambda2) {
                         for (int l = 0; l <= L_k; ++l) {
                             // Polarizability
-                            double inv_alpha = pow(this->getCenter()->getSigma(), -2*l-1); // TODO Initialise in constructor HACK 1./(2*l+1)
+                            //double inv_alpha = 1./(2*l+1)*pow(this->getCenter()->getSigma(), -2*l-1); // TODO Initialise in constructor HACK 1./(2*l+1)
+                            //double inv_alpha = 1./(2*l+1)*pow(this->getCenter()->getSigma(), -l);
+                            //double inv_alpha = 1./(l+0.1)*pow(this->getCenter()->getSigma(), -l);
+                            double inv_alpha = 1./this->_alpha[l];
                             cmplx_t phi_l_s1s2_l1l2 = 0.0;
                             for (int m = -l; m <= l; ++m) {
                                 int lm = l*l+l+m;
@@ -454,7 +465,10 @@ void InteractUpdateSourceTarget(
         // lm-out
         for (int l1=0; l1<=L_out; ++l1) {
             // Polarizability
-            double alpha = (2*l1+1)*pow(sigma2, 2*l1+1); // TODO HACK: 2*l1+1
+            //double alpha = (2*l1+1)*pow(sigma2, 2*l1+1); // TODO HACK: 2*l1+1
+            //double alpha = (2*l1+1)*pow(sigma2, l1);
+            //double alpha = (l1+0.1)*pow(sigma2, l1);
+            double alpha = b->_alpha[l1];
             for (int m1=-l1; m1<=l1; ++m1) {
                 int lm_out = l1*l1+l1+m1;
                 // lambda-in
