@@ -33,7 +33,7 @@ public:
     field_t _M;
     std::vector<double> _alpha;
 
-    AtomicSpectrumFT(Particle *center, int K, int L);
+    AtomicSpectrumFT(Particle *center, int K, int L, Options *options);
    ~AtomicSpectrumFT();
     Particle *getCenter() { return _center; }
     std::string getType() { return _type; }

@@ -12,7 +12,7 @@ namespace ub = boost::numeric::ublas;
 
 const std::string AtomicSpectrumFT::_numpy_t = "float64";
 
-AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int K, int L)
+AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int K, int L, Options *options)
     : _center(center), _K(K), _L(L) {
     this->_s = center->getTypeId()-1; // TODO No longer used, using string labels as map keys instead
     this->_type = center->getType();
@@ -21,16 +21,25 @@ AtomicSpectrumFT::AtomicSpectrumFT(Particle *center, int K, int L)
             << " " << center->getId()
             << " @ " << _center->getPos()
             << std::endl;
-    assert(_s >= 0 && "Type-IDs should start from 1");
+    //assert(_s >= 0 && "Type-IDs should start from 1");
     // Body-order storage
     assert(K >= 0);
     _body_map.resize(K+1);
     // Linear field responses
+    double p = options->get<double>("fieldtensor.alpha.p");
+    double q = options->get<double>("fieldtensor.alpha.q");
+    double r = options->get<double>("fieldtensor.alpha.r");
     _alpha.clear();
     for (int l = 0; l <= _L; ++l) {
         //double alpha_l = factorial(l)*pow(2*l+1,0.0)*pow(_center->getSigma(), 2*l+1); // HACK
-        double alpha_l = pow(2*l+1,1.0)*pow(_center->getSigma(), 2*l+1);
-        if (l == 0) alpha_l *= 0.5;
+        //
+        //double alpha_l = pow(2*l+1,1.0)*pow(_center->getSigma(), 2*l+1);
+        //if (l == 0) alpha_l *= 0.5;
+        //
+        //double alpha_l = 1.;
+        //
+        double alpha_l = pow(2*l+1,p)*pow(_center->getSigma(), q*(2*l+1));
+        if (l == 0) alpha_l *= r;
         _alpha.push_back(alpha_l);
     }
 }
@@ -233,7 +242,7 @@ void AtomicSpectrumFT::contract() {
 
 void AtomicSpectrumFT::registerPython() {
     using namespace boost::python;
-    class_<AtomicSpectrumFT, AtomicSpectrumFT*>("AtomicSpectrumFT", init<Particle*, int, int>())
+    class_<AtomicSpectrumFT, AtomicSpectrumFT*>("AtomicSpectrumFT", init<Particle*, int, int, Options*>())
         .def("getTypes", &AtomicSpectrumFT::getTypes)
         .def("getPower", &AtomicSpectrumFT::getCoefficientsNumpy)
         .def("getCenter", &AtomicSpectrumFT::getCenter, return_value_policy<reference_existing_object>());
@@ -556,7 +565,7 @@ void FTSpectrum::createAtomic() {
     }
     _atomic_array.clear();
     for (auto pit = _structure->beginParticles(); pit != _structure->endParticles(); ++pit) {
-        atomic_t *new_atomic = new atomic_t(*pit, _K, _L);
+        atomic_t *new_atomic = new atomic_t(*pit, _K, _L, _options);
         _atomic_array.push_back(new_atomic);
     }
 }

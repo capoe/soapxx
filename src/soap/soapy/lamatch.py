@@ -5,6 +5,29 @@ from .. import linalg as perm
 import kernel as kern
 import lagraph
 
+def reduce_kernel_canonical(K, xi):
+    N = K.shape[0]
+    M = K.shape[1]
+    K_sum_N = np.sum(K**xi, axis=1)
+    K_sum_M = np.sum(K**xi, axis=0)
+    P1 = 1./N * ( K.T**xi / K_sum_N ).T
+    P2 = 1./M * ( K**xi / K_sum_M )
+    #print P1*N
+    #print P2*M
+    P = 0.5*(P1 + P2)
+    return np.sum(P*K)
+
+def reduce_kernel_canonical_corr(K, xi):
+    raise NotImplementedError()
+    N = K.shape[0]
+    M = K.shape[1]
+    K_sum_N = np.sum(K**xi, axis=1)
+    K_sum_M = np.sum(K**xi, axis=0)
+    norm = 1./np.outer(K_sum_N, K_sum_M)
+    print norm
+    P = 1./(N*M)**0.5 * K**xi / norm
+    return np.sum(P*K)
+
 def compare_graphs_average(g1, g2, options):
     # TODO Use KernelFunctionFactory here
     xi = options['basekernel']['kernel.xi']
