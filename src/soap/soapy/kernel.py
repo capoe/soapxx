@@ -392,7 +392,7 @@ class KernelAdaptorSpecific(object):
         self.S = len(types_global)
         return
     def adapt(self, spectrum):
-        IX = np.zeros((0.,0.), dtype='float64')
+        IX = np.zeros((0,0), dtype='float64')
         dimX = -1
         for atomic_i in spectrum:
             Xi_unnorm, Xi_norm = self.adaptScalar(atomic_i)
