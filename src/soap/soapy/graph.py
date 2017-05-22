@@ -115,7 +115,7 @@ class TopKernelRematch(object):
         self.basekernel = basekernel
         return
     def compute(self, g1, g2, log=None):
-        if log: log << "Computing %s %s" % (g1.graph_info['label'], g2.graph_info['label']) << log.endl
+        if log: log << "[Kernel] %s %s" % (g1.graph_info['label'], g2.graph_info['label']) << log.endl
         K_base = self.basekernel.compute(g1.P, g2.P)
         # Only works with float64 (due to C-casts?) ...
         if K_base.dtype != 'float64':
@@ -130,7 +130,7 @@ class TopKernelCanonical(object):
         self.xi = options['xi']
         self.basekernel = basekernel
     def compute(self, g1, g2, log=None):
-        if log: log << "Computing %s %s" % (g1.graph_info['label'], g2.graph_info['label']) << log.endl
+        if log: log << "[Kernel] %s %s" % (g1.graph_info['label'], g2.graph_info['label']) << log.endl
         K_base = self.basekernel.compute(g1.P, g2.P)
         k_top = soap.soapy.lamatch.reduce_kernel_canonical(K_base, self.xi)
         return k_top
@@ -152,7 +152,7 @@ class TopKernelRematchHierarchical(object):
         if K_base.dtype != 'float64':
             K_base = K_base.astype('float64')
         k_top = soap.linalg.regmatch(K_base, self.gamma, 1e-6)
-        if log: log << "Computing %s %s" % (g1.graph_info['label'], g2.graph_info['label']) << k_top << log.endl
+        if log: log << "[Kernel] %s %s" % (g1.graph_info['label'], g2.graph_info['label']) << k_top << log.endl
         return k_top
     def preprocess(self, g, log=None):
         if log: log << "Preprocessing %s" % (g.graph_info['label']) << log.endl
@@ -223,7 +223,7 @@ class TopKernelRematchAtomic(object):
         self.basekernel = basekernel
         return
     def compute(self, g1, g2, log=None):
-        if log: log << "Computing %s %s" % (g1.graph_info['label'], g2.graph_info['label']) << log.endl
+        if log: log << "[Kernel] %s %s" % (g1.graph_info['label'], g2.graph_info['label']) << log.endl
         K_base = self.basekernel.compute(g1.P, g2.P)
         # Only works with float64 (due to C-casts?) ...
         if K_base.dtype != 'float64':
@@ -275,7 +275,7 @@ def mp_compute_graph(
         log):
     if log: 
         soap.soapy.util.MP_LOCK.acquire()
-        log << log.back << "Processing %s" % config.info['label'] << log.endl
+        log << log.back << "[Graph] Processing %s" % config.info['label'] << log.endl
         soap.soapy.util.MP_LOCK.release()
     # Config => struct + connectivity matrices
     # NOTE This will reorder the atoms in config

@@ -9,8 +9,10 @@ def subsample_array(array, n_select, method='stride', stride_shift=0):
     # Treat border cases
     if n_select >= n_data:
         return array, []
-    elif n_select <= 0:
+    elif n_select == 0:
         return [], array
+    elif n_select < 0:
+        return array, []
     n_discard = n_data - n_select
     # Subsample
     if method == 'random':
