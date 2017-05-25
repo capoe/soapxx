@@ -247,14 +247,15 @@ std::complex<double> pow_nnan(std::complex<double> z, double a) {
     }
 }
 
-const int FACTORIAL_CACHE_SIZE = 16;
+const int FACTORIAL_CACHE_SIZE = 19;
 const long int FACTORIAL_CACHE[] = {
   1,
   1, 2, 6,
   24, 120, 720,
   5040, 40320, 362880,
   3628800, 39916800, 479001600,
-  6227020800, 87178291200, 1307674368000 };
+  6227020800, 87178291200, 1307674368000,
+  20922789888000, 355687428096000, 6402373705728000};
 
 long int factorial(int x) {
     if (x < FACTORIAL_CACHE_SIZE) {
@@ -270,14 +271,15 @@ long int factorial(int x) {
     }
 }
 
-const int FACTORIAL2_CACHE_SIZE = 16;
+const int FACTORIAL2_CACHE_SIZE = 19;
 const long int FACTORIAL2_CACHE[] = {
     1,
     1, 2, 3,
     8, 15, 48,
     105, 384, 945,
     3840, 10395, 46080,
-    135135, 645120, 2027025 };
+    135135, 645120, 2027025,
+    10321920, 34459425, 185794560};
 
 long int factorial2(int x) {
     if (x < 0) {
