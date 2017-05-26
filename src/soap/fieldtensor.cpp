@@ -199,6 +199,7 @@ void AtomicSpectrumFT::contractDeep() {
                     phi_l_s1s2 += f1(0, lm)*std::conj(f2(0, lm));
                 }
                 int l1l2 = offset+l;
+                GLOG() << "Save " << l1l2 << std::endl;
                 coeffs(l1l2, 0) = pow(this->getCenter()->getSigma(), 2*l)*inv_alpha_l*phi_l_s1s2.real();
             } // l
 
@@ -216,21 +217,56 @@ void AtomicSpectrumFT::contractDeep() {
                     int lm2 = l2*l2+l2+m2;
                 for (int m3 = -l2; m3 <= l2; ++m3) {
                     int lm3 = l2*l2+l2+m3;
-                    // TODO Either (al1 bl2 bl2) or (al2 bl1 bl2)
+                    // TODO Either (al1 bl2 bl2) or (al2 bl1 bl2). Or both??
                     double w122 = WignerSymbols::wigner3j(l2, l1, l2, m2, m1, m3);
                     w122_sq += w122*w122;
                     //GLOG() << l1 << ":" << l2 << ":" << m1 << ":" << m2 << "  " << w122 << std::endl;
                     phi_l1l2l2_s1s2 += w122 * f1(0,lm2) * f2(0,lm1) * f2(0,lm3);
                 }}}
-                GLOG() << l1 << ":" << l2 << " " << w122_sq << std::endl;
+                GLOG() << l2 << ":" << l1 << ":" << l2 << " " << w122_sq << std::endl;
                 int l1l2l2 = offset + l1*(_L+1) + l2;
+                GLOG() << "Save " << l1l2l2 << std::endl;
                 coeffs(l1l2l2, 0) = 
                         sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l2)
-                      * pow(this->getCenter()->getSigma(), l1+0.5)
-                      * pow(this->getCenter()->getSigma(), 2*l2) *
+                      * pow(this->getCenter()->getSigma(), l2+l1+l2+0.5) * 
                         pow(-1, l2-l1+l2)
                       * phi_l1l2l2_s1s2.real();
             }}
+
+            // al, a'l', a'l'' contractions
+            offset = _L+1 + (_L+1)*(_L+1);
+            int count = 0;
+            for (int l1 = 0; l1 <= _L; ++l1) {
+                double inv_alpha_l1 = 1./this->_alpha[l1];
+            for (int l2 = l1; l2 <= _L; ++l2) {
+                double inv_alpha_l2 = 1./this->_alpha[l2];
+            for (int l3 = l2-l1; l3 <= l2+l1 && l3 <= _L; ++l3) {
+                // TODO l2 l1 l2 treated above, hence l3 == l2 no longer appropriate. Think about symmetries!
+                if (l3 == l2) continue;
+                double inv_alpha_l3 = 1./this->_alpha[l3];
+                cmplx_t phi_l1l2l3_s1s2 = 0.0;
+                double w123_sq = 0.0;
+                for (int m1 = -l1; m1 <= l1; ++m1) {
+                    int lm1 = l1*l1+l1+m1;
+                for (int m2 = -l2; m2 <= l2; ++m2) {
+                    int lm2 = l2*l2+l2+m2;
+                for (int m3 = -l3; m3 <= l3; ++m3) {
+                    int lm3 = l3*l3+l3+m3;
+                    double w123 = WignerSymbols::wigner3j(l1, l2, l3, m1, m2, m3);
+                    w123_sq += w123*w123;
+                    phi_l1l2l3_s1s2 += w123 * f1(0,lm1) * f2(0,lm2) * f2(0,lm3);
+                }}}
+                GLOG() << l1 << ":" << l2 << ":" << l3 << " " << w123_sq << std::endl;
+                int l1l2l3 = offset + count;
+                count += 1;
+                GLOG() << "Save " << l1l2l3 << std::endl;
+                coeffs(l1l2l3, 0) = 
+                        sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l3)
+                      * pow(this->getCenter()->getSigma(), l1+l2+l3+0.5) * 
+                        pow(-1, l1-l2+l3)
+                      * phi_l1l2l3_s1s2.real();
+            }}}
+
 
         } // Channel type 2
     } // Channel type 1
