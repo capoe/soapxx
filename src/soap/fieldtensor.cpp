@@ -1,5 +1,6 @@
 #include "soap/fieldtensor.hpp"
 #include "soap/linalg/numpy.hpp"
+#include "soap/linalg/wigner.hpp"
 #include <boost/math/special_functions/legendre.hpp>
 
 namespace soap {
@@ -144,6 +145,100 @@ AtomicSpectrumFT::field_t *AtomicSpectrumFT::getField(int k, std::string type) {
     }
 }
 
+void AtomicSpectrumFT::contractDeep() {
+    /*
+    for (int l1=0; l1<=_L; ++l1) {
+    for (int l2=0; l2<=_L; ++l2) {
+    for (int l3=0; l3<=_L; ++l3) {
+       int m1 = -l1;
+       int m2 = -l2;
+       int m3 = -m1-m2;
+       double w = WignerSymbols::wigner3j(l1, l2, l3, m1, m2, m3);
+       GLOG() << l1 << ":" << l2 << ":" << l3 << " " << m1 << ":" << m2 << ":" << m3 << " " << w << std::endl;
+    }}}
+
+    for (int l1=0; l1<=_L; ++l1) {
+    for (int l2=0; l2<=_L; ++l2) {
+    for (int l3=0; l3<=0; ++l3) {
+        for (int m1=-l1; m1<=l1; ++m1) {
+            int m2 = -m1;
+            int m3 = 0;
+            double w = WignerSymbols::wigner3j(l1, l2, l3, m1, m2, m3);
+            GLOG() << l1 << ":" << l2 << ":" << l3 << " " << m1 << ":" << m2 << ":" << m3 << " " << w << std::endl;
+        }
+    }}}
+    */
+
+
+    // Wig. 3j(2)     _L =  0  1  2  3   4   5   6   7    8    9    10   11   12   13   14   15
+    std::vector<int> lll = {0, 1, 5, 13, 27, 48, 78, 118, 170, 235, 315, 411, 525, 658, 812, 988 };
+    int k = 1;
+    int length = (_L+1) + (_L+1)*(_L+1) + lll[_L];
+    field_map_t &field_map = _body_map[k];
+
+    // Contract channels
+    for (auto it1 = field_map.begin(); it1 != field_map.end(); ++it1) {
+        std::string s1 = it1->first; // <- Channel 1 (e.g., 'C')
+        field_t &f1 = *(it1->second);
+        for (auto it2 = field_map.begin(); it2 != field_map.end(); ++it2) {
+            std::string s2 = it2->first; // <- Channel 2 (e.g., 'O')
+            field_t &f2 = *(it2->second);
+            GLOG() << " " << s1 << ":" << s2 << std::flush;
+
+            // Allocate channel if necessary
+            channel_t channel(s1, s2);
+            coeff_t &coeffs = *(this->getCreateContraction(channel, length, 1)); // TODO Will not work with k-dependent L-cutoff
+
+            // a,l <> a',l contractions
+            int offset = 0;
+            for (int l = 0; l <= _L; ++l) {
+                double inv_alpha_l = 1./this->_alpha[l];
+                cmplx_t phi_l_s1s2 = 0.0;
+                for (int m = -l; m <= l; ++m) {
+                    int lm = l*l+l+m;
+                    phi_l_s1s2 += f1(0, lm)*std::conj(f2(0, lm));
+                }
+                int l1l2 = offset+l;
+                coeffs(l1l2, 0) = pow(this->getCenter()->getSigma(), 2*l)*inv_alpha_l*phi_l_s1s2.real();
+            } // l
+
+            // al, a'l', a'l' contractions
+            offset = _L+1;
+            for (int l1 = 0; l1 <= _L; ++l1) {
+                double inv_alpha_l1 = 1./this->_alpha[l1];
+            for (int l2 = 0; l2 <= _L; ++l2) {
+                double inv_alpha_l2 = 1./this->_alpha[l2];
+                cmplx_t phi_l1l2l2_s1s2 = 0.0;
+                double w122_sq = 0.0;
+                for (int m1 = -l1; m1 <= l1; ++m1) {
+                    int lm1 = l1*l1+l1+m1;
+                for (int m2 = -l2; m2 <= l2; ++m2) {
+                    int lm2 = l2*l2+l2+m2;
+                for (int m3 = -l2; m3 <= l2; ++m3) {
+                    int lm3 = l2*l2+l2+m3;
+                    // TODO Either (al1 bl2 bl2) or (al2 bl1 bl2)
+                    double w122 = WignerSymbols::wigner3j(l2, l1, l2, m2, m1, m3);
+                    w122_sq += w122*w122;
+                    //GLOG() << l1 << ":" << l2 << ":" << m1 << ":" << m2 << "  " << w122 << std::endl;
+                    phi_l1l2l2_s1s2 += w122 * f1(0,lm2) * f2(0,lm1) * f2(0,lm3);
+                }}}
+                GLOG() << l1 << ":" << l2 << " " << w122_sq << std::endl;
+                int l1l2l2 = offset + l1*(_L+1) + l2;
+                coeffs(l1l2l2, 0) = 
+                        sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l2)
+                      * pow(this->getCenter()->getSigma(), l1+0.5)
+                      * pow(this->getCenter()->getSigma(), 2*l2) *
+                        pow(-1, l2-l1+l2)
+                      * phi_l1l2l2_s1s2.real();
+            }}
+
+        } // Channel type 2
+    } // Channel type 1
+    GLOG() << std::endl;
+
+    return;
+}
+
 void AtomicSpectrumFT::contract() {
     int k = 0;
     int Lambda_total = (1 - pow(_L+1, _K))/(1 - (_L+1)); // from geometric series
@@ -229,7 +324,10 @@ void AtomicSpectrumFT::contract() {
                                     << " = " << phi_l_s1s2_l1l2
                                     <<  std::endl;
                             #endif
-                            coeffs(l1l2, l) = inv_alpha*phi_l_s1s2_l1l2.real();
+                            //coeffs(l1l2, l) = inv_alpha*phi_l_s1s2_l1l2.real(); // TODO HACK
+                            coeffs(l1l2, l) = pow(this->getCenter()->getSigma(), 2*l)*inv_alpha*phi_l_s1s2_l1l2.real(); // TODO HACK
+                            //coeffs(l1l2, l) = phi_l_s1s2_l1l2.real(); // TODO HACK
+
                         } // l
                     } // lambda 2
                 } // lambda 1
@@ -497,7 +595,9 @@ void InteractUpdateSourceTarget(
                                     << std::endl;
                             #endif
                             int lm_in = l2*l2+l2+m2;
-                            q_lambda_lm_out += T_ab(lm_out, lm_in)*f_a(lambda_in, lm_in);
+                            //q_lambda_lm_out += T_ab(lm_out, lm_in)*f_a(lambda_in, lm_in); // BACK-UP
+                            //q_lambda_lm_out += pow(sigma1, l1+0.5)*pow(sigma2, l2+0.5)*T_ab(lm_out, lm_in)*f_a(lambda_in, lm_in); // TODO HACK
+                            q_lambda_lm_out += pow(sigma1, -l1)*pow(sigma2, l2)*T_ab(lm_out, lm_in)*f_a(lambda_in, lm_in); // TODO HACK
                         }
                         // Apply weight and parity
                         q_lambda_lm_out *= alpha*w12*w2*parity;
@@ -874,8 +974,18 @@ void FTSpectrum::compute() {
         L_k_in = L;
     }
 
-    for (auto it = beginAtomic(); it != endAtomic(); ++it) {
-        (*it)->contract();
+    if (_options->get<std::string>("fieldtensor.contract") == "normal") {
+        for (auto it = beginAtomic(); it != endAtomic(); ++it) {
+            (*it)->contract();
+        }
+    }
+    else if (_options->get<std::string>("fieldtensor.contract") == "deep") {
+        for (auto it = beginAtomic(); it != endAtomic(); ++it) {
+            (*it)->contractDeep();
+        }
+    }
+    else {
+        assert(false && "fieldtensor.contract has invalid value (should be 'normal' or 'deep')");
     }
 
     /*

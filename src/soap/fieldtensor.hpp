@@ -53,6 +53,7 @@ public:
     coeff_t *getCreateContraction(channel_t &channel, int size1, int size2);
     coeff_map_t &getCoeffMap() { return _coeff_map; }
     void contract();
+    void contractDeep();
 
 private:
     Particle *_center;
