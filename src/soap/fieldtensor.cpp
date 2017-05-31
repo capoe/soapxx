@@ -169,11 +169,15 @@ void AtomicSpectrumFT::contractDeep() {
     }}}
     */
 
-
-    // Wig. 3j(2)     _L =  0  1  2  3   4   5   6   7    8    9    10   11   12   13   14   15
-    std::vector<int> lll = {0, 1, 5, 13, 27, 48, 78, 118, 170, 235, 315, 411, 525, 658, 812, 988 };
     int k = 1;
-    int length = (_L+1) + (_L+1)*(_L+1) + lll[_L];
+    int size_l1l1 = _L+1;
+    int size_l1l1l1 = _L+1;
+    // Unfortunately, there is no analytical formula for the descriptor size.
+    // Hence tabulation based on <l1,l2,l3> loops below.
+    // Wig. 3j(2)                _L =  0    1    2    3    4    5   6    7    8    9    10   11   12   13   14   15
+    std::vector<int> size_l1l1l2 = {   0,   1,   4,   8,  14,  21,  30,  40,  52,  65,  80,  96, 114, 133, 154, 176 };
+    std::vector<int> size_l1l2l3 = {   0,   0,   0,   1,   3,   7,  13,  22,  34,  50,  70,  95, 125, 161, 203, 252 };
+    int length = size_l1l1 + size_l1l1l1 + 2*size_l1l1l2[_L] + 3*size_l1l2l3[_L];
     field_map_t &field_map = _body_map[k];
 
     // Contract channels
@@ -198,53 +202,93 @@ void AtomicSpectrumFT::contractDeep() {
                     int lm = l*l+l+m;
                     phi_l_s1s2 += f1(0, lm)*std::conj(f2(0, lm));
                 }
-                int l1l2 = offset+l;
-                GLOG() << "Save " << l1l2 << std::endl;
-                coeffs(l1l2, 0) = pow(this->getCenter()->getSigma(), 2*l)*inv_alpha_l*phi_l_s1s2.real();
+                GLOG() << l << ":" << l << std::endl;
+                GLOG() << "Save @ " << offset << std::endl;
+                coeffs(offset, 0) = pow(this->getCenter()->getSigma(), 2*l)*inv_alpha_l*phi_l_s1s2.real();
+                offset += 1;
             } // l
 
-            // al, a'l', a'l' contractions
-            offset = _L+1;
+            // al, a'l, a'l contractions
             for (int l1 = 0; l1 <= _L; ++l1) {
                 double inv_alpha_l1 = 1./this->_alpha[l1];
-            for (int l2 = 0; l2 <= _L; ++l2) {
-                double inv_alpha_l2 = 1./this->_alpha[l2];
-                cmplx_t phi_l1l2l2_s1s2 = 0.0;
-                double w122_sq = 0.0;
+                cmplx_t phi_l1_l1l1 = 0.0;
+                double w111_sq = 0.0;
                 for (int m1 = -l1; m1 <= l1; ++m1) {
                     int lm1 = l1*l1+l1+m1;
-                for (int m2 = -l2; m2 <= l2; ++m2) {
-                    int lm2 = l2*l2+l2+m2;
+                for (int m2 = -l1; m2 <= l1; ++m2) {
+                    int lm2 = l1*l1+l1+m2;
+                for (int m3 = -l1; m3 <= l1; ++m3) {
+                    int lm3 = l1*l1+l1+m3;
+                    double w111 = WignerSymbols::wigner3j(l1, l1, l1, m1, m2, m3);
+                    w111_sq += w111*w111;
+                    phi_l1_l1l1 += w111 * f1(0,lm1) * f2(0,lm2) * f2(0,lm3);
+                }}}
+                // Store l1l1l2_s1s1s2
+                GLOG() << l1 << "::" << l1 << ":" << l1 << " " << w111_sq << std::endl;
+                GLOG() << "Save @ " << offset << std::endl;
+                coeffs(offset, 0) = 
+                        sqrt(inv_alpha_l1)*sqrt(inv_alpha_l1)*sqrt(inv_alpha_l1)
+                      * pow(this->getCenter()->getSigma(), l1+l1+l1+0.5) * 
+                        pow(-1, l1-l1+l1)
+                      * phi_l1_l1l1.real();
+                offset += 1;
+            }
+
+            // al, a'l', a'l' contractions
+            for (int l1 = 0; l1 <= _L; ++l1) {
+                double inv_alpha_l1 = 1./this->_alpha[l1];
+            for (int l2 = 0; l2 <= _L && l2 <= 2*l1; ++l2) {
+                // Redundancy check
+                if (l1 == l2) continue; // Dealt with above
+                double inv_alpha_l2 = 1./this->_alpha[l2];
+                // Contract: (al1 al1 bl2) or (al1 bl1 bl2)
+                cmplx_t phi_l1l1_l2 = 0.0;
+                cmplx_t phi_l1_l1l2 = 0.0;
+                double w112_sq = 0.0;
+                for (int m1 = -l1; m1 <= l1; ++m1) {
+                    int lm1 = l1*l1+l1+m1;
+                for (int m2 = -l1; m2 <= l1; ++m2) {
+                    int lm2 = l1*l1+l1+m2;
                 for (int m3 = -l2; m3 <= l2; ++m3) {
                     int lm3 = l2*l2+l2+m3;
-                    // TODO Either (al1 bl2 bl2) or (al2 bl1 bl2). Or both??
-                    double w122 = WignerSymbols::wigner3j(l2, l1, l2, m2, m1, m3);
-                    w122_sq += w122*w122;
+                    //double w122 = WignerSymbols::wigner3j(l2, l1, l2, m2, m1, m3);
+                    double w112 = WignerSymbols::wigner3j(l1, l1, l2, m1, m2, m3);
+                    w112_sq += w112*w112;
                     //GLOG() << l1 << ":" << l2 << ":" << m1 << ":" << m2 << "  " << w122 << std::endl;
-                    phi_l1l2l2_s1s2 += w122 * f1(0,lm2) * f2(0,lm1) * f2(0,lm3);
+                    //phi_l1l2l2_s1s2 += w122 * f1(0,lm2) * f2(0,lm1) * f2(0,lm3);
+                    phi_l1l1_l2 += w112 * f1(0,lm1) * f1(0,lm2) * f2(0,lm3);
+                    phi_l1_l1l2 += w112 * f1(0,lm1) * f2(0,lm2) * f2(0,lm3);
                 }}}
-                GLOG() << l2 << ":" << l1 << ":" << l2 << " " << w122_sq << std::endl;
-                int l1l2l2 = offset + l1*(_L+1) + l2;
-                GLOG() << "Save " << l1l2l2 << std::endl;
-                coeffs(l1l2l2, 0) = 
-                        sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l2)
-                      * pow(this->getCenter()->getSigma(), l2+l1+l2+0.5) * 
-                        pow(-1, l2-l1+l2)
-                      * phi_l1l2l2_s1s2.real();
+                // Store l1l1l2_s1s1s2
+                GLOG() << l1 << ":" << l1 << "::" << l2 << " " << w112_sq << std::endl;
+                GLOG() << "Save @ " << offset << std::endl;
+                coeffs(offset, 0) = 
+                        sqrt(inv_alpha_l1)*sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)
+                      * pow(this->getCenter()->getSigma(), l1+l1+l2+0.5) * 
+                        pow(-1, l1-l1+l2)
+                      * phi_l1l1_l2.real();
+                offset += 1;
+                // Store l1l1l2_s1s2s2
+                GLOG() << l1 << "::" << l1 << ":" << l2 << " " << w112_sq << std::endl;
+                GLOG() << "Save @ " << offset << std::endl;
+                coeffs(offset, 0) = 
+                        sqrt(inv_alpha_l1)*sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)
+                      * pow(this->getCenter()->getSigma(), l1+l1+l2+0.5) * 
+                        pow(-1, l1-l1+l2)
+                      * phi_l1_l1l2.real();
+                offset += 1;
             }}
 
             // al, a'l', a'l'' contractions
-            offset = _L+1 + (_L+1)*(_L+1);
-            int count = 0;
             for (int l1 = 0; l1 <= _L; ++l1) {
                 double inv_alpha_l1 = 1./this->_alpha[l1];
-            for (int l2 = l1; l2 <= _L; ++l2) {
+            for (int l2 = l1+1; l2 <= _L; ++l2) {
                 double inv_alpha_l2 = 1./this->_alpha[l2];
-            for (int l3 = l2-l1; l3 <= l2+l1 && l3 <= _L; ++l3) {
-                // TODO l2 l1 l2 treated above, hence l3 == l2 no longer appropriate. Think about symmetries!
-                if (l3 == l2) continue;
+            for (int l3 = l2+1; l3 <= l2+l1 && l3 <= _L; ++l3) {
                 double inv_alpha_l3 = 1./this->_alpha[l3];
-                cmplx_t phi_l1l2l3_s1s2 = 0.0;
+                cmplx_t phi_l1_l2l3 = 0.0;
+                cmplx_t phi_l2_l3l1 = 0.0;
+                cmplx_t phi_l3_l1l2 = 0.0;
                 double w123_sq = 0.0;
                 for (int m1 = -l1; m1 <= l1; ++m1) {
                     int lm1 = l1*l1+l1+m1;
@@ -254,17 +298,37 @@ void AtomicSpectrumFT::contractDeep() {
                     int lm3 = l3*l3+l3+m3;
                     double w123 = WignerSymbols::wigner3j(l1, l2, l3, m1, m2, m3);
                     w123_sq += w123*w123;
-                    phi_l1l2l3_s1s2 += w123 * f1(0,lm1) * f2(0,lm2) * f2(0,lm3);
+                    phi_l1_l2l3 += w123 * f1(0,lm1) * f2(0,lm2) * f2(0,lm3);
+                    phi_l2_l3l1 += w123 * f1(0,lm2) * f2(0,lm3) * f2(0,lm1);
+                    phi_l3_l1l2 += w123 * f1(0,lm3) * f2(0,lm1) * f2(0,lm2);
                 }}}
-                GLOG() << l1 << ":" << l2 << ":" << l3 << " " << w123_sq << std::endl;
-                int l1l2l3 = offset + count;
-                count += 1;
-                GLOG() << "Save " << l1l2l3 << std::endl;
-                coeffs(l1l2l3, 0) = 
+                // Store (l1)(l2l3)
+                GLOG() << l1 << "::" << l2 << ":" << l3 << " " << w123_sq << std::endl;
+                GLOG() << "Save @ " << offset << std::endl;
+                coeffs(offset, 0) = 
                         sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l3)
                       * pow(this->getCenter()->getSigma(), l1+l2+l3+0.5) * 
                         pow(-1, l1-l2+l3)
-                      * phi_l1l2l3_s1s2.real();
+                      * phi_l1_l2l3.real();
+                offset += 1;
+                // Store (l2)(l3l1)
+                GLOG() << l2 << "::" << l3 << ":" << l1 << " " << w123_sq << std::endl;
+                GLOG() << "Save @ " << offset << std::endl;
+                coeffs(offset, 0) = 
+                        sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l3)
+                      * pow(this->getCenter()->getSigma(), l1+l2+l3+0.5) * 
+                        pow(-1, l1-l2+l3)
+                      * phi_l2_l3l1.real();
+                offset += 1;
+                // Store (l3)(l1l2)
+                GLOG() << l3 << "::" << l1 << ":" << l2 << " " << w123_sq << std::endl;
+                GLOG() << "Save @ " << offset << std::endl;
+                coeffs(offset, 0) = 
+                        sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l3)
+                      * pow(this->getCenter()->getSigma(), l1+l2+l3+0.5) * 
+                        pow(-1, l1-l2+l3)
+                      * phi_l3_l1l2.real();
+                offset += 1;
             }}}
 
 
