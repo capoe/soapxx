@@ -202,8 +202,10 @@ void AtomicSpectrumFT::contractDeep() {
                     int lm = l*l+l+m;
                     phi_l_s1s2 += f1(0, lm)*std::conj(f2(0, lm));
                 }
-                GLOG() << l << ":" << l << std::endl;
-                GLOG() << "Save @ " << offset << std::endl;
+                #ifdef DBG
+                    GLOG() << l << ":" << l << std::endl;
+                    GLOG() << "Save @ " << offset << std::endl;
+                #endif
                 coeffs(offset, 0) = pow(this->getCenter()->getSigma(), 2*l)*inv_alpha_l*phi_l_s1s2.real();
                 offset += 1;
             } // l
@@ -224,8 +226,10 @@ void AtomicSpectrumFT::contractDeep() {
                     phi_l1_l1l1 += w111 * f1(0,lm1) * f2(0,lm2) * f2(0,lm3);
                 }}}
                 // Store l1l1l2_s1s1s2
-                GLOG() << l1 << "::" << l1 << ":" << l1 << " " << w111_sq << std::endl;
-                GLOG() << "Save @ " << offset << std::endl;
+                #ifdef DBG
+                    GLOG() << l1 << "::" << l1 << ":" << l1 << " " << w111_sq << std::endl;
+                    GLOG() << "Save @ " << offset << std::endl;
+                #endif
                 coeffs(offset, 0) = 
                         sqrt(inv_alpha_l1)*sqrt(inv_alpha_l1)*sqrt(inv_alpha_l1)
                       * pow(this->getCenter()->getSigma(), l1+l1+l1+0.5) * 
@@ -260,8 +264,10 @@ void AtomicSpectrumFT::contractDeep() {
                     phi_l1_l1l2 += w112 * f1(0,lm1) * f2(0,lm2) * f2(0,lm3);
                 }}}
                 // Store l1l1l2_s1s1s2
-                GLOG() << l1 << ":" << l1 << "::" << l2 << " " << w112_sq << std::endl;
-                GLOG() << "Save @ " << offset << std::endl;
+                #ifdef DBG
+                    GLOG() << l1 << ":" << l1 << "::" << l2 << " " << w112_sq << std::endl;
+                    GLOG() << "Save @ " << offset << std::endl;
+                #endif
                 coeffs(offset, 0) = 
                         sqrt(inv_alpha_l1)*sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)
                       * pow(this->getCenter()->getSigma(), l1+l1+l2+0.5) * 
@@ -269,8 +275,10 @@ void AtomicSpectrumFT::contractDeep() {
                       * phi_l1l1_l2.real();
                 offset += 1;
                 // Store l1l1l2_s1s2s2
-                GLOG() << l1 << "::" << l1 << ":" << l2 << " " << w112_sq << std::endl;
-                GLOG() << "Save @ " << offset << std::endl;
+                #ifdef DBG
+                    GLOG() << l1 << "::" << l1 << ":" << l2 << " " << w112_sq << std::endl;
+                    GLOG() << "Save @ " << offset << std::endl;
+                #endif
                 coeffs(offset, 0) = 
                         sqrt(inv_alpha_l1)*sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)
                       * pow(this->getCenter()->getSigma(), l1+l1+l2+0.5) * 
@@ -303,8 +311,10 @@ void AtomicSpectrumFT::contractDeep() {
                     phi_l3_l1l2 += w123 * f1(0,lm3) * f2(0,lm1) * f2(0,lm2);
                 }}}
                 // Store (l1)(l2l3)
-                GLOG() << l1 << "::" << l2 << ":" << l3 << " " << w123_sq << std::endl;
-                GLOG() << "Save @ " << offset << std::endl;
+                #ifdef DBG
+                    GLOG() << l1 << "::" << l2 << ":" << l3 << " " << w123_sq << std::endl;
+                    GLOG() << "Save @ " << offset << std::endl;
+                #endif
                 coeffs(offset, 0) = 
                         sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l3)
                       * pow(this->getCenter()->getSigma(), l1+l2+l3+0.5) * 
@@ -312,8 +322,10 @@ void AtomicSpectrumFT::contractDeep() {
                       * phi_l1_l2l3.real();
                 offset += 1;
                 // Store (l2)(l3l1)
-                GLOG() << l2 << "::" << l3 << ":" << l1 << " " << w123_sq << std::endl;
-                GLOG() << "Save @ " << offset << std::endl;
+                #ifdef DBG
+                    GLOG() << l2 << "::" << l3 << ":" << l1 << " " << w123_sq << std::endl;
+                    GLOG() << "Save @ " << offset << std::endl;
+                #endif
                 coeffs(offset, 0) = 
                         sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l3)
                       * pow(this->getCenter()->getSigma(), l1+l2+l3+0.5) * 
@@ -321,8 +333,10 @@ void AtomicSpectrumFT::contractDeep() {
                       * phi_l2_l3l1.real();
                 offset += 1;
                 // Store (l3)(l1l2)
-                GLOG() << l3 << "::" << l1 << ":" << l2 << " " << w123_sq << std::endl;
-                GLOG() << "Save @ " << offset << std::endl;
+                #ifdef DBG
+                    GLOG() << l3 << "::" << l1 << ":" << l2 << " " << w123_sq << std::endl;
+                    GLOG() << "Save @ " << offset << std::endl;
+                #endif
                 coeffs(offset, 0) = 
                         sqrt(inv_alpha_l1)*sqrt(inv_alpha_l2)*sqrt(inv_alpha_l3)
                       * pow(this->getCenter()->getSigma(), l1+l2+l3+0.5) * 

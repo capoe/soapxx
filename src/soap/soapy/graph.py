@@ -19,37 +19,108 @@ class Graph(object):
             idx=-1, 
             label='', 
             feature_mat=None, 
+            feature_mat_avg=None,
             position_mat=None, 
             connectivity_mat=None, 
             vertex_info=[], 
             graph_info={}):
+        # Labels
         self.idx = idx
         self.label = label
-        self.P = feature_mat
-        self.R = position_mat
-        self.C = connectivity_mat
-        self.vertex_info = vertex_info
         self.graph_info = graph_info
+        # Vertex data: descriptors
+        self.P = feature_mat
+        self.P_avg = feature_mat_avg
+        self.P_type_str = str(type(self.P))
+        # Vertex data: positions, labels
+        self.R = position_mat
+        self.vertex_info = vertex_info
+        # Edge data
+        self.C = connectivity_mat
         return
     def save_to_h5(self, h5f, dtype='float32'):
         group = h5f.create_group('%06d' % self.idx)
-        group.create_dataset('feature_mat', data=self.P, compression='gzip', dtype=dtype)
+        if self.P_type_str == "<class 'soap.soapy.kernel.DescriptorMapMatrix'>":
+            # Save list of descriptor maps
+            g0 = group.create_group('feature_dmap')
+            for dmap_idx, dmap in enumerate(self.P):
+                g1 = g0.create_group('%d' % dmap_idx)
+                for key in dmap:
+                    g1.create_dataset(
+                        key, 
+                        data=dmap[key], 
+                        compression='gzip', 
+                        dtype=dtype)
+            # Save averaged descriptor map
+            g0_avg = group.create_group('feature_dmap_avg')
+            for key in self.P_avg:
+                g0_avg.create_dataset(
+                    key, 
+                    data=self.P_avg[key], 
+                    compression='gzip', 
+                    dtype=dtype)
+        elif self.P_type_str == "<type 'numpy.ndarray'>":
+            # Save numpy arrays
+            group.create_dataset(
+                'feature_mat', 
+                data=self.P, 
+                compression='gzip', 
+                dtype=dtype)
+            group.create_dataset(
+                'feature_mat_avg', 
+                data=self.P_avg, 
+                compression='gzip', 
+                dtype=dtype)
+        else: raise NotImplementedError(self.P_type_str)
         group.create_dataset('position_mat', data=self.R)
         group.create_dataset('connectivity_mat', data=self.C)
         group.attrs['idx'] = self.idx
         group.attrs['label'] = self.label
         group.attrs['vertex_info'] = json.dumps(self.vertex_info)
         group.attrs['graph_info'] = json.dumps(self.graph_info)
+        group.attrs['P_type_str'] = self.P_type_str
         return
     def load_from_h5(self, h5f):
         self.idx = h5f.attrs['idx']
         self.label = h5f.attrs['label']
         self.vertex_info = json.loads(h5f.attrs['vertex_info'])
         self.graph_info = json.loads(h5f.attrs['graph_info'])
-        self.P = h5f['feature_mat'].value
+        # Determine feature matrix type
+        if 'P_type_str'in h5f.attrs:
+            self.P_type_str = h5f.attrs['P_type_str']
+        else:
+            self.P_type_str = "<type 'numpy.ndarray'>"
+        if self.P_type_str == "<class 'soap.soapy.kernel.DescriptorMapMatrix'>":
+            # Load list of descriptor maps
+            self.P = soap.soapy.kernel.DescriptorMapMatrix()
+            g0 = h5f['feature_dmap']
+            for i in range(len(g0)):
+                Pi = soap.soapy.kernel.DescriptorMap()
+                g1 = g0['%d' % i]
+                for key in g1:
+                    Pi[key] = g1[key].value
+                self.P.append(Pi)
+            # Load averaged descriptor map
+            self.P_avg = soap.soapy.kernel.DescriptorMap()
+            g0_avg = h5f['feature_dmap_avg']
+            for key in g0_avg:
+                self.P_avg[key] = g0_avg[key].value
+        elif self.P_type_str == "<type 'numpy.ndarray'>":
+            self.P = h5f['feature_mat'].value
+            self.P_avg = h5f['feature_mat_avg'].value
+        else: raise NotImplementedError(self.P_type_str)
         self.R = h5f['position_mat'].value
         self.C = h5f['connectivity_mat'].value
         return self
+
+def load_graphs(hdf5, n=-1):
+    h = h5py.File(hdf5, 'r')
+    gsec = h['graphs']
+    if n == None or n < 0: n = len(gsec)
+    graphs = [ Graph().load_from_h5(
+        gsec['%06d' % i]) for i in range(len(gsec)) if i < n ]
+    h.close()
+    return graphs
 
 def calculate_graph_connectivity(graph, zero_diagonal):
     """
@@ -297,7 +368,7 @@ def mp_compute_graph(
         vertex_info = frag_labels
     else:
         connectivity_mat = atom_bond_mat
-        vertex_info = atom_labels
+        vertex_info = type_vec
     graph = Graph(
         idx = config.info['idx'],
         label = str(config.info['label']),
@@ -332,7 +403,7 @@ def mp_compute_kernel_block_hdf5(block, kernel, log, dtype_result, h5_file):
     #soap.soapy.util.MP_LOCK.release()
     return mp_compute_kernel_block([g_rows, g_cols], kernel, log, dtype_result)
 
-def mp_compute_kernel_block(block, kernel, log, dtype_result):
+def mp_compute_kernel_block(block, kernel, log, dtype_result, symmetric=True):
     gi_block = block[0]
     gj_block = block[1]
     if log: 
@@ -342,7 +413,7 @@ def mp_compute_kernel_block(block, kernel, log, dtype_result):
     kmat = np.zeros((len(gi_block),len(gj_block)), dtype=dtype_result)
     for i,gi in enumerate(gi_block):
         for j,gj in enumerate(gj_block):
-            if gi.idx > gj.idx: pass
+            if symmetric and gi.idx > gj.idx: pass
             else: kmat[i,j] = kernel.compute(gi,gj)
     return kmat
 
