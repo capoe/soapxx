@@ -66,11 +66,12 @@ class Graph(object):
                 data=self.P, 
                 compression='gzip', 
                 dtype=dtype)
-            group.create_dataset(
-                'feature_mat_avg', 
-                data=self.P_avg, 
-                compression='gzip', 
-                dtype=dtype)
+            if type(self.P_avg) != type(None):
+                group.create_dataset(
+                    'feature_mat_avg', 
+                    data=self.P_avg, 
+                    compression='gzip', 
+                    dtype=dtype)
         else: raise NotImplementedError(self.P_type_str)
         group.create_dataset('position_mat', data=self.R)
         group.create_dataset('connectivity_mat', data=self.C)
@@ -107,7 +108,9 @@ class Graph(object):
                 self.P_avg[key] = g0_avg[key].value
         elif self.P_type_str == "<type 'numpy.ndarray'>":
             self.P = h5f['feature_mat'].value
-            self.P_avg = h5f['feature_mat_avg'].value
+            if 'feature_mat_avg' in h5f:
+                self.P_avg = h5f['feature_mat_avg'].value
+            else: self.P_avg = None
         else: raise NotImplementedError(self.P_type_str)
         self.R = h5f['position_mat'].value
         self.C = h5f['connectivity_mat'].value
