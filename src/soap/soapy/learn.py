@@ -1,6 +1,6 @@
 import numpy as np
 
-def subsample_array(array, n_select, method='stride', stride_shift=0):
+def subsample_array(array, n_select, method='stride', stride_shift=0, seed=None):
     # Number of data items; selected, discarded items
     if type(array) == list:
         n_data = len(array)
@@ -16,6 +16,8 @@ def subsample_array(array, n_select, method='stride', stride_shift=0):
     n_discard = n_data - n_select
     # Subsample
     if method == 'random':
+        if seed != None:
+            np.random.seed(seed)
         # Random access indices
         idcs = np.arange(0, n_data)
         np.random.shuffle(idcs)
