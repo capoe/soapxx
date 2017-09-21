@@ -24,6 +24,11 @@ Spectrum::Spectrum(std::string archfile) :
 	this->load(archfile);
 }
 
+Spectrum::Spectrum() :
+	_log(NULL), _options(NULL), _structure(NULL), _basis(NULL), _own_basis(true), _global_atomic(NULL) { 
+    ;
+}
+
 Spectrum::~Spectrum() {
 	delete _log;
 	_log = NULL;
@@ -281,11 +286,38 @@ void Spectrum::save(std::string archfile) {
 	return;
 }
 
+std::string Spectrum::saves(bool prune) {
+    if (prune) {
+        // Delete all pid-resolved data from atomic spectra.
+        // Note that this data is required to compute gradients.
+        // Pruning will no longer allow computing gradients
+        // for serialised objects.
+        for (auto it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it) {
+            (*it)->prunePidData();
+        }
+        if (_global_atomic) {
+            _global_atomic->prunePidData();
+        }
+    }
+    std::stringstream bstream;
+    boost::archive::binary_oarchive arch(bstream);
+    arch << (*this);
+    return bstream.str();
+}
+
 void Spectrum::load(std::string archfile) {
 	std::ifstream ifs(archfile.c_str());
 	boost::archive::binary_iarchive arch(ifs);
 	arch >> (*this);
 	return;
+}
+
+Spectrum &Spectrum::loads(std::string bstr) {
+    std::stringstream bstream;
+    bstream << bstr;
+    boost::archive::binary_iarchive arch(bstream);
+    arch >> (*this);
+    return (*this);
 }
 
 void Spectrum::registerPython() {
@@ -298,6 +330,7 @@ void Spectrum::registerPython() {
     class_<Spectrum>("Spectrum", init<Structure &, Options &>())
     	.def(init<Structure &, Options &, Basis &>())
     	.def(init<std::string>())
+        .def(init<>())
     	.def("__iter__", range<return_value_policy<reference_existing_object> >(&Spectrum::beginAtomic, &Spectrum::endAtomic))
         .def("__len__", &Spectrum::length)
 	    .def("compute", computeAll)
@@ -306,6 +339,7 @@ void Spectrum::registerPython() {
 	    .def("compute", computeCentersTargets)
 		.def("computePower", &Spectrum::computePower)
 		.def("computePowerGradients", &Spectrum::computePowerGradients)
+        .def("deleteGlobal", &Spectrum::deleteGlobal)
 		.def("computeGlobal", &Spectrum::computeGlobal, return_value_policy<reference_existing_object>())
 		.def("addAtomic", &Spectrum::addAtomic)
 		.def("getAtomic", &Spectrum::getAtomic, return_value_policy<reference_existing_object>())
@@ -313,6 +347,8 @@ void Spectrum::registerPython() {
 	    .def("saveAndClean", &Spectrum::saveAndClean)
 		.def("save", &Spectrum::save)
 		.def("load", &Spectrum::load)
+        .def("saves", &Spectrum::saves)
+        .def("loads", &Spectrum::loads, ref_existing())
         .def("writeDensityOnGrid", &Spectrum::writeDensityOnGrid)
         .def("writeDensityCubeFile", &Spectrum::writeDensityCubeFile)
 		.def("writeDensity", &Spectrum::writeDensity)

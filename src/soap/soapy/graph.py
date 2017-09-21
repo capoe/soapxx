@@ -52,13 +52,14 @@ class Graph(object):
                         compression='gzip', 
                         dtype=dtype)
             # Save averaged descriptor map
-            g0_avg = group.create_group('feature_dmap_avg')
-            for key in self.P_avg:
-                g0_avg.create_dataset(
-                    key, 
-                    data=self.P_avg[key], 
-                    compression='gzip', 
-                    dtype=dtype)
+            if type(self.P_avg) != type(None):
+                g0_avg = group.create_group('feature_dmap_avg')
+                for key in self.P_avg:
+                    g0_avg.create_dataset(
+                        key, 
+                        data=self.P_avg[key], 
+                        compression='gzip', 
+                        dtype=dtype)
         elif self.P_type_str == "<type 'numpy.ndarray'>":
             # Save numpy arrays
             group.create_dataset(
@@ -103,9 +104,10 @@ class Graph(object):
                 self.P.append(Pi)
             # Load averaged descriptor map
             self.P_avg = soap.soapy.kernel.DescriptorMap()
-            g0_avg = h5f['feature_dmap_avg']
-            for key in g0_avg:
-                self.P_avg[key] = g0_avg[key].value
+            if 'feature_dmap_avg' in h5f:
+                g0_avg = h5f['feature_dmap_avg']
+                for key in g0_avg:
+                    self.P_avg[key] = g0_avg[key].value
         elif self.P_type_str == "<type 'numpy.ndarray'>":
             self.P = h5f['feature_mat'].value
             if 'feature_mat_avg' in h5f:

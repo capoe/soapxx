@@ -28,6 +28,7 @@ public:
 	typedef std::vector<AtomicSpectrum*>::iterator atomic_it_t;
 	typedef std::map<std::string, atomspec_array_t> map_atomspec_array_t;
 
+    Spectrum();
 	Spectrum(std::string archfile);
 	Spectrum(Structure &structure, Options &options);
 	Spectrum(Structure &structure, Options &options, Basis &basis);
@@ -42,7 +43,9 @@ public:
 
 	void saveAndClean() { std::cout << "spectrum::save&clean" << std::endl; }
 	void save(std::string archfile);
+    std::string saves(bool prune = true);
 	void load(std::string archfile);
+    Spectrum &loads(std::string bstr);
 	void clean();
     int length() { return _atomspec_array.size(); }
 
@@ -52,7 +55,8 @@ public:
 	void compute(Structure::particle_array_t &sources, Structure::particle_array_t &targets);
 	AtomicSpectrum *computeAtomic(Particle *center);
 	AtomicSpectrum *computeAtomic(Particle *center, Structure::particle_array_t &targets);
-	AtomicSpectrum *computeGlobal();
+    AtomicSpectrum *computeGlobal();
+	void deleteGlobal() { if (_global_atomic) { delete _global_atomic; _global_atomic = NULL; } }
 	void addAtomic(AtomicSpectrum *atomspec);
 	AtomicSpectrum *getAtomic(int slot_idx, std::string center_type);
 	AtomicSpectrum *getGlobal() { assert(_global_atomic && "Compute first"); return _global_atomic; }

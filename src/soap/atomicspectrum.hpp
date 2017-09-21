@@ -36,12 +36,12 @@ public:
 	typedef std::map<int, map_xnkl_t> map_pid_xnkl_t; // <- id=>type=>xnkl
 	typedef std::map<int, xnkl_t*> map_pid_xnkl_gc_t; // <- id=>xnkl_generic_coherent
 
-
 	AtomicSpectrum(Particle *center, Basis *basis);
 	AtomicSpectrum(Basis *basis);
 	AtomicSpectrum() { this->null(); }
    ~AtomicSpectrum();
     void null();
+    void prunePidData();
     void write(std::ostream &ofs);
     void invert(map_xnkl_t &map_xnkl, xnkl_t *xnkl_generic_coherent, std::string type1, std::string type2);
     void invert(xnkl_t *xnkl, std::string type1, std::string type2);

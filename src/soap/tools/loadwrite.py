@@ -51,7 +51,8 @@ def structure_from_ase(
     frag_labels = []
     atom_labels = []
     # System properties
-    label = str(config.info['label'])
+    if 'label' in config.info: label = str(config.info['label'])
+    else: label = "?"
     positions = config.get_positions()
     types = config.get_chemical_symbols()
     if log: log << log.back << "Reading '%s'" % label << log.flush

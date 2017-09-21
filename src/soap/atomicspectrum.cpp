@@ -48,6 +48,22 @@ AtomicSpectrum::~AtomicSpectrum() {
         _xnkl_generic_incoherent = NULL;
     }
     // CLEAN PID-RESOLVED GRADIENTS
+    this->prunePidData();
+}
+
+void AtomicSpectrum::null() {
+    _center = NULL;
+    _center_id = -1;
+    _center_pos = vec(0,0,0);
+    _center_type = "?";
+    _basis = NULL;
+    _qnlm_generic = NULL;
+    _xnkl_generic_coherent = NULL;
+    _xnkl_generic_incoherent = NULL;
+}
+
+void AtomicSpectrum::prunePidData() {
+    // CLEAN PID-RESOLVED GRADIENTS
     // ... Neighbour density expansions with gradients
     for (auto it = _map_pid_qnlm.begin(); it != _map_pid_qnlm.end(); ++it) delete it->second.second;
     _map_pid_qnlm.clear();
@@ -63,17 +79,6 @@ AtomicSpectrum::~AtomicSpectrum() {
     for (auto it = _map_pid_xnkl_gc.begin(); it != _map_pid_xnkl_gc.end(); ++it) {
         delete it->second;
     }
-}
-
-void AtomicSpectrum::null() {
-    _center = NULL;
-    _center_id = -1;
-    _center_pos = vec(0,0,0);
-    _center_type = "?";
-    _basis = NULL;
-    _qnlm_generic = NULL;
-    _xnkl_generic_coherent = NULL;
-    _xnkl_generic_incoherent = NULL;
 }
 
 void AtomicSpectrum::invert(map_xnkl_t &map_xnkl, xnkl_t *xnkl_generic_coherent, std::string type1, std::string type2) {

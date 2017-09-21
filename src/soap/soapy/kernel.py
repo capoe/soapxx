@@ -22,7 +22,10 @@ class DescriptorMap(object):
     """
     def __init__(self):
         self.dmap = {}
-        self.T = self # Transpose
+        #self.T = self # Transpose
+    @property
+    def T(self):
+        return self
     def dot(self, other):
         dot = 0.0
         for key in self.dmap:
@@ -294,7 +297,7 @@ def reduce_xnklab_atomic(atomic, types_global, verbose=False):
     return X
 
 class KernelAdaptorSpecificUniqueDMap(object):
-    def __init__(self, options, types_global):
+    def __init__(self, options, types_global=None):
         return
     def adapt(self, spectrum, return_pos_matrix=False):
         IDMap = DescriptorMapMatrix() # List of <DescriptorMaps>
@@ -468,6 +471,53 @@ class KernelAdaptorGlobalSpecific(object):
         X = xnklab_atomic.reduce()
         X_norm = X/np.dot(X,X)**0.5
         return X, X_norm
+
+class KernelAdaptorGlobalSpecificDMap(object):
+    def __init__(self, options, types_global=None):
+        return
+    def adapt(self, spectrum, return_pos_matrix=False):
+        IDMap = DescriptorMapMatrix() # List of <DescriptorMaps>
+        dimX = -1
+        IR = np.zeros((1,3), dtype='float64') # position matrix
+        types = []
+        atomic_i = spectrum.getGlobal()
+        IDMap.append(self.adaptScalar(atomic_i))
+        Ri = np.array([0., 0., 0.])
+        types.append("global")
+        IR[0,:] = Ri
+        if return_pos_matrix:
+            return IDMap, IR, types
+        else:
+            return IDMap
+    def adaptScalar(self, atomic, epsilon=1e-20):
+        dmap = DescriptorMap()
+        types_atomic = atomic.getTypes()
+        S = len(types_atomic)
+        N = atomic.basis.N
+        L = atomic.basis.L
+        # SPECIES a = b
+        for i in range(S):
+            a = types_atomic[i]
+            xnklaa = atomic.getPower(a,a).array.real
+            xnklaa_red = np.zeros(((N*N+N)/2, L+1))
+            # Select where n <= k
+            for i in range(N):
+                for j in range(i, N):
+                    ij_red = i*N - (i*i-i)/2 + j-i
+                    xnklaa_red[ij_red] = xnklaa[i*N+j]
+            dmap['%s:%s' % (a,a)] = xnklaa_red.flatten()
+        # SPECIES a != b
+        for i in range(S):
+            for j in range(i+1, S):
+                # Select all
+                a = types_atomic[i]
+                b = types_atomic[j]
+                xnklab = atomic.getPower(a,b).array.real
+                xnklab_red = xnklab
+                pair_ab = '%s:%s' % ((a,b) if a < b else (b,a))
+                dmap[pair_ab] = xnklab_red.flatten()
+        dmap.normalise()
+        return dmap
 
 class KernelAdaptorGeneric(object):
     def __init__(self, options, types_global=None):
@@ -742,25 +792,26 @@ class KernelFunctionDot3HarmonicDist(object):
         return 2*(D_A - D_B)*(0.5/D_A*(-1.)*IC_A - 0.5/D_B*(-1.)*IC_B) + 2*(D_A - D_AB)*0.5/D_A*(-1.)*IC_A + 2*(D_B - D_AB)*0.5/D_B*(-1.)*IC_B + 2*(D_A-self.d0)*1./D_A*(-1.)*IC_A + 2*(D_B-self.d0)*1./D_B*(-1.)*IC_B
 
 KernelAdaptorFactory = {
-'generic': KernelAdaptorGeneric,
-'specific': KernelAdaptorSpecific,
-'specific-unique': KernelAdaptorSpecificUnique,
-'specific-unique-dmap': KernelAdaptorSpecificUniqueDMap,
-'global-generic': KernelAdaptorGlobalGeneric,
-'global-specific': KernelAdaptorGlobalSpecific,
-'global-specific-energy': KernelAdaptorGlobalSpecificEnergy,
-'ftd-specific': KernelAdaptorFTD
+    'generic': KernelAdaptorGeneric,
+    'specific': KernelAdaptorSpecific,
+    'specific-unique': KernelAdaptorSpecificUnique,
+    'specific-unique-dmap': KernelAdaptorSpecificUniqueDMap,
+    'global-generic': KernelAdaptorGlobalGeneric,
+    'global-specific': KernelAdaptorGlobalSpecific,
+    'global-specific-dmap': KernelAdaptorGlobalSpecificDMap,
+    'global-specific-energy': KernelAdaptorGlobalSpecificEnergy,
+    'ftd-specific': KernelAdaptorFTD
 }
 
 KernelFunctionFactory = {
-'gaussian-diff': KernelFunctionGaussianDiff,
-'dot': KernelFunctionDot,
-'dot-shifted': KernelFunctionDotShifted,
-'dot-harmonic': KernelFunctionDotHarmonic,
-'dot-harmonic-dist': KernelFunctionDotHarmonicDist,
-'dot-lj': KernelFunctionDotLj,
-'dot-3-harmonic': KernelFunctionDot3Harmonic,
-'dot-3-harmonic-dist': KernelFunctionDot3HarmonicDist
+    'gaussian-diff': KernelFunctionGaussianDiff,
+    'dot': KernelFunctionDot,
+    'dot-shifted': KernelFunctionDotShifted,
+    'dot-harmonic': KernelFunctionDotHarmonic,
+    'dot-harmonic-dist': KernelFunctionDotHarmonicDist,
+    'dot-lj': KernelFunctionDotLj,
+    'dot-3-harmonic': KernelFunctionDot3Harmonic,
+    'dot-3-harmonic-dist': KernelFunctionDot3HarmonicDist
 }
 
 class KernelPotential(object):
