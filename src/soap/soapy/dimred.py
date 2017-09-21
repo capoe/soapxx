@@ -72,7 +72,7 @@ class BondNetwork(object):
         beta = 1.
         k_t = 0.85 # 0.85 # 0.85
         self.H = beta*0.5*(
-            1.+np.tanh(alpha*(K-k_t))
+            1.+np.tanh(alpha*(self.K-k_t))
         )
         # Universal force constant?
         self.H.fill(0.28) # NOTE HACK
@@ -169,9 +169,9 @@ class BondNetwork(object):
                   - self.R0[self.idcs_noexcl][:,self.idcs_noexcl])**2)
             else:
                 E = np.sum(0.5*self.H*(dR - self.R0)**2)
-            print "Step %d   %+1.7e/%+1.7e   %+1.7e" % (i, rms, rms_max, E)
             # Trajectory
             if i % dn_out == 0:
+                print "Step %5d   rms/max %+1.7e/%+1.7e  energy %+1.7e" % (i, rms, rms_max, E)
                 scale = 100.
                 ofs.write('%d\n\n' % (self.N))
                 for i in range(self.N):
@@ -183,8 +183,17 @@ class BondNetwork(object):
             if rms < rms_cut and rms_max < rms_cut:
                 print "*** converged ***"
                 break
+        print "Step %5d   rms/max %+1.7e/%+1.7e  energy %+1.7e" % (i, rms, rms_max, E)
         ofs.close()
         return self.X, self.Y 
+    def write_confout(self, filename):
+        ofs = open(filename, 'w')
+        for i in range(self.N):
+            ofs.write('%10s %1.2e %+1.4e %+1.4e\n' % (
+                self.tags[i], self.M[i], self.X[i], self.Y[i]))
+        ofs.close()
+        return
+        
             
 def dimred_matrix(method, kmat=None, distmat=None, outfile=None, ix=None, symmetrize=False, prj_dimension=2):
     if symmetrize:
