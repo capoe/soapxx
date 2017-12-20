@@ -22,3 +22,8 @@ def kernel_statistics(K, triu=True, full=False):
         return avg, std, med, ent, kmin, kmax
     return avg, std, med, ent
         
+def div0(a, b):
+    with np.errstate(divide='ignore', invalid='ignore'):
+        c = np.true_divide(a, b)
+        c[~np.isfinite(c)] = 0
+        return c
