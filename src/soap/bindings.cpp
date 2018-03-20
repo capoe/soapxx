@@ -20,6 +20,7 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::AtomicSpectrum::registerPython();
     soap::BasisExpansion::registerPython();
     soap::PowerExpansion::registerPython();
+    soap::Mol2D::registerPython();
 
     soap::EnergySpectrum::registerPython();
     soap::HierarchicalCoulomb::registerPython();

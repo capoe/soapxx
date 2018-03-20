@@ -5,6 +5,7 @@
 #include "soap/options.hpp"
 #include "soap/spectrum.hpp"
 #include "soap/contraction.hpp"
+#include "soap/mol2d.hpp"
 
 namespace soap {
 
