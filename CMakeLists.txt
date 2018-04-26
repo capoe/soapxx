@@ -27,7 +27,23 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # FIND PACKAGES
 find_package(PythonLibs)
+#find_package(PythonLibs ${PYTHON_VERSION_STRING} EXACT REQUIRED)
 include_directories(${PYTHON_INCLUDE_DIRS})
+message(PYTHON_INC_PATH= ${PYTHON_INCLUDE_DIRS})
+message(PYTHON_LIB_PATH= ${PYTHON_LIBRARIES})
+message(PYTHON_LIB_STR= ${PYTHONLIBS_VERSION_STRING})
+string(REGEX REPLACE "libpython.*" "" LIBPY_ROOT_PATH ${PYTHON_LIBRARIES})
+message(PYTHON_LIB_ROOT= ${LIBPY_ROOT_PATH})
+
+find_package(PythonInterp REQUIRED)
+
+set(NUMPY_CORE_DIR "site-packages/numpy/core/include/")
+string(CONCAT NUMPY_CORE_PATH ${LIBPY_ROOT_PATH} "/python" ${PYTHON_VERSION_MAJOR} "." ${PYTHON_VERSION_MINOR} "/" ${NUMPY_CORE_DIR} )
+#set(NUMPY_CORE_PATH ${LIBPY_ROOT_PATH} "/" ${PYTHON_VERSION_MAJOR} "." ${PYTHON_VERSION_MINOR} "/" ${NUMPY_CORE_DIR})
+file(TO_NATIVE_PATH ${NUMPY_CORE_PATH} NUMPY_INCLUDE_DIR)
+include_directories(${NUMPY_INCLUDE_DIR})
+message(NUMPY_INC_DIR= ${NUMPY_INCLUDE_DIR})
+
 
 if(DEFINED ENV{BOOST_ROOT})
     set(BOOST_ROOT "$ENV{BOOST_ROOT}")
@@ -35,13 +51,22 @@ if(DEFINED ENV{BOOST_ROOT})
 else(DEFINED ENV{BOOST_ROOT})
     message("-- Note: BOOST_ROOT not set. Let's see whether we can find BOOST anyway.")
 endif(DEFINED ENV{BOOST_ROOT})
-find_package(Boost COMPONENTS python mpi filesystem serialization)
+
+if (APPLE OR WIN32) # Windows & Homebrew convention
+    set(TMP_BOOST_PYTHON_COMPONENT "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "numpy${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "mpi" "filesystem" "serialization")
+else() # Debian convention
+    set(TMP_BOOST_PYTHON_COMPONENT "python-py${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "numpy${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "mpi" "filesystem" "serialization")
+endif()
+find_package(Boost COMPONENTS ${TMP_BOOST_PYTHON_COMPONENT} REQUIRED)
+unset(TMP_BOOST_PYTHON_COMPONENT)
+
+#find_package(Boost COMPONENTS python python3 mpi filesystem serialization)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(MPI REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
 
-set(SOAPXX_LINK_LIBRARIES ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${MPI_LIBRARIES} ${GSL_LIBRARIES})
+set(SOAPXX_LINK_LIBRARIES ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${MPI_LIBRARIES} ${GSL_LIBRARIES} ${NUMPY_LIBRARIES})
 
 # SUMMARIZE INCLUDES & LIBS
 get_property(local_dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
