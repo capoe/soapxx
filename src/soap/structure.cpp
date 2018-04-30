@@ -42,7 +42,7 @@ boost::python::numpy::ndarray Particle::getPosNumeric() {
 }
 #else
 boost::python::numeric::array Particle::getPosNumeric() {
-	boost::pythonhon::numeric::array pos(boost::python::make_tuple(_pos.x(), _pos.y(), _pos.z())); return pos;
+	boost::python::numeric::array pos(boost::python::make_tuple(_pos.x(), _pos.y(), _pos.z())); return pos;
 }
 #endif
 
