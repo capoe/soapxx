@@ -196,7 +196,7 @@ public:
 #else
     void setBoundaryNumeric(const boost::python::numeric::array &m);
     boost::python::numeric::array getBoundaryNumeric();
-        boost::python:endif:numeric::array connectNumeric(
+        boost::python::numeric::array connectNumeric(
                 const boost::python::numeric::array &a1,
                 const boost::python::numeric::array &a2);
 
