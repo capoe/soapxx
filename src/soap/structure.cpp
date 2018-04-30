@@ -172,7 +172,7 @@ boost::python::numeric::array Structure::connectNumeric(
 	vec r1(a1);
 	vec r2(a2);
 	vec dr = this->connect(r1, r2);
-	return boost::python::numeric::arrayay(boost::python::make_tuple(
+	return boost::python::numeric::array(boost::python::make_tuple(
 	        dr.x(), dr.y(), dr.z()));
 }
 #endif
@@ -220,7 +220,7 @@ boost::python::numpy::ndarray Structure::getBoundaryNumeric() {
 #else
 boost::python::numeric::array Structure::getBoundaryNumeric() {
 	matrix box = _box->getBox();
-	boost::python::numeric::array box_np(boost::python::make_functionke_tuple(
+	boost::python::numeric::array box_np(boost::python::make_tuple(
 		box.get(0,0), box.get(0,1), box.get(0,2),
 		box.get(1,0), box.get(1,1), box.get(1,2),
 		box.get(2,0), box.get(2,1), box.get(2,2)));
