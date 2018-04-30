@@ -1,6 +1,7 @@
 #ifndef _SOAP_TYPES_H
 #define	_SOAP_TYPES_H
 
+#include "Python.h"
 #include <vector>
 #include <string>
 #include <stdexcept>
