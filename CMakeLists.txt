@@ -48,10 +48,19 @@ else(DEFINED ENV{BOOST_ROOT})
     message("-- Note: BOOST_ROOT not set. Let's see whether we can find BOOST anyway.")
 endif(DEFINED ENV{BOOST_ROOT})
 
-if (APPLE OR WIN32) # Windows & Homebrew convention
-    set(TMP_BOOST_PYTHON_COMPONENT "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "numpy${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "mpi" "filesystem" "serialization")
-else() # Debian convention
-    set(TMP_BOOST_PYTHON_COMPONENT "python-py${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "numpy${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "mpi" "filesystem" "serialization")
+find_package(Boost REQUIRED)
+if(Boost_FOUND) 
+  if(Boost_VERSION GREATER_EQUAL 1.64)
+    if (APPLE OR WIN32) # Windows & Homebrew convention
+        set(TMP_BOOST_PYTHON_COMPONENT "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "numpy${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "mpi" "filesystem" "serialization")
+    else() # Debian convention
+        set(TMP_BOOST_PYTHON_COMPONENT "python-py${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "numpy${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "mpi" "filesystem" "serialization")
+    endif()
+  else()
+    set(TMP_BOOST_PYTHON_COMPONENT "python" "mpi" "filesystem" "serialization")
+  endif()
+else()
+  set(TMP_BOOST_PYTHON_COMPONENT "python" "mpi" "filesystem" "serialization")
 endif()
 find_package(Boost COMPONENTS ${TMP_BOOST_PYTHON_COMPONENT} REQUIRED)
 unset(TMP_BOOST_PYTHON_COMPONENT)
