@@ -1,6 +1,9 @@
+#include <boost/version.hpp>
+#if BOOST_VERSION >= 106400
 #define BOOST_PYTHON_STATIC_LIB  
 #define BOOST_LIB_NAME "boost_numpy"
 #include <boost/config/auto_link.hpp>
+#endif
 #include "soap/structure.hpp"
 
 
@@ -33,9 +36,15 @@ void Particle::model(Particle &model) {
     _sigma = model._sigma;
 }
 
+#if BOOST_VERSION >= 106400
 boost::python::numpy::ndarray Particle::getPosNumeric() {
 	boost::python::numpy::ndarray pos(boost::python::numpy::array(boost::python::make_tuple(_pos.x(), _pos.y(), _pos.z()))); return pos;
 }
+#else
+boost::python::numeric::array Particle::getPosNumeric() {
+	boost::pythonhon::numeric::array pos(boost::python::make_tuple(_pos.x(), _pos.y(), _pos.z())); return pos;
+}
+#endif
 
 void Particle::registerPython() {
 	using namespace boost::python;
@@ -146,6 +155,7 @@ Particle &Structure::addParticle(Segment &seg) {
 	return *new_part;
 }
 
+#if BOOST_VERSION >= 106400
 boost::python::numpy::ndarray Structure::connectNumeric(
 	const boost::python::numpy::ndarray &a1,
 	const boost::python::numpy::ndarray &a2) {
@@ -155,6 +165,17 @@ boost::python::numpy::ndarray Structure::connectNumeric(
 	return boost::python::numpy::ndarray(boost::python::numpy::array(boost::python::make_tuple(
 		dr.x(), dr.y(), dr.z())));
 }
+#else
+boost::python::numeric::array Structure::connectNumeric(
+	const boost::python::numeric::array &a1,
+	const boost::python::numeric::array &a2) {
+	vec r1(a1);
+	vec r2(a2);
+	vec dr = this->connect(r1, r2);
+	return boost::python::numeric::arrayay(boost::python::make_tuple(
+	        dr.x(), dr.y(), dr.z()));
+}
+#endif
 
 void Structure::setBoundary(const matrix &box) {
 	delete _box;
@@ -174,11 +195,19 @@ void Structure::setBoundary(const matrix &box) {
 	return;
 }
 
+#if BOOST_VERSION >= 106400
 void Structure::setBoundaryNumeric(const boost::python::numpy::ndarray &m) {
 	matrix box(m);
 	this->setBoundary(box);
 }
+#else
+void Structure::setBoundaryNumeric(const boost::python::numeric::array &m) {
+	matrix box(m);
+	this->setBoundary(box);
+}
+#endif
 
+#if BOOST_VERSION >= 106400
 boost::python::numpy::ndarray Structure::getBoundaryNumeric() {
 	matrix box = _box->getBox();
 	boost::python::numpy::ndarray box_np(boost::python::numpy::array(boost::python::make_tuple(
@@ -188,6 +217,17 @@ boost::python::numpy::ndarray Structure::getBoundaryNumeric() {
 	box_np.reshape(boost::python::make_tuple(3,3));
 	return box_np;
 }
+#else
+boost::python::numeric::array Structure::getBoundaryNumeric() {
+	matrix box = _box->getBox();
+	boost::python::numeric::array box_np(boost::python::make_functionke_tuple(
+		box.get(0,0), box.get(0,1), box.get(0,2),
+		box.get(1,0), box.get(1,1), box.get(1,2),
+		box.get(2,0), box.get(2,1), box.get(2,2)));
+	box_np.resize(3,3);
+	return box_np;
+}
+#endif
 
 void Structure::registerPython() {
 	using namespace boost::python;

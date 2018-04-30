@@ -1,16 +1,24 @@
 #ifndef _SOAP_LINALG_KERNEL_H
 #define	_SOAP_LINALG_KERNEL_H
 
+#include <boost/version.hpp>
+
+#if BOOST_VERSION >= 106400
 #define BOOST_PYTHON_STATIC_LIB  
 #define BOOST_LIB_NAME "boost_numpy"
 #include <boost/config/auto_link.hpp>
+#endif
 #include <iostream>
 #include <cmath>
 #include <stdexcept>
 #include <string>
 #include <boost/numeric/ublas/lu.hpp>
 #include <boost/python.hpp>
+#if BOOST_VERSION >= 106400
 #include <boost/python/numpy.hpp>
+#else
+#include <boost/python/numeric.hpp>
+#endif
 #include "soap/linalg/numpy.hpp"
 
 namespace soap { namespace linalg {

@@ -1,11 +1,19 @@
 #ifndef _SOAP_STRUCTURE_HPP
 #define _SOAP_STRUCTURE_HPP
 
+#include <boost/version.hpp>
+
+#if BOOST_VERSION >= 106400
 #define BOOST_PYTHON_STATIC_LIB  
 #define BOOST_LIB_NAME "boost_numpy"
 #include <boost/config/auto_link.hpp>
+#endif
 #include <boost/python.hpp>
+#if BOOST_VERSION >= 106400
 #include <boost/python/numpy.hpp>
+#else
+#include <boost/python/numeric.hpp>
+#endif
 #include <boost/python/iterator.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <iostream>
@@ -32,8 +40,13 @@ public:
     void setPos(vec &pos) { _pos = pos; }
     void setPos(double x, double y, double z) { _pos = vec(x,y,z); }
     vec &getPos() { return _pos; }
+#if BOOST_VERSION >= 106400
     void setPosNumeric(const boost::python::numpy::ndarray &pos) { _pos = vec(pos); }
     boost::python::numpy::ndarray getPosNumeric();
+#else
+    void setPosNumeric(const boost::python::numeric::array &pos) { _pos = vec(pos); }
+    boost::python::numeric::array getPosNumeric();
+#endif
     // Name
     void setName(std::string name) { _name = name; }
     std::string &getName() { return _name; }
@@ -174,11 +187,20 @@ public:
     Boundary *getBoundary() { return _box; }
     void setBoundary(const matrix &box);
     vec connect(const vec &r1, const vec &r2) { return _box->connect(r1, r2); /* 1->2 */ }
+#if BOOST_VERSION >= 106400
     void setBoundaryNumeric(const boost::python::numpy::ndarray &m);
     boost::python::numpy::ndarray getBoundaryNumeric();
 	boost::python::numpy::ndarray connectNumeric(
 		const boost::python::numpy::ndarray &a1,
 		const boost::python::numpy::ndarray &a2);
+#else
+    void setBoundaryNumeric(const boost::python::numeric::array &m);
+    boost::python::numeric::array getBoundaryNumeric();
+        boost::python:endif:numeric::array connectNumeric(
+                const boost::python::numeric::array &a1,
+                const boost::python::numeric::array &a2);
+
+#endif
 
     static void registerPython();
 

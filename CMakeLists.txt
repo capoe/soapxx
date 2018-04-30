@@ -50,7 +50,7 @@ endif(DEFINED ENV{BOOST_ROOT})
 
 find_package(Boost REQUIRED)
 if(Boost_FOUND) 
-  if(Boost_VERSION GREATER_EQUAL 1.64)
+	if(Boost_MAJOR_VERSION GREATER_EQUAL 1 AND Boost_MINOR_VERSION GREATER_EQUAL 64)
     if (APPLE OR WIN32) # Windows & Homebrew convention
         set(TMP_BOOST_PYTHON_COMPONENT "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "numpy${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}" "mpi" "filesystem" "serialization")
     else() # Debian convention

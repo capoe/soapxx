@@ -1,16 +1,24 @@
 #ifndef _SOAP_LINALG_VEC_H
 #define	_SOAP_LINALG_VEC_H
 
+#include <boost/version.hpp>
+
+#if BOOST_VERSION >= 106400
 #define BOOST_PYTHON_STATIC_LIB  
 #define BOOST_LIB_NAME "boost_numpy"
 #include <boost/config/auto_link.hpp>
+#endif
 #include <iostream>
 #include <cmath>
 #include <stdexcept>
 #include <string>
 #include <boost/numeric/ublas/lu.hpp>
 #include <boost/python.hpp>
+#if BOOST_VERSION >= 106400
 #include <boost/python/numpy.hpp>
+#else
+#include <boost/python/numeric.hpp>
+#endif
 
 namespace soap { namespace linalg {
 using namespace std;
@@ -32,7 +40,11 @@ public:
     vec(const double r[3]);
     vec(const double &x, const double &y, const double &z);
     vec(const boost::numeric::ublas::vector<double> &v);
+#if BOOST_VERSION >= 106400
     vec(const boost::python::numpy::ndarray &v);
+#else
+    vec(const boost::python::numeric::array &v);
+#endif
     
     vec &operator=(const vec &v);
     vec &operator+=(const vec &v);
@@ -103,7 +115,11 @@ public:
     static void registerPython() {
         using namespace boost::python;
         class_<vec>("vec", init<double, double, double>())
+#if BOOST_VERSION >= 106400
             .def(init<boost::python::numpy::ndarray &>())
+#else
+	    .def(init<boost::python::numeric::array &>())
+#endif
             .add_property("x", make_function(&vec::x, return_value_policy<copy_non_const_reference>()), &vec::setX)
             .add_property("y", make_function(&vec::y, return_value_policy<copy_non_const_reference>()), &vec::setY)
             .add_property("z", make_function(&vec::z, return_value_policy<copy_non_const_reference>()), &vec::setZ)
@@ -131,7 +147,11 @@ inline vec::vec(const boost::numeric::ublas::vector<double> &v)
     catch(std::exception &err){throw std::length_error("Conversion from ub::vector to votca-vec failed");} 
 }
 
+#if BOOST_VERSION >= 106400
 inline vec::vec(const boost::python::numpy::ndarray &v) {
+#else
+inline vec::vec(const boost::python::numeric::array &v) {
+#endif
    _x = boost::python::extract<double>(v[0]);
    _y = boost::python::extract<double>(v[1]);
    _z = boost::python::extract<double>(v[2]);
