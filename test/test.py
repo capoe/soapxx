@@ -4,7 +4,7 @@ import soap.tools
 
 import os
 import numpy as np
-from momo import osio, endl, flush
+from soap.soapy.momo import osio, endl, flush
 
 element_vdw_radius = { 
 'C':1.70,
@@ -21,7 +21,7 @@ element_mass = {
 
 ase_config_list = soap.tools.ase_load_all('configs')
 for config in ase_config_list:
-    print config.config_file
+    print(config.config_file)
 config = ase_config_list[4]
 osio << config.atoms << endl
 
