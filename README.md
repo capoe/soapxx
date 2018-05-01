@@ -13,4 +13,4 @@ source soap/SOAPRC
 - openmpi
 - GSL (Tested with 2.1) or MKL (MKL + intel compilers are recommended)
 - GCC (Tested with 5.4.1 and 7.3.0)
-- Python <= 2.7 (Python > 3.5 bindings are not supported yet.)
+- Python <= 2.7 (Python 3 bindings are not supported yet.)
