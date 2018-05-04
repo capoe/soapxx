@@ -27,7 +27,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # FIND PACKAGES
 find_package(PythonInterp REQUIRED)
-set(Python_ADDITIONAL_VERSIONS "$ENV{PYTHON_VERSION_STRING}")
+set(Python_ADDITIONAL_VERSIONS ${PYTHON_VERSION_STRING})
 message(PYTHON_ADD_VERSIONS= ${Python_ADDITIONAL_VERSIONS})
 find_package(PythonLibs)
 include_directories(${PYTHON_INCLUDE_DIRS})
