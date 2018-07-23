@@ -1,6 +1,7 @@
 #include "bindings.hpp"
 #include "coulomb.hpp"
 #include "fieldtensor.hpp"
+#include "npfga.hpp"
 
 namespace soap {
 
@@ -32,6 +33,7 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::AngularBasisFactory::registerAll();
     soap::CutoffFunctionFactory::registerAll();
 
+    soap::npfga::FGraph::registerPython();
 
     boost::python::def("silence", &soap::GLOG_SILENCE);
     boost::python::def("verbose", &soap::GLOG_VERBOSE);
