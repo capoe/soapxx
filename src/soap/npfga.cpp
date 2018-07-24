@@ -774,10 +774,10 @@ void FGraph::save(std::string archfile) {
 }
 
 FGraph *FGraph::load(std::string archfile) {
-	std::ifstream ifs(archfile.c_str());
-	boost::archive::binary_iarchive arch(ifs);
-	arch >> (*this);
-	return this;
+    std::ifstream ifs(archfile.c_str());
+    boost::archive::binary_iarchive arch(ifs);
+    arch >> (*this);
+    return this;
 }
 
 void FGraph::registerPython() {
@@ -791,7 +791,7 @@ void FGraph::registerPython() {
         .def("save", &FGraph::save)
         .def("load", &FGraph::load, return_value_policy<reference_existing_object>())
         .def("__len__", &FGraph::size)
-	    .def("__iter__", range<return_value_policy<reference_existing_object> >(
+        .def("__iter__", range<return_value_policy<reference_existing_object> >(
             &FGraph::beginNodes, &FGraph::endNodes))
         .def("applyAndCorrelate", &FGraph::applyAndCorrelateNumpy);
 }

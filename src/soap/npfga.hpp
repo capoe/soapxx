@@ -44,16 +44,16 @@ struct Instruction
     double prefactor;
     args_t args;
     // Serialization
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-		arch & op;
-		arch & is_root;
-		arch & tag;
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & op;
+        arch & is_root;
+        arch & tag;
         arch & expr;
         arch & power;
         arch & prefactor;
         arch & args;
-	}
+    }
 };
 
 struct FNodeStats
@@ -63,11 +63,11 @@ struct FNodeStats
     double cov;
     double p;
     // Serialization
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-		arch & cov;
-		arch & p;
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & cov;
+        arch & p;
+    }
 };
 
 struct FNodeDimension
@@ -91,10 +91,10 @@ struct FNodeDimension
     // Members
     dim_map_t dim_map;
     // Serialization
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-		arch & dim_map;
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & dim_map;
+    }
 };
 
 struct FNodeCheck
@@ -105,11 +105,11 @@ struct FNodeCheck
     double min_pow;
     double max_pow;
     // Serialization
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-		arch & min_pow;
-		arch & max_pow;
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & min_pow;
+        arch & max_pow;
+    }
 };
 
 class FNode 
@@ -154,10 +154,10 @@ class FNode
     Instruction *instruction;
   public:
     // Serialization
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-		arch & generation_idx;
-		arch & is_root;
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & generation_idx;
+        arch & is_root;
         arch & maybe_negative;
         arch & maybe_zero;
         arch & prefactor;
@@ -168,7 +168,7 @@ class FNode
         arch & dimension;
         arch & stats;
         arch & instruction;
-	}
+    }
 };
 
 static std::map<std::string, int> OP_PRIORITY {
@@ -220,10 +220,10 @@ class Operator
     std::string tag;
   public:
     // Serialization
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-		arch & tag;
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & tag;
+    }
 };
 
 class OIdent : public Operator
@@ -231,10 +231,10 @@ class OIdent : public Operator
   public:
     OIdent() { tag = "I"; }
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue(); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class OExp : public Operator 
@@ -245,10 +245,10 @@ class OExp : public Operator
     FNode *generate(FNode *f1);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return std::exp(fnodes[0]->getValue()); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class OLog : public Operator 
@@ -259,10 +259,10 @@ class OLog : public Operator
     FNode *generate(FNode *f1);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return std::log(fnodes[0]->getValue()); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class OMod : public Operator
@@ -273,10 +273,10 @@ class OMod : public Operator
     FNode *generate(FNode *f1);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return std::abs(fnodes[0]->getValue()); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class OSqrt : public Operator
@@ -286,10 +286,10 @@ class OSqrt : public Operator
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
     double evaluate(std::vector<FNode*> &fnodes) { return std::sqrt(fnodes[0]->getValue()); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class OInv : public Operator
@@ -299,10 +299,10 @@ class OInv : public Operator
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
     double evaluate(std::vector<FNode*> &fnodes) { return 1./fnodes[0]->getValue(); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class O2 : public Operator
@@ -312,10 +312,10 @@ class O2 : public Operator
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
     double evaluate(std::vector<FNode*> &fnodes) { return std::pow(fnodes[0]->getValue(), 2.0); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class OPlus : public Operator
@@ -326,10 +326,10 @@ class OPlus : public Operator
     FNode *generate(FNode *f1, FNode *f2);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue()+fnodes[1]->getValue(); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class OMinus : public Operator
@@ -339,10 +339,10 @@ class OMinus : public Operator
     bool checkInput(FNode *f1, FNode *f2);
     FNode *generate(FNode *f1, FNode *f2);
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue()-fnodes[1]->getValue(); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
     
 class OMult : public Operator
@@ -353,10 +353,10 @@ class OMult : public Operator
     FNode *generate(FNode *f1, FNode *f2);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue()*fnodes[1]->getValue(); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class ODiv : public Operator
@@ -366,10 +366,10 @@ class ODiv : public Operator
     bool checkInput(FNode *f1, FNode *f2);
     FNode *generate(FNode *f1, FNode *f2);
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue()/fnodes[1]->getValue(); }
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & boost::serialization::base_object<Operator>(*this);
-	}
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & boost::serialization::base_object<Operator>(*this);
+    }
 };
 
 class OP_MAP
@@ -385,11 +385,11 @@ class OP_MAP
     static OP_MAP *instance;
   public:
     // Serialization
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & op_map;
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & op_map;
         arch & instance;
-	}
+    }
 };
 
 class FGraph
@@ -428,17 +428,17 @@ class FGraph
   public:
     // Serialization
     void save(std::string archfile);
-	FGraph *load(std::string archfile);
-	template<class Archive>
-	void serialize(Archive &arch, const unsigned int version) {
-    	arch & root_fnodes;
+    FGraph *load(std::string archfile);
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & root_fnodes;
         arch & fnodes;
         arch & uop_layers;
         arch & bop_layers;
         arch & uop_map;
         arch & bop_map;
         arch & fnode_map;
-	}
+    }
 };
 
 void zscoreMatrixByColumn(matrix_t &X);
