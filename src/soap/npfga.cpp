@@ -1,11 +1,15 @@
+#include <algorithm>
+#include <assert.h>
+#include <fstream>
+#include <boost/archive/binary_oarchive.hpp>
+#include <boost/archive/binary_iarchive.hpp>
+
 #include "soap/base/tokenizer.hpp"
 #include "soap/base/exceptions.hpp"
 #include "soap/npfga.hpp"
 #include "soap/globals.hpp"
 #include "soap/linalg/numpy.hpp"
 #include "boost/format.hpp"
-#include <algorithm>
-#include <assert.h>
 
 namespace soap { namespace npfga {
 
@@ -145,7 +149,6 @@ std::string OMult::format(std::vector<std::string> &argstr) {
     }
     return expr;
 }
-
 
 bool OExp::checkInput(FNode *f1) {
     return f1->isDimensionless() 
@@ -318,17 +321,18 @@ OP_MAP::OP_MAP() {
 // =====
 
 FNode::FNode(Operator *oper, std::string varname, std::string maybe_neg,
-        std::string maybe_zero, std::string dimstr, bool is_root) 
-        : prefactor(1.0), value(0.0), instruction(NULL), 
+        std::string maybe_zero, std::string dimstr, bool is_root, double prefac) 
+        : prefactor(prefac), value(0.0), instruction(NULL), 
           op(oper), tag(varname), is_root(is_root), generation_idx(0) {
     if (maybe_neg != "+-" && maybe_neg != "+") throw soap::base::OutOfRange(maybe_neg);
     if (maybe_zero != "+0" && maybe_zero != "-0") throw soap::base::OutOfRange(maybe_zero);
     maybe_negative = (maybe_neg == "+-") ? true : false;
     maybe_zero = (maybe_zero == "+0") ? true : false;
     dimension = FNodeDimension(dimstr);
-    GLOG() << "Created " << (is_root ? "root" : "") << "node '" << varname << "': Units ";
+    GLOG() << "Created " << (is_root ? "root" : "") << "node '" << varname << "': Units= ";
     for (auto it=dimension.dim_map.begin(); it!=dimension.dim_map.end(); ++it)
         GLOG() << it->first << "^" << it->second << " ";
+    GLOG() << "  Prefactor= " << prefactor;
     GLOG() << std::endl;
 }
 
@@ -348,6 +352,12 @@ FNode::FNode(Operator *oper, FNode *par1, bool maybe_neg, bool maybe_z)
           op(oper), is_root(false) {
     parents.push_back(par1);
     generation_idx = par1->getGenerationIdx()+1;
+}
+
+FNode::FNode()
+        : prefactor(1.0), value(0.0), instruction(NULL),
+          maybe_negative(true), maybe_zero(true),
+          op(OP_MAP::get("I")), is_root(false) {
 }
 
 FNode::~FNode() {
@@ -399,6 +409,12 @@ Instruction *FNode::getOrCalculateInstruction() {
         instruction = new Instruction(op, args);
     }
     return instruction;
+}
+
+void FNode::registerPython() {
+    using namespace boost::python;
+    class_<FNode, FNode*>("FNode", init<>())
+        .add_property("expr", &FNode::getExpr);
 }
 
 // ===========
@@ -582,7 +598,7 @@ bool FNodeCheck::check(FNode* fnode) {
     return ok;
 }
 
-FGraph::FGraph() {
+FGraph::FGraph(Options &options_ref) : options(&options_ref) {
     GLOG() << "Creating FGraph" << std::endl;
     // Unary ops
     uop_map["I"] = OP_MAP::get("I"); 
@@ -604,9 +620,9 @@ FGraph::~FGraph() {
 }
 
 void FGraph::addRootNode(std::string varname, std::string maybe_neg, 
-        std::string maybe_zero, std::string unit) {
+        std::string maybe_zero, double prefactor, std::string unit) {
     bool is_root = true;
-    FNode *new_node = new FNode(uop_map["I"], varname, maybe_neg, maybe_zero, unit, is_root);
+    FNode *new_node = new FNode(uop_map["I"], varname, maybe_neg, maybe_zero, unit, is_root, prefactor);
     root_fnodes.push_back(new_node);
     this->registerNewNode(new_node);
 }
@@ -629,7 +645,9 @@ void FGraph::addLayer(std::string uops_str, std::string bops_str) {
 }
 
 void FGraph::generateLayer(op_vec_t &uops, op_vec_t &bops) {
-    FNodeCheck fnode_check(0.25, 4.0);
+    FNodeCheck fnode_check(
+        options->get<double>("unit_min_exp"), 
+        options->get<double>("unit_max_exp"));
     // Unary layer
     std::vector<FNode*> new_nodes;
     for (auto fnode : fnodes) {
@@ -703,7 +721,7 @@ void FGraph::registerNewNode(FNode *new_node) {
 }
 
 boost::python::object FGraph::applyNumpy(boost::python::object &np_input, std::string np_dtype) {
-    // TODO The copying to and from numpy causes significant delays. Find workaround.
+    // TODO The copying to and from numpy causes significant delays. Fix this.
     matrix_t input;
     soap::linalg::numpy_converter npc(np_dtype.c_str());
     npc.numpy_to_ublas<dtype_t>(np_input, input);
@@ -736,25 +754,45 @@ bpy::object FGraph::applyAndCorrelateNumpy(bpy::object &np_X, bpy::object &np_Y,
     npc.numpy_to_ublas<dtype_t>(np_X, X_in);
     npc.numpy_to_ublas<dtype_t>(np_Y, Y_in);
     matrix_t X_out = zero_matrix_t(X_in.size1(), fnodes.size());
-    //matrix_t cov_out = zero_matrix_t(fnodes.size(), Y_in.size2());
-    matrix_t cov_out = zero_matrix_t(fnodes.size(), fnodes.size()); // HACK
+    matrix_t cov_out = zero_matrix_t(fnodes.size(), Y_in.size2());
+    //matrix_t cov_out = zero_matrix_t(fnodes.size(), fnodes.size()); // HACK for speed-check
     this->applyAndCorrelate(X_in, X_out, Y_in, cov_out);
     return npc.ublas_to_numpy<dtype_t>(cov_out);
 }
 
 void FGraph::applyAndCorrelate(matrix_t &X_in, matrix_t &X_out, matrix_t &Y_in, matrix_t &cov_out) {
     this->apply(X_in, X_out);
-    //correlateMatrixColumnsPearson(X_out, Y_in, cov_out);
-    correlateMatrixColumnsPearson(X_out, X_out, cov_out); // HACK
+    correlateMatrixColumnsPearson(X_out, Y_in, cov_out);
+    //correlateMatrixColumnsPearson(X_out, X_out, cov_out); // HACK for speed-check
+}
+
+void FGraph::save(std::string archfile) {
+    std::ofstream ofs(archfile.c_str());
+    boost::archive::binary_oarchive arch(ofs);
+    arch << (*this);
+    return;
+}
+
+FGraph *FGraph::load(std::string archfile) {
+	std::ifstream ifs(archfile.c_str());
+	boost::archive::binary_iarchive arch(ifs);
+	arch >> (*this);
+	return this;
 }
 
 void FGraph::registerPython() {
     using namespace boost::python;
-    class_<FGraph>("FGraph", init<>())
+    class_<FGraph, FGraph*>("FGraph", init<Options &>())
+        .def(init<>())
         .def("addRootNode", &FGraph::addRootNode)
         .def("addLayer", &FGraph::addLayer)
         .def("generate", &FGraph::generate)
         .def("apply", &FGraph::applyNumpy)
+        .def("save", &FGraph::save)
+        .def("load", &FGraph::load, return_value_policy<reference_existing_object>())
+        .def("__len__", &FGraph::size)
+	    .def("__iter__", range<return_value_policy<reference_existing_object> >(
+            &FGraph::beginNodes, &FGraph::endNodes))
         .def("applyAndCorrelate", &FGraph::applyAndCorrelateNumpy);
 }
 
@@ -777,30 +815,27 @@ void zscoreMatrixByColumn(matrix_t &X) {
 }
 
 void correlateMatrixColumnsPearson(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out) {
-    // NOTE that this function modifies X_in and Y_in
-    std::cout << "Correlate matrices" << std::endl;
+    // NOTE This function modifies X_in and Y_in
     if ((X_in.size1() != Y_in.size1())
         || (cov_out.size1() != X_in.size2())
         || (cov_out.size2() != Y_in.size2()))
         throw soap::base::SanityCheckFailed("Inconsistent matrix dimensions");
-    std::cout << "Z-score matrices" << std::endl;
     zscoreMatrixByColumn(X_in);
     zscoreMatrixByColumn(Y_in);
-    std::cout << "Pearson" << std::endl;
     cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_in), Y_in);
-    //for (int j1=0; j1<X_in.size2(); ++j1) {
-    //    for (int j2=0; j2<Y_in.size2(); ++j2) {
-    //        cov_out(j1,j2) = 0.0;
-    //        for (int i1=0; i1<X_in.size1(); ++i1) {
-    //            cov_out(j1,j2) += X_in(i1,j1)*Y_in(i1,j2);
-    //        }
-    //        cov_out(j1,j2) /= X_in.size1();
-    //    }
-    //}
-    std::cout << "Done" << std::endl;
 }
 
 }}
 
-
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OMult);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::ODiv);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OPlus);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OMinus);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OExp);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OLog);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OMod);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OSqrt);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OInv);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::O2);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OIdent);
 

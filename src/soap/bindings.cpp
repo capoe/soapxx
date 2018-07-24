@@ -33,6 +33,7 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::AngularBasisFactory::registerAll();
     soap::CutoffFunctionFactory::registerAll();
 
+    soap::npfga::FNode::registerPython();
     soap::npfga::FGraph::registerPython();
 
     boost::python::def("silence", &soap::GLOG_SILENCE);
