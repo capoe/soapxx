@@ -8,6 +8,7 @@
 namespace soap { namespace npfga {
 
 namespace ub = boost::numeric::ublas;
+namespace bpy = boost::python;
 
 typedef double dtype_t;
 typedef ub::matrix<dtype_t> matrix_t;
@@ -15,7 +16,6 @@ typedef ub::zero_matrix<dtype_t> zero_matrix_t;
 
 class Operator;
 class FNode;
-
 
 struct Instruction
 {
@@ -288,12 +288,14 @@ class FGraph
     ~FGraph();
     void addRootNode(std::string varname, std::string varplus, 
         std::string varzero, std::string unit);
-    void generate();
-    void generateLayer(op_vec_t &uops, op_vec_t &bops);
-    void addLayer(std::string uops, std::string bops);
-    void apply(matrix_t &input, matrix_t &output);
-    boost::python::object applyNumpy(boost::python::object &np_input, std::string np_dtype);
     void registerNewNode(FNode *new_node);
+    void generate();
+    void addLayer(std::string uops, std::string bops);
+    void generateLayer(op_vec_t &uops, op_vec_t &bops);
+    void apply(matrix_t &input, matrix_t &output);
+    bpy::object applyNumpy(bpy::object &np_input, std::string np_dtype);
+    bpy::object applyAndCorrelateNumpy(bpy::object &np_X, bpy::object &np_y, std::string np_dtype);
+    void applyAndCorrelate(matrix_t &X_in, matrix_t &X_out, matrix_t &Y_in, matrix_t &cov_out);
     static void registerPython();
   private:
     std::vector<FNode*> root_fnodes;
@@ -304,6 +306,10 @@ class FGraph
     std::map<std::string, Operator*> bop_map;
     std::map<std::string, FNode*> fnode_map;
 };
+
+void zscoreMatrixByColumn(matrix_t &X);
+
+void correlateMatrixColumnsPearson(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out);
 
 }}
 

@@ -5,6 +5,7 @@
 #include "soap/linalg/numpy.hpp"
 #include "boost/format.hpp"
 #include <algorithm>
+#include <assert.h>
 
 namespace soap { namespace npfga {
 
@@ -728,13 +729,75 @@ void FGraph::apply(matrix_t &input, matrix_t &output) {
     }
 }
 
+bpy::object FGraph::applyAndCorrelateNumpy(bpy::object &np_X, bpy::object &np_Y, std::string np_dtype) {
+    matrix_t X_in;
+    matrix_t Y_in;
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    npc.numpy_to_ublas<dtype_t>(np_X, X_in);
+    npc.numpy_to_ublas<dtype_t>(np_Y, Y_in);
+    matrix_t X_out = zero_matrix_t(X_in.size1(), fnodes.size());
+    //matrix_t cov_out = zero_matrix_t(fnodes.size(), Y_in.size2());
+    matrix_t cov_out = zero_matrix_t(fnodes.size(), fnodes.size()); // HACK
+    this->applyAndCorrelate(X_in, X_out, Y_in, cov_out);
+    return npc.ublas_to_numpy<dtype_t>(cov_out);
+}
+
+void FGraph::applyAndCorrelate(matrix_t &X_in, matrix_t &X_out, matrix_t &Y_in, matrix_t &cov_out) {
+    this->apply(X_in, X_out);
+    //correlateMatrixColumnsPearson(X_out, Y_in, cov_out);
+    correlateMatrixColumnsPearson(X_out, X_out, cov_out); // HACK
+}
+
 void FGraph::registerPython() {
     using namespace boost::python;
     class_<FGraph>("FGraph", init<>())
         .def("addRootNode", &FGraph::addRootNode)
         .def("addLayer", &FGraph::addLayer)
         .def("generate", &FGraph::generate)
-        .def("apply", &FGraph::applyNumpy);
+        .def("apply", &FGraph::applyNumpy)
+        .def("applyAndCorrelate", &FGraph::applyAndCorrelateNumpy);
+}
+
+void zscoreMatrixByColumn(matrix_t &X) {
+    for (int j=0; j<X.size2(); ++j) {
+        double x_avg = 0.0;
+        double x2_avg = 0.0;
+        for (int i=0; i<X.size1(); ++i) {
+            x_avg += X(i,j);
+            x2_avg += X(i,j)*X(i,j);
+        }
+        x_avg /= X.size1();
+        x2_avg /= X.size1();
+        double x_std = std::sqrt(x2_avg - x_avg*x_avg);
+        for (int i=0; i<X.size1(); ++i) {
+            X(i,j) -= x_avg;
+            X(i,j) /= (x_std+1e-20); // TODO Make epsilon=1e-20 an option
+        }
+    }
+}
+
+void correlateMatrixColumnsPearson(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out) {
+    // NOTE that this function modifies X_in and Y_in
+    std::cout << "Correlate matrices" << std::endl;
+    if ((X_in.size1() != Y_in.size1())
+        || (cov_out.size1() != X_in.size2())
+        || (cov_out.size2() != Y_in.size2()))
+        throw soap::base::SanityCheckFailed("Inconsistent matrix dimensions");
+    std::cout << "Z-score matrices" << std::endl;
+    zscoreMatrixByColumn(X_in);
+    zscoreMatrixByColumn(Y_in);
+    std::cout << "Pearson" << std::endl;
+    cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_in), Y_in);
+    //for (int j1=0; j1<X_in.size2(); ++j1) {
+    //    for (int j2=0; j2<Y_in.size2(); ++j2) {
+    //        cov_out(j1,j2) = 0.0;
+    //        for (int i1=0; i1<X_in.size1(); ++i1) {
+    //            cov_out(j1,j2) += X_in(i1,j1)*Y_in(i1,j2);
+    //        }
+    //        cov_out(j1,j2) /= X_in.size1();
+    //    }
+    //}
+    std::cout << "Done" << std::endl;
 }
 
 }}
