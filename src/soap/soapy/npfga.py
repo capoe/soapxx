@@ -146,3 +146,48 @@ def rank_ptest(
     q_values = [ 1.-p_first_list[c] for c in range(n_channels) ]
     return cleaned, q_values, p_first_list[idcs_sorted[0]], exs[idcs_sorted[0]]
 
+def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
+    pots, rand_exs_cum, rand_exs_rank, rand_exs_rank_cum = soap.soapy.npfga.calculate_null_distribution(
+        fgraph=fgraph,
+        rand_IX_list=rand_IX_list,
+        rand_Y=rand_Y.reshape((-1,1)),
+        options=options,
+        log=log)
+    covs = fgraph.applyAndCorrelate(
+        IX,
+        Y.reshape((-1,1)),
+        str(IX.dtype))[:,0]
+    covs_abs = np.abs(covs)
+    exs = -np.average((pots+1e-10-covs_abs)/(pots+1e-10), axis=0)
+    tags = [ f.expr for f in fgraph ]
+    cleaned, q_values, p1, e1 = soap.soapy.npfga.rank_ptest(
+        tags=tags,
+        covs=covs_abs,
+        exs=exs,
+        exs_cum=rand_exs_cum,
+        rand_exs_rank=rand_exs_rank,
+        rand_exs_rank_cum=rand_exs_rank_cum,
+        q_threshold=options.confidence_threshold)
+    for fidx, fnode in enumerate(fgraph):
+        fnode.q = q_values[fidx]
+        fnode.cov = covs[fidx]
+    return tags, covs, q_values
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

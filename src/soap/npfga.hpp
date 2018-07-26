@@ -58,15 +58,15 @@ struct Instruction
 
 struct FNodeStats
 {
-    FNodeStats() : cov(-1.), p(-1.) {;}
+    FNodeStats() : cov(-1.), q(-1.) {;}
     ~FNodeStats() {;}
     double cov;
-    double p;
+    double q;
     // Serialization
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & cov;
-        arch & p;
+        arch & q;
     }
 };
 
@@ -127,10 +127,15 @@ class FNode
     Instruction *getOrCalculateInstruction();
     FNodeDimension &getDimension() { return dimension; }
     int getGenerationIdx() { return generation_idx; }
+    bool isRoot() { return is_root; }
     bool isDimensionless() { return dimension.isDimensionless(); }
     bool notNegative() { return !maybe_negative; }
     bool notZero() { return !maybe_zero; }
     double &getValue() { return value; }
+    double getConfidence() { return stats.q; }
+    double getCovariance() { return stats.cov; }
+    void setConfidence(double q_value) { stats.q = q_value; }
+    void setCovariance(double cov) { stats.cov = cov; }
     double &evaluate();
     void seed(double v) { value = prefactor*v; }
     std::vector<FNode*> &getParents() { return parents; }

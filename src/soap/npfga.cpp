@@ -249,7 +249,7 @@ FNode *O2::generate(FNode *f1) {
 
 FNode *OPlus::generate(FNode *f1, FNode *f2) {
     bool maybe_neg = !(f1->notNegative() && f2->notNegative());
-    bool maybe_zero = !(!maybe_neg && (f1->notZero() || f2->notZero()));
+    bool maybe_zero = maybe_neg;
     FNode *new_node = new FNode(this, f1, f2, maybe_neg, maybe_zero);
     new_node->getDimension().add(f1->getDimension());
     assert(new_node->getDimension().matches(f2->getDimension())); // TODO Make debug
@@ -267,7 +267,7 @@ FNode *OMinus::generate(FNode *f1, FNode *f2) {
 
 FNode *OMult::generate(FNode *f1, FNode *f2) {
     bool maybe_neg = !(f1->notNegative() && f2->notNegative());
-    bool maybe_zero = !(!maybe_neg && (f1->notZero() || f2->notZero()));
+    bool maybe_zero = !(f1->notZero() && f2->notZero());
     FNode *new_node = new FNode(this, f1, f2, maybe_neg, maybe_zero);
     new_node->getDimension().add(f1->getDimension());
     new_node->getDimension().add(f2->getDimension());
@@ -276,7 +276,7 @@ FNode *OMult::generate(FNode *f1, FNode *f2) {
 
 FNode *ODiv::generate(FNode *f1, FNode *f2) {
     bool maybe_neg = !(f1->notNegative() && f2->notNegative());
-    bool maybe_zero = false;
+    bool maybe_zero = !(f1->notZero());
     FNode *new_node = new FNode(this, f1, f2, maybe_neg, maybe_zero);
     new_node->getDimension().add(f1->getDimension());
     new_node->getDimension().subtract(f2->getDimension());
@@ -321,19 +321,19 @@ OP_MAP::OP_MAP() {
 // =====
 
 FNode::FNode(Operator *oper, std::string varname, std::string maybe_neg,
-        std::string maybe_zero, std::string dimstr, bool is_root, double prefac) 
+        std::string maybe_zero_arg, std::string dimstr, bool is_root, double prefac) 
         : prefactor(prefac), value(0.0), instruction(NULL), 
           op(oper), tag(varname), is_root(is_root), generation_idx(0) {
-    if (maybe_neg != "+-" && maybe_neg != "+") throw soap::base::OutOfRange(maybe_neg);
-    if (maybe_zero != "+0" && maybe_zero != "-0") throw soap::base::OutOfRange(maybe_zero);
+    if (maybe_neg != "+-" && maybe_neg != "+" && maybe_neg != "-") throw soap::base::OutOfRange(maybe_neg);
+    if (maybe_zero_arg != "+0" && maybe_zero_arg != "-0") throw soap::base::OutOfRange(maybe_zero_arg);
     maybe_negative = (maybe_neg == "+-") ? true : false;
-    maybe_zero = (maybe_zero == "+0") ? true : false;
+    if (maybe_neg == "-") prefactor *= -1.;
+    maybe_zero = (maybe_zero_arg == "+0") ? true : false;
     dimension = FNodeDimension(dimstr);
-    GLOG() << "Created " << (is_root ? "root" : "") << "node '" << varname << "': Units= ";
-    for (auto it=dimension.dim_map.begin(); it!=dimension.dim_map.end(); ++it)
-        GLOG() << it->first << "^" << it->second << " ";
-    GLOG() << "  Prefactor= " << prefactor;
-    GLOG() << std::endl;
+
+    GLOG() << (boost::format("Created %1$snode: %2$-30s  []=%3$-15s  pre=%4$1.2f  +0=%5$d  +-=%6$d")
+        % (is_root ? "root " : "") % varname % dimension.calculateString() 
+        % prefactor % maybe_zero % maybe_negative).str() << std::endl;
 }
 
 FNode::FNode(Operator *oper, FNode *par1, FNode *par2, bool maybe_neg, bool maybe_z)
@@ -414,7 +414,9 @@ Instruction *FNode::getOrCalculateInstruction() {
 void FNode::registerPython() {
     using namespace boost::python;
     class_<FNode, FNode*>("FNode", init<>())
-        .add_property("expr", &FNode::getExpr);
+        .add_property("expr", &FNode::getExpr)
+        .add_property("cov", &FNode::getCovariance, &FNode::setCovariance)
+        .add_property("q", &FNode::getConfidence, &FNode::setConfidence);
 }
 
 // ===========
@@ -709,7 +711,7 @@ void FGraph::registerNewNode(FNode *new_node) {
             mssg = "[dupli]";
         }
     }
-    GLOG() << (boost::format("%1$10s %2$50s == %3$-50s") 
+    if (!new_node->isRoot()) GLOG() << (boost::format("%1$10s %2$50s == %3$-50s") 
         % mssg % new_node->calculateTag() % expr) << std::endl;
     // Add node to containers or delete
     if (keep) {
