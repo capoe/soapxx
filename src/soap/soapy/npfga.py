@@ -1,5 +1,6 @@
 import numpy as np
 import soap
+from soap.soapy.math import zscore
 
 # TODO Clean this module up, split onto shorter functions
 # TODO Generic function for calculating cumulative distributions
@@ -173,18 +174,105 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
         fnode.cov = covs[fidx]
     return tags, covs, q_values
 
+def run_cov_decomposition(fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_to_idx, log):
+    roots = fnode.getRoots()
+    root_tags = [ (r.tag[2:-1] if r.tag.startswith("(-") else r.tag) for r in roots ]
+    y_norm = (Y-np.average(Y))/np.std(Y)
+    # Marginalization tuples
+    input_tuples = []
+    for size in range(len(root_tags)+1):
+        input_tuples.extend(soap.soapy.math.find_all_tuples_of_size(size, root_tags))
+    covs = []
+    # Calculated expectations
+    for tup in input_tuples:
+        rand_covs = []
+        xs = []
+        ys = []
+        for i in range(len(rand_IX_list)):
+            rand_IX = np.copy(IX)
+            for tag in tup:
+                rand_IX[:,ftag_to_idx[tag]] = rand_IX_list[i][:,ftag_to_idx[tag]]
+            rand_x = fgraph.evaluateSingleNode(fnode, rand_IX, str(rand_IX.dtype))
+            rand_x_norm = (rand_x[:,0] - np.average(rand_x[:,0]))/np.std(rand_x[:,0])
+            xs = xs + list(rand_x[:,0])
+            ys = ys + list(y_norm)
+            rand_cov = np.dot(rand_x_norm, y_norm)/y_norm.shape[0]
+            #rand_covs.append(np.abs(rand_cov))
+            rand_covs.append(rand_cov)
+        xs = np.array(xs)
+        ys = np.array(ys)
+        xs = (xs - np.average(xs))/np.std(xs)
+        ys = (ys - np.average(ys))/np.std(ys)
+        covs.append(np.average(rand_covs))
+        #covs.append(np.dot(xs,ys)/ys.shape[0])
+        print "Marginalizing over", tup, "=>", covs[-1]
+    # Solve linear system for decomposition
+    col_names = [ ":".join(tup)+":" for tup in input_tuples ]
+    # Setup linear system A*x = b and solve for x (margin terms)
+    A = np.ones((len(col_names),len(col_names))) # coeff_matrix
+    for i, tup in enumerate(input_tuples):
+        for j, col_name in enumerate(col_names):
+            zero = False
+            for tag in tup:
+                if tag+":" in col_name:
+                    zero = True
+                    break
+            if zero: A[i,j] = 0.0
+    print "Coefficient matrix"
+    print A
+    b = covs # 
+    x = np.linalg.solve(A,b)
+    order = np.argsort(x)[::-1]
+    for i in order:
+        print "%-50s = %+1.4f" % ("<rho[%s]>" % (":".join(input_tuples[i])), x[i])
+    raw_input('...')
+    return
 
-
-
-
-
-
-
-
-
-
-
-
+def run_factor_analysis(mode, fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_to_idx, log):
+    roots = fnode.getRoots()
+    root_tags = [ (r.tag[2:-1] if r.tag.startswith("(-") else r.tag) for r in roots ]
+    # Covariance for true instantiation
+    x = fgraph.evaluateSingleNode(fnode, IX, str(IX.dtype))
+    x_norm = (x[:,0]-np.average(x[:,0]))/np.std(x)
+    y_norm = (Y-np.average(Y))/np.std(Y)
+    cov = np.dot(x_norm, y_norm)/y_norm.shape[0]
+    # Null dist
+    rand_covs_base = []
+    for i in range(len(rand_IX_list)):
+        rand_x = fgraph.evaluateSingleNode(fnode, rand_IX_list[i], str(rand_IX_list[i].dtype))
+        rand_x_norm = (rand_x[:,0] - np.average(rand_x[:,0]))/np.std(rand_x[:,0])
+        rand_cov = np.dot(rand_x_norm, y_norm)/y_norm.shape[0]
+        rand_covs_base.append(np.abs(rand_cov))
+    rand_covs_base = np.array(sorted(rand_covs_base))
+    np.savetxt('out_null.txt', np.array([np.arange(len(rand_covs_base))/float(len(rand_covs_base)), rand_covs_base]).T)
+    # Analyse each factor
+    factor_map = {}
+    for root_tag in root_tags:
+        rand_covs = []
+        for i in range(len(rand_IX_list)):
+            rand_IX = np.copy(IX)
+            if mode == "randomize_this":
+                rand_IX[:,ftag_to_idx[root_tag]] = rand_IX_list[i][:,ftag_to_idx[root_tag]]
+            elif mode == "randomize_other":
+                for tag in root_tags:
+                    if tag == root_tag: pass
+                    else: rand_IX[:,ftag_to_idx[tag]] = rand_IX_list[i][:,ftag_to_idx[tag]]
+            else: raise ValueError(mode)
+            rand_x = fgraph.evaluateSingleNode(fnode, rand_IX, str(rand_IX.dtype))
+            rand_x_norm = (rand_x[:,0] - np.average(rand_x[:,0]))/np.std(rand_x[:,0])
+            rand_cov = np.dot(rand_x_norm, y_norm)/y_norm.shape[0]
+            rand_covs.append(np.abs(rand_cov))
+        # Test
+        rand_covs = np.array(sorted(rand_covs))
+        np.savetxt('out_%s_%s.txt' % (mode.split("_")[1], root_tag), np.array([np.arange(len(rand_covs))/float(len(rand_covs)), rand_covs]).T)
+        rank = np.searchsorted(rand_covs, np.abs(cov))
+        q_value = float(rank)/len(rand_covs)
+        factor_map[root_tag] = { "q_value": q_value, "min_cov": rand_covs[0], "max_cov": rand_covs[-1] }
+    for factor, r in factor_map.iteritems():
+        log << "%-50s c=%+1.4f q%-20s = %+1.4f  [random min=%1.2f max=%1.2f]" % (
+            fnode.expr, cov, "(%s)" % factor, r["q_value"], r["min_cov"], r["max_cov"]) << log.endl
+    return factor_map
+    
 
 
 

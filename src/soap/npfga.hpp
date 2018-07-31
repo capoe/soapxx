@@ -12,13 +12,15 @@
 #include "soap/options.hpp"
 
 namespace soap { namespace npfga {
+
 namespace ub = boost::numeric::ublas;
 namespace bpy = boost::python;
+class Operator;
+class FNode;
 typedef double dtype_t;
 typedef ub::matrix<dtype_t> matrix_t;
 typedef ub::zero_matrix<dtype_t> zero_matrix_t;
-class Operator;
-class FNode;
+typedef std::vector<FNode*> node_list_t;
 
 struct Instruction
 {
@@ -117,7 +119,7 @@ class FNode
   public:
     FNode();
     FNode(Operator *op, std::string varname, std::string varplus, 
-        std::string varzero, std::string dimstr, bool is_root, double prefactor);
+        std::string varzero, std::string dimstr, bool is_root, double unit_prefactor);
     FNode(Operator *op, FNode *par1, bool maybe_negative, bool maybe_zero);
     FNode(Operator *op, FNode *par1, FNode *par2, bool maybe_negative, bool maybe_zero);
     ~FNode();
@@ -128,6 +130,8 @@ class FNode
     FNodeDimension &getDimension() { return dimension; }
     int getGenerationIdx() { return generation_idx; }
     bool isRoot() { return is_root; }
+    node_list_t getRoots();
+    bpy::list getRootsPython();
     bool isDimensionless() { return dimension.isDimensionless(); }
     bool notNegative() { return !maybe_negative; }
     bool notZero() { return !maybe_zero; }
@@ -136,8 +140,9 @@ class FNode
     double getCovariance() { return stats.cov; }
     void setConfidence(double q_value) { stats.q = q_value; }
     void setCovariance(double cov) { stats.cov = cov; }
+    void seed(double v) { value = unit_prefactor*prefactor*v; }
     double &evaluate();
-    void seed(double v) { value = prefactor*v; }
+    double &evaluateRecursive();
     std::vector<FNode*> &getParents() { return parents; }
     std::string calculateDimString() { return dimension.calculateString(); }
     Operator *getOperator() { return op; }
@@ -149,6 +154,7 @@ class FNode
     bool is_root;
     bool maybe_negative;
     bool maybe_zero;
+    double unit_prefactor;
     double prefactor;
     double value;
     std::string tag;
@@ -165,6 +171,7 @@ class FNode
         arch & is_root;
         arch & maybe_negative;
         arch & maybe_zero;
+        arch & unit_prefactor;
         arch & prefactor;
         arch & value;
         arch & tag;
@@ -205,6 +212,20 @@ static std::map<std::string, bool> OP_COMMUTES {
     { "2", false }
 };
 
+static std::map<std::string, bool> OP_COMMUTES_UP_TO_SIGN {
+    { "I", false },
+    { "*", true },
+    { ":", false },
+    { "+", true },
+    { "-", true },
+    { "e", false },
+    { "l", false },
+    { "|", false },
+    { "s", false },
+    { "r", false },
+    { "2", false }
+};
+
 class Operator
 {
   public:
@@ -216,6 +237,7 @@ class Operator
     FNode *generateAndCheck(FNode *f1, FNode *f2, FNodeCheck &chk);
     virtual std::string format(std::vector<std::string> &args) { assert(false); }
     virtual double evaluate(std::vector<FNode*> &fnodes) { return -1; }
+    virtual double evaluateRecursive(std::vector<FNode*> &fnodes) { return -1; }
   protected:
     virtual bool checkInput(FNode *f1) { assert(false); }
     virtual FNode* generate(FNode *f1) { assert(false); }
@@ -236,6 +258,7 @@ class OIdent : public Operator
   public:
     OIdent() { tag = "I"; }
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue(); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return fnodes[0]->evaluateRecursive(); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -250,6 +273,7 @@ class OExp : public Operator
     FNode *generate(FNode *f1);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return std::exp(fnodes[0]->getValue()); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return std::exp(fnodes[0]->evaluateRecursive()); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -264,6 +288,7 @@ class OLog : public Operator
     FNode *generate(FNode *f1);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return std::log(fnodes[0]->getValue()); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return std::log(fnodes[0]->evaluateRecursive()); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -278,6 +303,7 @@ class OMod : public Operator
     FNode *generate(FNode *f1);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return std::abs(fnodes[0]->getValue()); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return std::abs(fnodes[0]->evaluateRecursive()); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -291,6 +317,7 @@ class OSqrt : public Operator
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
     double evaluate(std::vector<FNode*> &fnodes) { return std::sqrt(fnodes[0]->getValue()); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return std::sqrt(fnodes[0]->evaluateRecursive()); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -304,6 +331,7 @@ class OInv : public Operator
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
     double evaluate(std::vector<FNode*> &fnodes) { return 1./fnodes[0]->getValue(); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return 1./fnodes[0]->evaluateRecursive(); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -317,6 +345,7 @@ class O2 : public Operator
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
     double evaluate(std::vector<FNode*> &fnodes) { return std::pow(fnodes[0]->getValue(), 2.0); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return std::pow(fnodes[0]->evaluateRecursive(), 2.0); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -331,6 +360,7 @@ class OPlus : public Operator
     FNode *generate(FNode *f1, FNode *f2);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue()+fnodes[1]->getValue(); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return fnodes[0]->evaluateRecursive()+fnodes[1]->evaluateRecursive(); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -344,6 +374,7 @@ class OMinus : public Operator
     bool checkInput(FNode *f1, FNode *f2);
     FNode *generate(FNode *f1, FNode *f2);
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue()-fnodes[1]->getValue(); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return fnodes[0]->evaluateRecursive()-fnodes[1]->evaluateRecursive(); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -358,6 +389,7 @@ class OMult : public Operator
     FNode *generate(FNode *f1, FNode *f2);
     std::string format(std::vector<std::string> &args);
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue()*fnodes[1]->getValue(); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return fnodes[0]->evaluateRecursive()*fnodes[1]->evaluateRecursive(); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -371,6 +403,7 @@ class ODiv : public Operator
     bool checkInput(FNode *f1, FNode *f2);
     FNode *generate(FNode *f1, FNode *f2);
     double evaluate(std::vector<FNode*> &fnodes) { return fnodes[0]->getValue()/fnodes[1]->getValue(); }
+    double evaluateRecursive(std::vector<FNode*> &fnodes) { return fnodes[0]->evaluateRecursive()/fnodes[1]->evaluateRecursive(); }
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & boost::serialization::base_object<Operator>(*this);
@@ -407,18 +440,20 @@ class FGraph
     ~FGraph();
     // Methods
     void addRootNode(std::string varname, std::string varplus, 
-        std::string varzero, double prefactor, std::string unit);
+        std::string varzero, double unit_prefactor, std::string unit);
     void registerNewNode(FNode *new_node);
     void generate();
     void addLayer(std::string uops, std::string bops);
     void generateLayer(op_vec_t &uops, op_vec_t &bops);
     void apply(matrix_t &input, matrix_t &output);
+    void applyAndCorrelate(matrix_t &X_in, matrix_t &X_out, matrix_t &Y_in, matrix_t &cov_out);
+    void evaluateSingleNode(FNode *fnode, matrix_t &input, matrix_t &output);
     int size() { return fnodes.size(); }
     fgraph_it_t beginNodes() { return fnodes.begin(); } 
     fgraph_it_t endNodes() { return fnodes.end(); } 
     bpy::object applyNumpy(bpy::object &np_input, std::string np_dtype);
     bpy::object applyAndCorrelateNumpy(bpy::object &np_X, bpy::object &np_y, std::string np_dtype);
-    void applyAndCorrelate(matrix_t &X_in, matrix_t &X_out, matrix_t &Y_in, matrix_t &cov_out);
+    bpy::object evaluateSingleNodeNumpy(FNode *fnode, bpy::object &np_input, std::string np_dtype);
     static void registerPython();
   private:
     // Members

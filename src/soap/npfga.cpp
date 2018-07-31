@@ -3,6 +3,7 @@
 #include <fstream>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
+#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 
 #include "soap/base/tokenizer.hpp"
 #include "soap/base/exceptions.hpp"
@@ -321,13 +322,16 @@ OP_MAP::OP_MAP() {
 // =====
 
 FNode::FNode(Operator *oper, std::string varname, std::string maybe_neg,
-        std::string maybe_zero_arg, std::string dimstr, bool is_root, double prefac) 
-        : prefactor(prefac), value(0.0), instruction(NULL), 
+        std::string maybe_zero_arg, std::string dimstr, bool is_root, double unit_prefac) 
+        : unit_prefactor(unit_prefac), prefactor(1.0), value(0.0), instruction(NULL), 
           op(oper), tag(varname), is_root(is_root), generation_idx(0) {
     if (maybe_neg != "+-" && maybe_neg != "+" && maybe_neg != "-") throw soap::base::OutOfRange(maybe_neg);
     if (maybe_zero_arg != "+0" && maybe_zero_arg != "-0") throw soap::base::OutOfRange(maybe_zero_arg);
     maybe_negative = (maybe_neg == "+-") ? true : false;
-    if (maybe_neg == "-") prefactor *= -1.;
+    if (maybe_neg == "-") {
+        unit_prefactor *= -1.;
+        tag = "(-"+tag+")";
+    }
     maybe_zero = (maybe_zero_arg == "+0") ? true : false;
     dimension = FNodeDimension(dimstr);
 
@@ -337,7 +341,7 @@ FNode::FNode(Operator *oper, std::string varname, std::string maybe_neg,
 }
 
 FNode::FNode(Operator *oper, FNode *par1, FNode *par2, bool maybe_neg, bool maybe_z)
-        : prefactor(1.0), value(0.0), instruction(NULL), 
+        : unit_prefactor(1.0), prefactor(1.0), value(0.0), instruction(NULL), 
           maybe_negative(maybe_neg), maybe_zero(maybe_z), 
           op(oper), is_root(false) {
     parents.push_back(par1);
@@ -347,7 +351,7 @@ FNode::FNode(Operator *oper, FNode *par1, FNode *par2, bool maybe_neg, bool mayb
 }
 
 FNode::FNode(Operator *oper, FNode *par1, bool maybe_neg, bool maybe_z)
-        : prefactor(1.0), value(0.0), instruction(NULL), 
+        : unit_prefactor(1.0), prefactor(1.0), value(0.0), instruction(NULL), 
           maybe_negative(maybe_neg), maybe_zero(maybe_z), 
           op(oper), is_root(false) {
     parents.push_back(par1);
@@ -355,8 +359,8 @@ FNode::FNode(Operator *oper, FNode *par1, bool maybe_neg, bool maybe_z)
 }
 
 FNode::FNode()
-        : prefactor(1.0), value(0.0), instruction(NULL),
-          maybe_negative(true), maybe_zero(true),
+        : unit_prefactor(1.0), prefactor(1.0), value(0.0), 
+          instruction(NULL), maybe_negative(true), maybe_zero(true),
           op(OP_MAP::get("I")), is_root(false) {
 }
 
@@ -364,8 +368,41 @@ FNode::~FNode() {
     if (instruction) delete instruction;
 }
 
+node_list_t FNode::getRoots() {
+    std::map<FNode*, bool> roots;
+    if (is_root) {
+        roots[this] = true;
+    } else {
+        for (auto par: parents) {
+            node_list_t list = par->getRoots();
+            for (auto node: list) {
+                roots[node] = true;
+            }
+        }
+    }
+    node_list_t out;
+    for (auto it=roots.begin(); it!=roots.end(); ++it)
+        out.push_back(it->first);
+    return out;
+}
+
+boost::python::list FNode::getRootsPython() {
+    node_list_t roots = this->getRoots();
+    boost::python::list list;
+    for (auto root: roots) list.append(root);
+    return list;
+}
+
 double &FNode::evaluate() {
-    value = prefactor*op->evaluate(parents);
+    // TODO Make sure this function is not called on root nodes
+    value = unit_prefactor*prefactor*op->evaluate(parents);
+    return value;
+}
+
+double &FNode::evaluateRecursive() {
+    // TODO Make sure this function is not called on root nodes
+    if (is_root) ;
+    else value = unit_prefactor*prefactor*op->evaluateRecursive(parents);
     return value;
 }
 
@@ -400,7 +437,7 @@ Instruction *FNode::getOrCalculateInstruction() {
         ;
     }
     else if (is_root) {
-        instruction = new Instruction(op, tag, 1.0, 1.0);
+        instruction = new Instruction(op, tag, 1.0, prefactor);
     } else {
         std::vector<Instruction*> args;
         for (auto p: parents) args.push_back(p->getOrCalculateInstruction());
@@ -414,6 +451,8 @@ Instruction *FNode::getOrCalculateInstruction() {
 void FNode::registerPython() {
     using namespace boost::python;
     class_<FNode, FNode*>("FNode", init<>())
+        .def("getRoots", &FNode::getRootsPython)
+        .add_property("tag", &FNode::calculateTag)
         .add_property("expr", &FNode::getExpr)
         .add_property("cov", &FNode::getCovariance, &FNode::setCovariance)
         .add_property("q", &FNode::getConfidence, &FNode::setConfidence);
@@ -561,7 +600,7 @@ std::string Instruction::stringify(std::string format) {
             if (is_root || (OP_PRIORITY["*"] <= OP_PRIORITY[op->getTag()]) )
                 expr = (boost::format("%1$s%2$s%3$s") % prestr % expr % powstr).str();
             else
-            expr = (boost::format("%1$s(%2$s)%3$s") % prestr % expr % powstr).str();
+                expr = (boost::format("%1$s(%2$s)%3$s") % prestr % expr % powstr).str();
     }
     if (format != "") expr = (boost::format(format) % expr).str();
     return expr;
@@ -622,9 +661,9 @@ FGraph::~FGraph() {
 }
 
 void FGraph::addRootNode(std::string varname, std::string maybe_neg, 
-        std::string maybe_zero, double prefactor, std::string unit) {
+        std::string maybe_zero, double unit_prefactor, std::string unit) {
     bool is_root = true;
-    FNode *new_node = new FNode(uop_map["I"], varname, maybe_neg, maybe_zero, unit, is_root, prefactor);
+    FNode *new_node = new FNode(uop_map["I"], varname, maybe_neg, maybe_zero, unit, is_root, unit_prefactor);
     root_fnodes.push_back(new_node);
     this->registerNewNode(new_node);
 }
@@ -670,6 +709,10 @@ void FGraph::generateLayer(op_vec_t &uops, op_vec_t &bops) {
             for (it2=it1+1; it2!=fnodes.end(); ++it2) {
                 FNode *new_node = bop->generateAndCheck(*it1, *it2, fnode_check);
                 if (new_node != NULL) new_nodes.push_back(new_node);
+                if (!OP_COMMUTES_UP_TO_SIGN[bop->getTag()]) {
+                    new_node = bop->generateAndCheck(*it2, *it1, fnode_check);
+                    if (new_node != NULL) new_nodes.push_back(new_node);
+                }
             }
         }
     }
@@ -749,6 +792,29 @@ void FGraph::apply(matrix_t &input, matrix_t &output) {
     }
 }
 
+boost::python::object FGraph::evaluateSingleNodeNumpy(
+        FNode *fnode, 
+        boost::python::object &np_input, 
+        std::string np_dtype) {
+    matrix_t input;
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    npc.numpy_to_ublas<dtype_t>(np_input, input);
+    matrix_t output = zero_matrix_t(input.size1(), 1);
+    this->evaluateSingleNode(fnode, input, output);
+    return npc.ublas_to_numpy<dtype_t>(output);
+}
+
+void FGraph::evaluateSingleNode(FNode *fnode, matrix_t &input, matrix_t &output) {
+    assert(input.size2() == root_fnodes.size() && "Input size inconsistent with graph");
+    assert(output.size2() == 1 && "Input size inconsistent with graph");
+    for (int i=0; i<input.size1(); ++i) {
+        for (int r=0; r<root_fnodes.size(); ++r) {
+            root_fnodes[r]->seed(input(i,r));
+        }
+        output(i,0) = fnode->evaluateRecursive();
+    }
+}
+
 bpy::object FGraph::applyAndCorrelateNumpy(bpy::object &np_X, bpy::object &np_Y, std::string np_dtype) {
     matrix_t X_in;
     matrix_t Y_in;
@@ -789,12 +855,13 @@ void FGraph::registerPython() {
         .def("addRootNode", &FGraph::addRootNode)
         .def("addLayer", &FGraph::addLayer)
         .def("generate", &FGraph::generate)
-        .def("apply", &FGraph::applyNumpy)
         .def("save", &FGraph::save)
         .def("load", &FGraph::load, return_value_policy<reference_existing_object>())
         .def("__len__", &FGraph::size)
         .def("__iter__", range<return_value_policy<reference_existing_object> >(
             &FGraph::beginNodes, &FGraph::endNodes))
+        .def("evaluateSingleNode", &FGraph::evaluateSingleNodeNumpy)
+        .def("apply", &FGraph::applyNumpy)
         .def("applyAndCorrelate", &FGraph::applyAndCorrelateNumpy);
 }
 
