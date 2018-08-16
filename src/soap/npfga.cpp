@@ -393,6 +393,12 @@ boost::python::list FNode::getRootsPython() {
     return list;
 }
 
+boost::python::list FNode::getParentsPython() {
+    boost::python::list list;
+    for (auto par: parents) list.append(par);
+    return list;
+}
+
 double &FNode::evaluate() {
     // TODO Make sure this function is not called on root nodes
     value = unit_prefactor*prefactor*op->evaluate(parents);
@@ -452,6 +458,9 @@ void FNode::registerPython() {
     using namespace boost::python;
     class_<FNode, FNode*>("FNode", init<>())
         .def("getRoots", &FNode::getRootsPython)
+        .def("getParents", &FNode::getParentsPython)
+        .add_property("generation", &FNode::getGenerationIdx)
+        .add_property("is_root", &FNode::isRoot)
         .add_property("tag", &FNode::calculateTag)
         .add_property("expr", &FNode::getExpr)
         .add_property("cov", &FNode::getCovariance, &FNode::setCovariance)

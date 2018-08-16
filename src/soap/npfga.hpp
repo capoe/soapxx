@@ -144,6 +144,7 @@ class FNode
     double &evaluate();
     double &evaluateRecursive();
     std::vector<FNode*> &getParents() { return parents; }
+    bpy::list getParentsPython();
     std::string calculateDimString() { return dimension.calculateString(); }
     Operator *getOperator() { return op; }
     bool containsOperator(std::string optag);
