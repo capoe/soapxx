@@ -149,7 +149,6 @@ def rank_ptest(
         exs_cum, 
         rand_exs_rank, 
         rand_exs_rank_cum, 
-        q_threshold, # lower confidence threshold
         file_out=False):
     n_channels = exs.shape[0]
     idcs_sorted = np.argsort(exs)[::-1]
@@ -254,8 +253,7 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
         exs=exs,
         exs_cum=ranks_Cx1,
         rand_exs_rank=null_exs_SxC,
-        rand_exs_rank_cum=ranks_Sx1,
-        q_threshold=options.confidence_threshold)
+        rand_exs_rank_cum=ranks_Sx1)
     for fidx, fnode in enumerate(fgraph):
         fnode.q = q_values[fidx]
         fnode.cov = covs[fidx]
