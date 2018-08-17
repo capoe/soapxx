@@ -33,9 +33,102 @@ class PyFGraph(object):
         ranked = sorted(self.fnodes, key=key)
         for idx, r in enumerate(ranked):
             r.rank = scores_cum[idx]/scores_cum[-1]*key(r)
-            print r.rank
-            #r.rank = float(idx+1)/len(ranked)
         return
+
+class PyFGraphStats(object):
+    def __init__(self, tags, covs, exs, q_values, q_values_nth, null_exs, null_covs, cov_tail_scaling_fct):
+        self.n_samples = null_exs.shape[0]
+        self.n_channels = null_exs.shape[1]
+        self.tags = tags
+        self.covs = covs
+        self.exs = exs
+        self.q_values = np.array(q_values)
+        self.q_values_nth = np.array(q_values_nth)
+        self.null_exs = null_exs # matrix of size SxC (samples by channels)
+        self.null_covs = null_covs # matrix of size SxC
+        self.cov_tail_scaling_fct = cov_tail_scaling_fct
+        self.order = np.argsort(-np.abs(self.covs))
+        self.evaluateTopNode()
+    def evaluateTopNode(self):
+        self.top_idx = self.order[0]
+        self.top_tag = self.tags[self.top_idx]
+        self.top_cov = self.covs[self.top_idx]
+        self.top_q = self.q_values[self.top_idx]
+        self.top_exceedence = self.exs[self.top_idx]
+        self.top_avg_null_exceedence = np.average(self.null_exs[:,0])
+        self.top_rho_harm = np.abs(self.top_cov)/(1.+self.top_exceedence)
+        self.top_avg_null_cov = self.top_cov*(1.+self.top_avg_null_exceedence)/(1.+self.top_exceedence)
+        self.percentiles = np.arange(0,110,10)
+        self.top_avg_null_exc_percentiles = [ np.percentile(self.null_exs[:,0], p) for p in self.percentiles ]
+        self.top_avg_null_cov_percentiles = [ self.top_cov*(1.+e)/(1.+self.top_exceedence) for e in self.top_avg_null_exc_percentiles ]
+        return
+    def calculateExpectedCovExceedence(self, outfile=None, log=None):
+        if outfile: ofs = open(outfile, 'w')
+        else: ofs = None
+        xcov_ex_1st_list = []
+        xcov_ex_nth_list = []
+        for r in range(self.n_channels):
+            cov_ex_1st = self.calculateExpectedCovExceedenceRank(rank=r, rank_null=0)
+            cov_ex_nth = self.calculateExpectedCovExceedenceRank(rank=r, rank_null=r)
+            q1 = self.q_values[self.order[r]]
+            qr = self.q_values_nth[self.order[r]]
+            xcov_ex_1st_list.append(q1*cov_ex_nth)
+            xcov_ex_nth_list.append(qr*cov_ex_nth)
+            if ofs: ofs.write("%1.4f %1.4f %1.4f %1.4f %1.4f %1.4f %s\n" % (
+                q1*cov_ex_1st,
+                qr*cov_ex_nth,
+                q1,
+                qr,
+                cov_ex_1st,
+                cov_ex_nth,
+                self.tags[self.order[r]]))
+        if ofs: ofs.close()
+        excov_order = np.argsort(xcov_ex_nth_list)[::-1]
+        top = excov_order[0]
+        if log: log << "Max xcov observed: x=%+1.4f @ %s" % (
+            xcov_ex_nth_list[top], self.tags[self.order[top]]) << "(cov-rank=%d)" % top << log.endl
+        return xcov_ex_1st_list, xcov_ex_nth_list
+    def calculateExpectedCovExceedenceRank(self, rank, rank_null=0):
+        idx = self.order[rank]
+        cov = np.abs(self.covs[idx])
+        exc = self.exs[idx]
+        avg_null_exceedence = np.average(self.null_exs[:,rank_null])
+        rho_harm = cov/(1.+exc) # harmonic tail cov for this channel
+        avg_null_cov = cov*(1.+avg_null_exceedence)/(1.+exc)
+        return cov-avg_null_cov
+    def summarize(self, log):
+        log << "Top-ranked node: '%s'" % (self.top_tag) << log.endl
+        log << "  [phys]   cov  = %+1.4f     exc  = %+1.4f     q = %1.4f" % (self.top_cov, self.top_exceedence, self.top_q) << log.endl
+        log << "  [null]  <cov> = %+1.4f    <exc> = %+1.4f" % (self.top_avg_null_cov, self.top_avg_null_exceedence) << log.endl
+        log << "Percentiles"
+        for idx, p in enumerate(self.percentiles):
+            log << "  [null] p = %1.2f  <cov>_p = %+1.4f  <exc>_p = %+1.4f" % (
+                0.01*p, self.top_avg_null_cov_percentiles[idx], self.top_avg_null_exc_percentiles[idx]) << log.endl
+        cidx = np.argmax(np.abs(self.covs))
+        eidx = np.argmax(self.exs)
+        qidx = np.argmax(self.q_values)
+        log << "Max cov observed: c=%+1.4f @ %s" % (self.covs[cidx], self.tags[cidx]) << log.endl
+        log << "Max exc observed: e=%+1.4f @ %s" % (self.exs[eidx], self.tags[eidx]) << log.endl
+        log << "Max prb observed: q=%+1.4f @ %s" % (self.q_values[qidx], self.tags[qidx]) << log.endl
+        return
+    def tabulateExceedence(self, outfile):
+        percentiles = np.arange(0, 110, 10)
+        null_exs_percentiles = []
+        for p in percentiles:
+            null_exs_percentiles.append(np.percentile(self.null_exs, p, axis=0))
+        null_exs_percentiles = np.array(null_exs_percentiles).T
+        ranks = np.arange(len(self.exs))+1.
+        ranks = ranks/ranks[-1]
+        ofs = open(outfile, 'w')
+        ofs.write('# rank exs null@' + ' null@'.join(map(str, percentiles)) + '\n')
+        chunk = np.concatenate([ ranks.reshape((-1,1)), np.sort(self.exs)[::-1].reshape((-1,1)), null_exs_percentiles ], axis=1)
+        np.savetxt(ofs, chunk)
+        ofs.close()
+        return
+    def getChannelNullCovDist(self, channel_idx, ofs=None):
+        dist = np.array([ 1.-np.arange(self.n_samples)/float(self.n_samples), self.null_covs[:,channel_idx]]).T
+        if ofs: np.savetxt(ofs, dist)
+        return dist
 
 class PyFNode(object):
     def __init__(self, fnode):
@@ -50,6 +143,28 @@ class PyFNode(object):
         self.rank = -1
     def resolveParents(self, fnode_map):
         self.parents = [ fnode_map[p.expr] for p in self.parents_ ]
+
+class CovTailScalingFct(object):
+    def __init__(self, null_covs, tail_fraction):
+        # <null_covs>: matrix SxC (#samples x #channels)
+        from scipy.optimize import curve_fit
+        def scaling_fct(x, a): return x**a
+        p0_covs = np.percentile(null_covs, 100*(1.-2.0*tail_fraction), axis=0)
+        p1_covs = np.percentile(null_covs, 100*(1.-1.0*tail_fraction), axis=0)
+        #popt1, pcov1 = curve_fit(scaling_fct, p2_covs, p1_covs)
+        #popt3, pcov3 = curve_fit(scaling_fct, p2_covs, p3_covs)
+        self.tail_weight = (1.-p0_covs)/(1.-p1_covs)
+    def __call__(self, x):
+        return 1. #self.tail_weight
+
+def calculate_exceedence(covs_harm, covs_sample, epsilon=1e-10, scale_fct=lambda c: c):
+    # C = # channels
+    # covs_harm: vec of length C
+    # covs_sample: vec of length C
+    # exs: vec of length C
+    exs = (covs_sample-covs_harm)/(covs_harm)
+    exs = exs*scale_fct(covs_sample)
+    return exs
 
 def generate_graph(
         features_with_props, 
@@ -97,6 +212,8 @@ def calculate_null_distribution(
     # Sort covariance observations for each channel
     rand_covs = np.abs(rand_covs)
     rand_covs = np.sort(rand_covs, axis=0)
+    # Fit scaling function
+    cov_scaling_fct = CovTailScalingFct(rand_covs, options.tail_fraction)
     # Cumulative distribution for each channel
     rand_cum = np.ones((n_samples,1), dtype=npfga_dtype)
     rand_cum = np.cumsum(rand_cum, axis=0)
@@ -115,11 +232,13 @@ def calculate_null_distribution(
     # Peaks over threshold: calculate excesses for random samples
     log << "Calculating excess for random samples" << log.endl
     pots = rand_covs[i_threshold:n_samples,:]
+    pots = pots.shape[0]/np.sum(1./(pots+1e-10), axis=0) # harmonic average
     rand_exs_mat = np.zeros((n_samples,n_channels), dtype=npfga_dtype)
     for s in range(n_samples):
         log << log.back << "- Sample %d/%d" % (s+1, n_samples) << log.flush
         rand_cov_sample = rand_cov_mat[s]
-        exs = -np.average((pots+1e-10-rand_cov_sample)/(pots+1e-10), axis=0)
+        exs = calculate_exceedence(pots, rand_cov_sample, scale_fct=cov_scaling_fct)
+        #exs = -np.average((pots+1e-10-rand_cov_sample)/(pots+1e-10), axis=0)
         rand_exs_mat[s,:] = exs
     # Random excess distributions
     rand_exs = np.sort(rand_exs_mat, axis=1) # n_samples x n_channels
@@ -129,7 +248,11 @@ def calculate_null_distribution(
     rand_exs_cum = rand_exs_cum[::-1,:]
     rand_exs_avg = np.average(rand_exs, axis=0)
     rand_exs_std = np.std(rand_exs, axis=0)
-    # Rank distributions
+    # Rank distributions: covariance
+    rand_covs_rank = np.sort(rand_cov_mat, axis=1)
+    rand_covs_rank = np.sort(rand_covs_rank, axis=0)
+    rand_covs_rank = rand_covs_rank[:,::-1]
+    # Rank distributions: exceedence
     rand_exs_rank = np.sort(rand_exs, axis=0) # n_samples x n_channels
     rand_exs_rank = rand_exs_rank[:,::-1]
     rand_exs_rank_cum = np.ones((n_samples,1), dtype=npfga_dtype) # n_samples x 1
@@ -140,7 +263,7 @@ def calculate_null_distribution(
     # ... Histogram
     if file_out: np.savetxt('out_exs_rand.txt', np.array([rand_exs_cum[:,0], rand_exs_avg, rand_exs_std]).T)
     log << log.endl
-    return pots, rand_exs_cum, rand_exs_rank, rand_exs_rank_cum
+    return pots, rand_exs_cum, rand_exs_rank_cum, rand_exs_rank, rand_covs_rank, rand_covs, cov_scaling_fct
 
 def rank_ptest(
         tags,
@@ -191,50 +314,9 @@ def rank_ptest(
     q_values_nth = [ 1.-p_rank_list[c] for c in range(n_channels) ]
     return q_values, q_values_nth
 
-class PyFGraphStats(object):
-    def __init__(self, tags, covs, exs, q_values, q_values_nth, null_exs):
-        self.tags = tags
-        self.covs = covs
-        self.exs = exs
-        self.q_values = np.array(q_values)
-        self.q_values_nth = np.array(q_values_nth)
-        self.null_exs = null_exs # matrix of size SxC (samples by channels)
-        self.order = np.argsort(-np.abs(self.covs))
-        self.evaluateTopNode()
-    def evaluateTopNode(self):
-        self.top_idx = self.order[0]
-        self.top_tag = self.tags[self.top_idx]
-        self.top_cov = self.covs[self.top_idx]
-        self.top_q = self.q_values[self.top_idx]
-        self.top_exceedence = self.exs[self.top_idx]
-        self.top_avg_null_exceedence = np.average(self.null_exs[:,0])
-        self.top_rho_harm = np.abs(self.top_cov)/(1.+self.top_exceedence)
-        self.top_avg_null_cov = self.top_cov*(1.+self.top_avg_null_exceedence)/(1.+self.top_exceedence)
-        self.percentiles = np.arange(0,110,10)
-        self.top_avg_null_exc_percentiles = [ np.percentile(self.null_exs[:,0], p) for p in self.percentiles ]
-        self.top_avg_null_cov_percentiles = [ self.top_cov*(1.+e)/(1.+self.top_exceedence) for e in self.top_avg_null_exc_percentiles ]
-        return
-    def calculateExpectedCovExceedence(self, rank, rank_null=0):
-        idx = self.order[rank]
-        cov = np.abs(self.covs[idx])
-        exc = self.exs[idx]
-        avg_null_exceedence = np.average(self.null_exs[:,rank_null])
-        rho_harm = cov/(1.+exc) # harmonic tail cov for this channel
-        avg_null_cov = cov*(1.+avg_null_exceedence)/(1.+exc)
-        return cov-avg_null_cov
-    def summarize(self, log):
-        log << "Top-ranked node: '%s'" % (self.top_tag) << log.endl
-        log << "  [phys]   cov  = %+1.4f     exc  = %+1.4f     q = %1.4f" % (self.top_cov, self.top_exceedence, self.top_q) << log.endl
-        log << "  [null]  <cov> = %+1.4f    <exc> = %+1.4f" % (self.top_avg_null_cov, self.top_avg_null_exceedence) << log.endl
-        log << "Percentiles"
-        for idx, p in enumerate(self.percentiles):
-            log << "  [null] p = %1.2f  <cov>_p = %+1.4f  <exc>_p = %+1.4f" % (
-                0.01*p, self.top_avg_null_cov_percentiles[idx], self.top_avg_null_exc_percentiles[idx]) << log.endl
-        return
-
 def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
-    # C = #channels, S = #samples, T = tail length
-    pots_TxC, ranks_Cx1, null_exs_SxC, ranks_Sx1 = soap.soapy.npfga.calculate_null_distribution(
+    # C = #channels, S = #samples
+    pots_1xC, ranks_Cx1, ranks_Sx1, null_exs_SxC, null_order_covs_SxC, null_covs_SxC, cov_scaling_fct = soap.soapy.npfga.calculate_null_distribution(
         fgraph=fgraph,
         rand_IX_list=rand_IX_list,
         rand_Y=rand_Y.reshape((-1,1)),
@@ -244,10 +326,19 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
         IX,
         Y.reshape((-1,1)),
         str(IX.dtype))[:,0]
-    covs_abs = np.abs(covs)
-    exs = -np.average((pots_TxC+1e-10-covs_abs)/(pots_TxC+1e-10), axis=0)
     tags = [ f.expr for f in fgraph ]
-    q_values, q_values_nth = soap.soapy.npfga.rank_ptest(
+    # Test statistic: abs(cov)
+    covs_abs = np.abs(covs)
+    cq_values, cq_values_nth = soap.soapy.npfga.rank_ptest(
+        tags=tags,
+        covs=covs_abs,
+        exs=covs_abs,
+        exs_cum=ranks_Cx1,
+        rand_exs_rank=null_order_covs_SxC,
+        rand_exs_rank_cum=ranks_Sx1)
+    # Test statistic: exs(cov)
+    exs = calculate_exceedence(pots_1xC, covs_abs, scale_fct=cov_scaling_fct)
+    xq_values, xq_values_nth = soap.soapy.npfga.rank_ptest(
         tags=tags,
         covs=covs_abs,
         exs=exs,
@@ -255,9 +346,11 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
         rand_exs_rank=null_exs_SxC,
         rand_exs_rank_cum=ranks_Sx1)
     for fidx, fnode in enumerate(fgraph):
-        fnode.q = q_values[fidx]
+        fnode.q = xq_values[fidx]
         fnode.cov = covs[fidx]
-    return tags, covs, q_values, PyFGraphStats(tags, covs, exs, q_values, q_values_nth, null_exs_SxC)
+    cstats = PyFGraphStats(tags, covs, covs_abs, cq_values, cq_values_nth, null_order_covs_SxC, null_covs_SxC, cov_scaling_fct)
+    xstats = PyFGraphStats(tags, covs, exs, xq_values, xq_values_nth, null_exs_SxC, null_covs_SxC, cov_scaling_fct)
+    return tags, covs, cq_values, xq_values, cstats, xstats
 
 def run_cov_decomposition(fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_to_idx, log):
     roots = fnode.getRoots()
@@ -445,7 +538,86 @@ def represent_graph_2d(fgraph):
     curves = sorted(curves, key=lambda c: c[0][-1])
     return fgraph, curves
 
+class RandomizeMatrix(object):
+    def __init__(self, method):
+        self.method = method
+    def sample(self, X, n_samples, seed=None, log=None):
+        rnd_X_list = []
+        if seed != None: np.random.seed(seed)
+        if self.method == "perm_within_cols":
+            for i in range(n_samples):
+                if log: log << log.back << "Random feature set" << i << log.flush
+                rnd_X = np.copy(X)
+                for col in range(X.shape[1]):
+                    np.random.shuffle(rnd_X[:,col])
+                rnd_X_list.append(rnd_X)
+        elif self.method == "perm_rows":
+            for i in range(n_samples):
+                if log: log << log.back << "Random feature set" << i << log.flush
+                rnd_X = np.copy(X)
+                np.random.shuffle(rnd_X)
+                rnd_X_list.append(rnd_X)
+        else: raise ValueError(self.method)
+        if log: log << log.endl
+        return rnd_X_list
 
+class CVLOO(object):
+    def __init__(self, state, options):
+        self.tag = "cv_loo"
+        self.n_samples = len(state)
+        self.n_reps = len(state)
+        self.step = 0
+    def next(self):
+        assert not self.isDone()
+        info = "%s_i%03d" % (self.tag, self.step)
+        idcs_train = list(np.arange(self.step)) + list(np.arange(self.step+1, self.n_samples))
+        idcs_test = [ self.step ]
+        self.step += 1
+        return info, idcs_train, idcs_test
+    def isDone(self):
+        return self.step >= self.n_reps
 
+class CVMC(object):
+    def __init__(self, state, options):
+        self.tag = "cv_mc"
+        self.n_samples = len(state)
+        self.n_reps = options.n_mccv
+        self.f_mccv = options.f_mccv
+        self.step = 0
+    def next(self):
+        assert not self.isDone()
+        info = "%s_i%03d" % (self.tag, self.step)
+        idcs = np.arange(self.n_samples)
+        np.random.shuffle(idcs)
+        split_at = int(self.f_mccv*self.n_samples)
+        idcs_train = idcs[0:split_at]
+        idcs_test = idcs[split_at:]
+        self.step += 1
+        return info, idcs_train, idcs_test
+    def isDone(self):
+        return self.step >= self.n_reps
+
+class CVNone(object):
+    def __init__(self, state, options):
+        self.tag = "cv_no"
+        self.n_samples = len(state)
+        self.n_reps = 1
+        self.step = 0
+    def next(self):
+        assert not self.isDone()
+        info = "%s_i%03d" % (self.tag, self.step)
+        idcs_train = np.arange(self.n_samples)
+        idcs_test = []
+        self.step += 1
+        return info, idcs_train, idcs_test
+    def isDone(self):
+        return self.step >= self.n_reps
+        
+
+cv_iterator = {
+  "loo": CVLOO,
+  "mc": CVMC,
+  "none": CVNone
+}
 
 
