@@ -677,6 +677,13 @@ void FGraph::addRootNode(std::string varname, std::string maybe_neg,
     this->registerNewNode(new_node);
 }
 
+boost::python::list FGraph::getRootsPython() {
+    node_list_t roots = this->getRoots();
+    boost::python::list list;
+    for (auto root: roots) list.append(root);
+    return list;
+}
+
 void FGraph::addLayer(std::string uops_str, std::string bops_str) {
     op_vec_t uop_layer;
     op_vec_t bop_layer;
@@ -862,6 +869,7 @@ void FGraph::registerPython() {
     class_<FGraph, FGraph*>("FGraph", init<Options &>())
         .def(init<>())
         .def("addRootNode", &FGraph::addRootNode)
+        .def("getRoots", &FGraph::getRootsPython)
         .def("addLayer", &FGraph::addLayer)
         .def("generate", &FGraph::generate)
         .def("save", &FGraph::save)

@@ -442,6 +442,8 @@ class FGraph
     // Methods
     void addRootNode(std::string varname, std::string varplus, 
         std::string varzero, double unit_prefactor, std::string unit);
+    node_list_t &getRoots() { return root_fnodes; }
+    bpy::list getRootsPython();
     void registerNewNode(FNode *new_node);
     void generate();
     void addLayer(std::string uops, std::string bops);

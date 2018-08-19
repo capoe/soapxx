@@ -314,7 +314,23 @@ def rank_ptest(
     q_values_nth = [ 1.-p_rank_list[c] for c in range(n_channels) ]
     return q_values, q_values_nth
 
+def resample_IX_Y(IX, Y, n):
+    for i in range(n):
+        idcs = np.random.randint(0, IX.shape[0], size=(IX.shape[0],))
+        yield i, IX[idcs], Y[idcs]
+    return
+
+def resample_range(start, end, n):
+    for i in range(n):
+        idcs = np.random.randint(start, end, size=(end-start,))
+        yield i, idcs
+    return
+        
+
 def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
+    """
+    Required options fields: bootstrap, tail_fraction
+    """
     # C = #channels, S = #samples
     pots_1xC, ranks_Cx1, ranks_Sx1, null_exs_SxC, null_order_covs_SxC, null_covs_SxC, cov_scaling_fct = soap.soapy.npfga.calculate_null_distribution(
         fgraph=fgraph,
@@ -322,68 +338,68 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
         rand_Y=rand_Y.reshape((-1,1)),
         options=options,
         log=log)
-    covs = fgraph.applyAndCorrelate(
-        IX,
-        Y.reshape((-1,1)),
-        str(IX.dtype))[:,0]
-    tags = [ f.expr for f in fgraph ]
-    # Test statistic: abs(cov)
-    covs_abs = np.abs(covs)
-    cq_values, cq_values_nth = soap.soapy.npfga.rank_ptest(
-        tags=tags,
-        covs=covs_abs,
-        exs=covs_abs,
-        exs_cum=ranks_Cx1,
-        rand_exs_rank=null_order_covs_SxC,
-        rand_exs_rank_cum=ranks_Sx1)
-    # Test statistic: exs(cov)
-    exs = calculate_exceedence(pots_1xC, covs_abs, scale_fct=cov_scaling_fct)
-    xq_values, xq_values_nth = soap.soapy.npfga.rank_ptest(
-        tags=tags,
-        covs=covs_abs,
-        exs=exs,
-        exs_cum=ranks_Cx1,
-        rand_exs_rank=null_exs_SxC,
-        rand_exs_rank_cum=ranks_Sx1)
+    # Bootstrap
+    data_iterator = resample_IX_Y(IX, Y, options.bootstrap) if options.bootstrap > 0 else zip([0], [IX], [Y])
+    n_resamples = options.bootstrap if options.bootstrap > 0 else 1
+    cov_samples    = np.zeros((len(fgraph),n_resamples), dtype=IX.dtype)
+    exs_samples    = np.zeros((len(fgraph),n_resamples), dtype=IX.dtype)
+    cq_samples     = np.zeros((len(fgraph),n_resamples), dtype=IX.dtype)
+    cq_samples_nth = np.zeros((len(fgraph),n_resamples), dtype=IX.dtype)
+    xq_samples     = np.zeros((len(fgraph),n_resamples), dtype=IX.dtype)
+    xq_samples_nth = np.zeros((len(fgraph),n_resamples), dtype=IX.dtype)
+    for sample_idx, IX_i, Y_i in data_iterator:
+        if log: log << log.back << "Resampling idx" << sample_idx << log.flush
+        covs = fgraph.applyAndCorrelate(
+            IX_i,
+            Y_i.reshape((-1,1)),
+            str(IX_i.dtype))[:,0]
+        tags = [ f.expr for f in fgraph ]
+        # Test statistic: abs(cov)
+        covs_abs = np.abs(covs)
+        cq_values, cq_values_nth = soap.soapy.npfga.rank_ptest(
+            tags=tags,
+            covs=covs_abs,
+            exs=covs_abs,
+            exs_cum=ranks_Cx1,
+            rand_exs_rank=null_order_covs_SxC,
+            rand_exs_rank_cum=ranks_Sx1)
+        # Test statistic: exs(cov)
+        exs = calculate_exceedence(pots_1xC, covs_abs, scale_fct=cov_scaling_fct)
+        xq_values, xq_values_nth = soap.soapy.npfga.rank_ptest(
+            tags=tags,
+            covs=covs_abs,
+            exs=exs,
+            exs_cum=ranks_Cx1,
+            rand_exs_rank=null_exs_SxC,
+            rand_exs_rank_cum=ranks_Sx1)
+        cov_samples[:,sample_idx] = covs
+        exs_samples[:,sample_idx] = exs
+        cq_samples[:,sample_idx] = cq_values
+        cq_samples_nth[:,sample_idx] = cq_values_nth
+        xq_samples[:,sample_idx] = xq_values
+        xq_samples_nth[:,sample_idx] = xq_values_nth
+    if log: log << log.endl
+    # Bootstrap avgs and stddevs
+    covs = np.average(cov_samples, axis=1)
+    covs_std = np.std(cov_samples, axis=1)
+    exs = np.average(exs_samples, axis=1)
+    exs_std = np.std(exs_samples, axis=1)
+    cq_values = np.average(cq_samples, axis=1)
+    cq_values_std = np.std(cq_samples, axis=1)
+    xq_values = np.average(xq_samples, axis=1)
+    xq_values_std = np.std(xq_samples, axis=1)
+    cq_values_nth = np.average(cq_samples_nth, axis=1)
+    cq_values_nth_std = np.std(cq_samples_nth, axis=1)
+    xq_values_nth = np.average(xq_samples_nth, axis=1)
+    xq_values_nth_std = np.std(xq_samples_nth, axis=1)
     for fidx, fnode in enumerate(fgraph):
         fnode.q = xq_values[fidx]
         fnode.cov = covs[fidx]
     cstats = PyFGraphStats(tags, covs, covs_abs, cq_values, cq_values_nth, null_order_covs_SxC, null_covs_SxC, cov_scaling_fct)
     xstats = PyFGraphStats(tags, covs, exs, xq_values, xq_values_nth, null_exs_SxC, null_covs_SxC, cov_scaling_fct)
-    return tags, covs, cq_values, xq_values, cstats, xstats
+    return tags, covs, covs_std, cq_values, cq_values_std, xq_values, xq_values_std, cstats, xstats
 
-def run_cov_decomposition(fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_to_idx, log):
-    roots = fnode.getRoots()
-    root_tags = [ (r.tag[2:-1] if r.tag.startswith("(-") else r.tag) for r in roots ]
-    y_norm = (Y-np.average(Y))/np.std(Y)
-    # Marginalization tuples
-    input_tuples = []
-    for size in range(len(root_tags)+1):
-        input_tuples.extend(soap.soapy.math.find_all_tuples_of_size(size, root_tags))
-    covs = []
-    # Calculated expectations
-    for tup in input_tuples:
-        rand_covs = []
-        xs = []
-        ys = []
-        for i in range(len(rand_IX_list)):
-            rand_IX = np.copy(IX)
-            for tag in tup:
-                rand_IX[:,ftag_to_idx[tag]] = rand_IX_list[i][:,ftag_to_idx[tag]]
-            rand_x = fgraph.evaluateSingleNode(fnode, rand_IX, str(rand_IX.dtype))
-            rand_x_norm = (rand_x[:,0] - np.average(rand_x[:,0]))/np.std(rand_x[:,0])
-            xs = xs + list(rand_x[:,0])
-            ys = ys + list(y_norm)
-            rand_cov = np.dot(rand_x_norm, y_norm)/y_norm.shape[0]
-            #rand_covs.append(np.abs(rand_cov))
-            rand_covs.append(rand_cov)
-        xs = np.array(xs)
-        ys = np.array(ys)
-        xs = (xs - np.average(xs))/np.std(xs)
-        ys = (ys - np.average(ys))/np.std(ys)
-        covs.append(np.average(rand_covs))
-        #covs.append(np.dot(xs,ys)/ys.shape[0])
-        print "Marginalizing over", tup, "=>", covs[-1]
+def solve_decomposition_lseq(input_tuples, bar_covs, log=None):
     # Solve linear system for decomposition
     col_names = [ ":".join(tup)+":" for tup in input_tuples ]
     # Setup linear system A*x = b and solve for x (margin terms)
@@ -396,14 +412,106 @@ def run_cov_decomposition(fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_to_id
                     zero = True
                     break
             if zero: A[i,j] = 0.0
-    print "Coefficient matrix"
-    print A
-    b = covs # 
-    x = np.linalg.solve(A,b)
-    order = np.argsort(x)[::-1]
-    for i in order:
-        print "%-50s = %+1.4f" % ("<rho[%s]>" % (":".join(input_tuples[i])), x[i])
-    return
+    covs = np.zeros(shape=bar_covs.shape, dtype=bar_covs.dtype)
+    if log: log << "Solving LSEQ" << log.endl
+    for sample_idx in range(bar_covs.shape[2]):
+        if log: log << log.back << " - Random sample %d" % (sample_idx) << log.flush
+        covs[:,:,sample_idx] = np.linalg.solve(A, bar_covs[:,:,sample_idx])
+    if log: log << log.endl
+    covs_row_names = col_names
+    return covs_row_names, covs
+
+def get_marginal_tuples(roots, fnodes, log=None):
+    root_tags = [ r.expr for r in roots ]
+    input_tuples = []
+    max_size = max([ len(f.getRoots()) for f in fnodes ])
+    if log: log << "Partial randomizations (max degree = %d)" % max_size << log.endl
+    for size in range(len(root_tags)+1):
+        if size > max_size: break
+        tuples = soap.soapy.math.find_all_tuples_of_size(size, root_tags)
+        if log: log << " - Degree %d: %d marginals" % (size, len(tuples)) << log.endl
+        input_tuples.extend(tuples)
+    return input_tuples
+
+def run_cov_decomposition(fgraph, IX, Y, rand_IX_list, rand_Y, bootstrap, log):
+    log << log.mg << "Nonlinear covariance decomposition" << log.endl
+    roots = fgraph.getRoots()
+    root_tag_to_idx = { r.expr: ridx for ridx, r in enumerate(roots) }
+    input_tuples = get_marginal_tuples(roots, fgraph, log)
+    # Bootstrap sampling preps (bootstrap = 0 => no bootstrapping)
+    n_resample = bootstrap if bootstrap > 0 else 1
+    resample_iterator = resample_range(0, IX.shape[0], bootstrap) if bootstrap > 0 else zip([0], [ np.arange(0, IX.shape[0]) ])
+    resample_iterator_reusable = [ r for r in resample_iterator ]
+    # Calculate partially randomized marginals
+    bar_covs = np.zeros((len(input_tuples), len(fgraph), len(rand_IX_list)), dtype=IX.dtype)
+    for tup_idx, tup in enumerate(input_tuples):
+        log << "Marginal %d/%d: %s " % (tup_idx+1, len(input_tuples), tup) << log.endl
+        rand_covs = np.zeros((len(fgraph), len(rand_IX_list)), dtype=IX.dtype)
+        rand_Y = rand_Y.reshape((-1,1))
+        for i in range(len(rand_IX_list)):
+            rand_IX = np.copy(IX)
+            for tag in tup:
+                rand_IX[:,root_tag_to_idx[tag]] = rand_IX_list[i][:,root_tag_to_idx[tag]]
+            log << log.back << " - Randomized control, instance" << i << log.flush
+            rand_covs[:,i] = fgraph.applyAndCorrelate(rand_IX, rand_Y, str(IX.dtype))[:,0]
+        log << log.endl
+        bar_covs[tup_idx,:,:] = rand_covs
+    #bar_covs = np.zeros((len(input_tuples), len(fgraph), n_resample), dtype=IX.dtype)
+    #for tup_idx, tup in enumerate(input_tuples):
+    #    log << "Marginal %d/%d: %s " % (tup_idx+1, len(input_tuples), tup) << log.endl
+    #    rand_covs = np.zeros((len(fgraph), len(rand_IX_list), n_resample), dtype=IX.dtype)
+    #    rand_Y = rand_Y.reshape((-1,1))
+    #    for i in range(len(rand_IX_list)):
+    #        rand_IX = np.copy(IX)
+    #        for tag in tup:
+    #            rand_IX[:,root_tag_to_idx[tag]] = rand_IX_list[i][:,root_tag_to_idx[tag]]
+    #        log << log.back << " - Randomized control, instance" << i << log.flush
+    #        rand_IX_up = fgraph.apply(rand_IX, str(rand_IX.dtype))
+    #        for boot_idx, idcs in resample_iterator_reusable:
+    #            y_norm = (Y[idcs]-np.average(Y[idcs]))/np.std(Y[idcs])
+    #            IX_up_norm, mean, std = zscore(rand_IX_up[idcs])
+    #            rand_covs[:,i,boot_idx] = IX_up_norm.T.dot(y_norm)/y_norm.shape[0]
+    #    log << log.endl
+    #    bar_covs[tup_idx,:,:] = np.average(rand_covs, axis=1)
+    # Solve linear system for decomposition
+    covs_row_names, covs = solve_decomposition_lseq(input_tuples, bar_covs, log=log)
+    covs_avg = np.average(covs, axis=2)
+    covs_std = np.std(covs, axis=2)
+    return covs_row_names, covs_avg, covs_std
+
+def run_cov_decomposition_single(fgraph, fnode, IX, Y, rand_IX_list, rand_Y, bootstrap, log):
+    log << log.mg << "Nonlinear covariance decomposition for '%s'" % fnode.expr << log.endl
+    roots = fnode.getRoots()
+    roots_all = fgraph.getRoots()
+    root_tag_to_idx = { r.expr: ridx for ridx, r in enumerate(roots_all) }
+    input_tuples = get_marginal_tuples(roots, [ fnode ], log)
+    # Bootstrap sampling preps (bootstrap = 0 => no bootstrapping)
+    n_resample = bootstrap if bootstrap > 0 else 1
+    resample_iterator = resample_range(0, IX.shape[0], bootstrap) if bootstrap > 0 else zip([0], [ np.arange(0, IX.shape[0]) ])
+    resample_iterator_reusable = [ r for r in resample_iterator ]
+    # Calculate partially randomized marginals
+    bar_covs = np.zeros((len(input_tuples), 1, n_resample), dtype=IX.dtype) # marginals x channels x resample
+    for tup_idx, tup in enumerate(input_tuples):
+        log << "Marginal %d/%d: %s " % (tup_idx+1, len(input_tuples), tup) << log.endl
+        rand_covs = np.zeros((1, len(rand_IX_list), n_resample), dtype=IX.dtype) # channels x samples x resample
+        rand_Y = rand_Y.reshape((-1,1))
+        for i in range(len(rand_IX_list)):
+            rand_IX = np.copy(IX)
+            for tag in tup:
+                rand_IX[:,root_tag_to_idx[tag]] = rand_IX_list[i][:,root_tag_to_idx[tag]]
+            log << log.back << " - Randomized control, instance" << i << log.flush
+            rand_x = fgraph.evaluateSingleNode(fnode, rand_IX, str(rand_IX.dtype))[:,0]
+            for boot_idx, idcs in resample_iterator_reusable:
+                y_norm = (Y[idcs]-np.average(Y[idcs]))/np.std(Y[idcs])
+                x_norm = (rand_x[idcs] - np.average(rand_x[idcs]))/np.std(rand_x[idcs])
+                rand_covs[0,i,boot_idx] = np.dot(x_norm, y_norm)/y_norm.shape[0]
+        log << log.endl
+        bar_covs[tup_idx,0,:] = np.average(rand_covs, axis=1)
+    # Solve linear system for decomposition
+    covs_row_names, covs = solve_decomposition_lseq(input_tuples, bar_covs)
+    covs_avg = np.average(covs, axis=2)
+    covs_std = np.std(covs, axis=2)
+    return covs_row_names, covs_avg, covs_std
 
 def run_factor_analysis(mode, fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_to_idx, log):
     roots = fnode.getRoots()
