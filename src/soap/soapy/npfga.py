@@ -62,40 +62,26 @@ class PyFGraphStats(object):
         self.top_avg_null_exc_percentiles = [ np.percentile(self.null_exs[:,0], p) for p in self.percentiles ]
         self.top_avg_null_cov_percentiles = [ self.top_cov*(1.+e)/(1.+self.top_exceedence) for e in self.top_avg_null_exc_percentiles ]
         return
-    def calculateExpectedCovExceedence(self, outfile=None, log=None):
-        if outfile: ofs = open(outfile, 'w')
-        else: ofs = None
-        xcov_ex_1st_list = []
-        xcov_ex_nth_list = []
+    def calculateCovExceedencePercentiles(self, pctiles=None, log=None):
+        if pctiles is None: pctiles = np.arange(0,110,10)
+        covx_1st_list = []
+        covx_nth_list = []
         for r in range(self.n_channels):
-            cov_ex_1st = self.calculateExpectedCovExceedenceRank(rank=r, rank_null=0)
-            cov_ex_nth = self.calculateExpectedCovExceedenceRank(rank=r, rank_null=r)
-            q1 = self.q_values[self.order[r]]
-            qr = self.q_values_nth[self.order[r]]
-            xcov_ex_1st_list.append(q1*cov_ex_nth)
-            xcov_ex_nth_list.append(qr*cov_ex_nth)
-            if ofs: ofs.write("%1.4f %1.4f %1.4f %1.4f %1.4f %1.4f %s\n" % (
-                q1*cov_ex_1st,
-                qr*cov_ex_nth,
-                q1,
-                qr,
-                cov_ex_1st,
-                cov_ex_nth,
-                self.tags[self.order[r]]))
-        if ofs: ofs.close()
-        excov_order = np.argsort(xcov_ex_nth_list)[::-1]
-        top = excov_order[0]
-        if log: log << "Max xcov observed: x=%+1.4f @ %s" % (
-            xcov_ex_nth_list[top], self.tags[self.order[top]]) << "(cov-rank=%d)" % top << log.endl
-        return xcov_ex_1st_list, xcov_ex_nth_list
-    def calculateExpectedCovExceedenceRank(self, rank, rank_null=0):
+            covx_1st = self.calculateExpectedCovExceedenceRank(rank=r, rank_null=0, pctiles=pctiles)
+            covx_nth = self.calculateExpectedCovExceedenceRank(rank=r, rank_null=r, pctiles=pctiles)
+            covx_1st_list.append(covx_1st)
+            covx_nth_list.append(covx_nth)
+        covx_1st = np.array(covx_1st_list).T
+        covx_nth = np.array(covx_nth_list).T
+        return self.order, pctiles, covx_1st, covx_nth
+    def calculateExpectedCovExceedenceRank(self, rank, rank_null, pctiles):
         idx = self.order[rank]
         cov = np.abs(self.covs[idx])
         exc = self.exs[idx]
-        avg_null_exceedence = np.average(self.null_exs[:,rank_null])
+        null_exceedence_pctiles = np.array([ np.percentile(self.null_exs[:,rank_null], p) for p in pctiles ])
         rho_harm = cov/(1.+exc) # harmonic tail cov for this channel
-        avg_null_cov = cov*(1.+avg_null_exceedence)/(1.+exc)
-        return cov-avg_null_cov
+        null_cov_pctiles = cov*(1.+null_exceedence_pctiles)/(1.+exc)
+        return -null_cov_pctiles+cov
     def summarize(self, log):
         log << "Top-ranked node: '%s'" % (self.top_tag) << log.endl
         log << "  [phys]   cov  = %+1.4f     exc  = %+1.4f     q = %1.4f" % (self.top_cov, self.top_exceedence, self.top_q) << log.endl
@@ -326,7 +312,6 @@ def resample_range(start, end, n):
         yield i, idcs
     return
         
-
 def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
     """
     Required options fields: bootstrap, tail_fraction
@@ -400,15 +385,13 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
     return tags, covs, covs_std, cq_values, cq_values_std, xq_values, xq_values_std, cstats, xstats
 
 def solve_decomposition_lseq(input_tuples, bar_covs, log=None):
-    # Solve linear system for decomposition
-    col_names = [ ":".join(tup)+":" for tup in input_tuples ]
-    # Setup linear system A*x = b and solve for x (margin terms)
-    A = np.ones((len(col_names),len(col_names))) # coeff_matrix
-    for i, tup in enumerate(input_tuples):
-        for j, col_name in enumerate(col_names):
+    # Setup linear system A*X = B and solve for x (margin terms)
+    A = np.ones((len(input_tuples),len(input_tuples))) # coeff_matrix
+    for i, row_tup in enumerate(input_tuples):
+        for j, col_tup in enumerate(input_tuples):
             zero = False
-            for tag in tup:
-                if tag+":" in col_name:
+            for tag in row_tup:
+                if tag in col_tup:
                     zero = True
                     break
             if zero: A[i,j] = 0.0
@@ -418,8 +401,7 @@ def solve_decomposition_lseq(input_tuples, bar_covs, log=None):
         if log: log << log.back << " - Random sample %d" % (sample_idx) << log.flush
         covs[:,:,sample_idx] = np.linalg.solve(A, bar_covs[:,:,sample_idx])
     if log: log << log.endl
-    covs_row_names = col_names
-    return covs_row_names, covs
+    return covs
 
 def get_marginal_tuples(roots, fnodes, log=None):
     root_tags = [ r.expr for r in roots ]
@@ -433,51 +415,53 @@ def get_marginal_tuples(roots, fnodes, log=None):
         input_tuples.extend(tuples)
     return input_tuples
 
-def run_cov_decomposition(fgraph, IX, Y, rand_IX_list, rand_Y, bootstrap, log):
+def run_cov_decomposition(fgraph, IX, Y, rand_IX_list, rand_Y, bootstrap, log=None):
     log << log.mg << "Nonlinear covariance decomposition" << log.endl
     roots = fgraph.getRoots()
     root_tag_to_idx = { r.expr: ridx for ridx, r in enumerate(roots) }
     input_tuples = get_marginal_tuples(roots, fgraph, log)
-    # Bootstrap sampling preps (bootstrap = 0 => no bootstrapping)
-    n_resample = bootstrap if bootstrap > 0 else 1
-    resample_iterator = resample_range(0, IX.shape[0], bootstrap) if bootstrap > 0 else zip([0], [ np.arange(0, IX.shape[0]) ])
-    resample_iterator_reusable = [ r for r in resample_iterator ]
     # Calculate partially randomized marginals
-    bar_covs = np.zeros((len(input_tuples), len(fgraph), len(rand_IX_list)), dtype=IX.dtype)
-    for tup_idx, tup in enumerate(input_tuples):
-        log << "Marginal %d/%d: %s " % (tup_idx+1, len(input_tuples), tup) << log.endl
-        rand_covs = np.zeros((len(fgraph), len(rand_IX_list)), dtype=IX.dtype)
-        rand_Y = rand_Y.reshape((-1,1))
-        for i in range(len(rand_IX_list)):
-            rand_IX = np.copy(IX)
-            for tag in tup:
-                rand_IX[:,root_tag_to_idx[tag]] = rand_IX_list[i][:,root_tag_to_idx[tag]]
-            log << log.back << " - Randomized control, instance" << i << log.flush
-            rand_covs[:,i] = fgraph.applyAndCorrelate(rand_IX, rand_Y, str(IX.dtype))[:,0]
-        log << log.endl
-        bar_covs[tup_idx,:,:] = rand_covs
-    #bar_covs = np.zeros((len(input_tuples), len(fgraph), n_resample), dtype=IX.dtype)
-    #for tup_idx, tup in enumerate(input_tuples):
-    #    log << "Marginal %d/%d: %s " % (tup_idx+1, len(input_tuples), tup) << log.endl
-    #    rand_covs = np.zeros((len(fgraph), len(rand_IX_list), n_resample), dtype=IX.dtype)
-    #    rand_Y = rand_Y.reshape((-1,1))
-    #    for i in range(len(rand_IX_list)):
-    #        rand_IX = np.copy(IX)
-    #        for tag in tup:
-    #            rand_IX[:,root_tag_to_idx[tag]] = rand_IX_list[i][:,root_tag_to_idx[tag]]
-    #        log << log.back << " - Randomized control, instance" << i << log.flush
-    #        rand_IX_up = fgraph.apply(rand_IX, str(rand_IX.dtype))
-    #        for boot_idx, idcs in resample_iterator_reusable:
-    #            y_norm = (Y[idcs]-np.average(Y[idcs]))/np.std(Y[idcs])
-    #            IX_up_norm, mean, std = zscore(rand_IX_up[idcs])
-    #            rand_covs[:,i,boot_idx] = IX_up_norm.T.dot(y_norm)/y_norm.shape[0]
-    #    log << log.endl
-    #    bar_covs[tup_idx,:,:] = np.average(rand_covs, axis=1)
+    if bootstrap > 0:
+        # Bootstrap sampling preps (bootstrap = 0 => no bootstrapping)
+        n_resample = bootstrap if bootstrap > 0 else 1
+        resample_iterator = resample_range(0, IX.shape[0], bootstrap) if bootstrap > 0 else zip([0], [ np.arange(0, IX.shape[0]) ])
+        resample_iterator_reusable = [ r for r in resample_iterator ]
+        bar_covs = np.zeros((len(input_tuples), len(fgraph), n_resample), dtype=IX.dtype)
+        for tup_idx, tup in enumerate(input_tuples):
+            log << "Marginal %d/%d: %s " % (tup_idx+1, len(input_tuples), tup) << log.endl
+            rand_covs = np.zeros((len(fgraph), len(rand_IX_list), n_resample), dtype=IX.dtype)
+            rand_Y = rand_Y.reshape((-1,1))
+            for i in range(len(rand_IX_list)):
+                rand_IX = np.copy(IX)
+                for tag in tup:
+                    rand_IX[:,root_tag_to_idx[tag]] = rand_IX_list[i][:,root_tag_to_idx[tag]]
+                log << log.back << " - Randomized control, instance" << i << log.flush
+                rand_IX_up = fgraph.apply(rand_IX, str(rand_IX.dtype))
+                for boot_idx, idcs in resample_iterator_reusable:
+                    y_norm = (Y[idcs]-np.average(Y[idcs]))/np.std(Y[idcs])
+                    IX_up_norm, mean, std = zscore(rand_IX_up[idcs])
+                    rand_covs[:,i,boot_idx] = IX_up_norm.T.dot(y_norm)/y_norm.shape[0]
+            log << log.endl
+            bar_covs[tup_idx,:,:] = np.average(rand_covs, axis=1)
+    else:
+        bar_covs = np.zeros((len(input_tuples), len(fgraph), len(rand_IX_list)), dtype=IX.dtype)
+        for tup_idx, tup in enumerate(input_tuples):
+            log << "Marginal %d/%d: %s " % (tup_idx+1, len(input_tuples), tup) << log.endl
+            rand_covs = np.zeros((len(fgraph), len(rand_IX_list)), dtype=IX.dtype)
+            rand_Y = rand_Y.reshape((-1,1))
+            for i in range(len(rand_IX_list)):
+                rand_IX = np.copy(IX)
+                for tag in tup:
+                    rand_IX[:,root_tag_to_idx[tag]] = rand_IX_list[i][:,root_tag_to_idx[tag]]
+                log << log.back << " - Randomized control, instance" << i << log.flush
+                rand_covs[:,i] = fgraph.applyAndCorrelate(rand_IX, rand_Y, str(IX.dtype))[:,0]
+            log << log.endl
+            bar_covs[tup_idx,:,:] = rand_covs
     # Solve linear system for decomposition
-    covs_row_names, covs = solve_decomposition_lseq(input_tuples, bar_covs, log=log)
+    covs = solve_decomposition_lseq(input_tuples, bar_covs, log=log)
     covs_avg = np.average(covs, axis=2)
     covs_std = np.std(covs, axis=2)
-    return covs_row_names, covs_avg, covs_std
+    return input_tuples, covs_avg, covs_std
 
 def run_cov_decomposition_single(fgraph, fnode, IX, Y, rand_IX_list, rand_Y, bootstrap, log):
     log << log.mg << "Nonlinear covariance decomposition for '%s'" % fnode.expr << log.endl
@@ -508,10 +492,36 @@ def run_cov_decomposition_single(fgraph, fnode, IX, Y, rand_IX_list, rand_Y, boo
         log << log.endl
         bar_covs[tup_idx,0,:] = np.average(rand_covs, axis=1)
     # Solve linear system for decomposition
-    covs_row_names, covs = solve_decomposition_lseq(input_tuples, bar_covs)
+    covs = solve_decomposition_lseq(input_tuples, bar_covs)
     covs_avg = np.average(covs, axis=2)
     covs_std = np.std(covs, axis=2)
-    return covs_row_names, covs_avg, covs_std
+    return input_tuples, covs_avg, covs_std
+
+def calculate_root_weights(fgraph, q_values, row_tuples, cov_decomposition, log=None):
+    if log: log << log.mg << "Calculating root weights from covariance decomposition" << log.endl
+    root_tags = [ r.expr for r in fgraph.getRoots() ]
+    row_idcs_non_null = filter(lambda i: len(row_tuples[i]) > 0, np.arange(len(row_tuples)))
+    row_tuples_non_null = filter(lambda t: len(t) > 0, row_tuples)
+    row_weights_non_null = [ 1./len(tup) for tup in row_tuples_non_null ]
+    col_signs = np.sign(np.sum(cov_decomposition[row_idcs_non_null], axis=0))
+    col_weights = np.array(q_values)
+    tuple_weights = np.sum(cov_decomposition[row_idcs_non_null]*col_signs*col_weights, axis=1)
+    root_counts = { root_tag: 0 for root_tag in root_tags }
+    for f in fgraph:
+        for r in f.getRoots(): root_counts[r.expr] += 1
+    root_weights = { root_tag: 0 for root_tag in root_tags }
+    for tupidx, tup in enumerate(row_tuples_non_null):
+        for t in tup:
+            root_weights[t] += 1./len(tup)*tuple_weights[tupidx]
+    for r in root_weights: root_weights[r] /= root_counts[r]
+    root_tags_sorted = sorted(root_tags, key=lambda t: root_weights[t])
+    if log: log << "Tuple weight" << log.endl
+    for tup_idx, tup in enumerate(row_tuples_non_null):
+        if log: log << "i...j = %-50s  w(i...j) = %1.4e" % (':'.join(tup), tuple_weights[tup_idx]) << log.endl
+    if log: log << "Aggregated root weight" << log.endl
+    for r in root_tags_sorted:
+        if log: log << "i = %-50s  w0(i) = %1.4e   (# derived nodes = %d)" % (r, root_weights[r], root_counts[r]) << log.endl
+    return root_tags_sorted, root_weights, root_counts
 
 def run_factor_analysis(mode, fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_to_idx, log):
     roots = fnode.getRoots()
@@ -721,11 +731,115 @@ class CVNone(object):
     def isDone(self):
         return self.step >= self.n_reps
         
-
 cv_iterator = {
   "loo": CVLOO,
   "mc": CVMC,
   "none": CVNone
 }
+
+class Booster(object):
+    def __init__(self, options):
+        self.options = options
+        self.initialized = False
+        self.ensembles = []
+        # Cleared whenever dispatched with iter=0
+        self.IX_trains = []
+        self.Y_trains = []
+        self.IX_tests = []
+        self.Y_tests = []
+        self.iteration = None
+        # Kept across dispatches
+        self.iteration_preds = {}
+        self.iteration_trues = {}
+    def dispatchY(self, iteration, Y_train, Y_test):
+        self.iteration = iteration
+        if self.iteration == 0:
+            self.ensembles = []
+            self.IX_trains = []
+            self.Y_trains = [ Y_train ]
+            self.IX_tests = []
+            self.Y_tests = [ Y_test ]
+        if not self.iteration in self.iteration_preds:
+            self.iteration_preds[self.iteration] = []
+            self.iteration_trues[self.iteration] = []
+    def dispatchX(self, iteration, IX_train, IX_test):
+        assert iteration == self.iteration # Need to ::dispatchY first
+        self.IX_trains.append(IX_train)
+        self.IX_tests.append(IX_test)
+    def getResidues(self):
+        if self.iteration == 0:
+            return self.Y_trains[0], self.Y_tests[0]
+        else:
+            return self.Y_trains[-1]-self.Y_trains[0], self.Y_tests[-1]-self.Y_tests[0]
+    def train(self, bootstraps=100):
+        import sklearn.linear_model
+        IX_train = np.concatenate(self.IX_trains, axis=1)
+        Y_train = self.Y_trains[0]
+        ensemble = []
+        for bootidx in range(bootstraps):
+            resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
+            m = sklearn.linear_model.LinearRegression()
+            m.fit(IX_train[resample_idcs], Y_train[resample_idcs])
+            ensemble.append(m)
+        self.ensembles.append(ensemble)
+    def evaluate(self):
+        ensemble = self.ensembles[-1]
+        IX_train = np.concatenate(self.IX_trains, axis=1)
+        IX_test = np.concatenate(self.IX_tests, axis=1)
+        Y_train = self.Y_trains[0]
+        Y_test = self.Y_tests[0]
+        Y_pred_train_avg, Y_pred_train_std = self.applyLatest(IX_train)
+        Y_pred_test_avg, Y_pred_test_std = self.applyLatest(IX_test)
+        self.iteration_preds[self.iteration].append(np.array([Y_pred_test_avg, Y_pred_test_std]).T)
+        self.iteration_trues[self.iteration].append(Y_test.reshape((-1,1)))
+        self.Y_trains.append(Y_pred_train_avg)
+        self.Y_tests.append(Y_pred_test_avg)
+        import scipy.stats
+        rmse_train = (np.sum((Y_pred_train_avg-Y_train)**2)/Y_train.shape[0])**0.5
+        rho_train = scipy.stats.pearsonr(Y_pred_train_avg, Y_train)[0]
+        rmse_test = (np.sum((Y_pred_test_avg-Y_test)**2)/Y_test.shape[0])**0.5
+        rho_test = scipy.stats.pearsonr(Y_pred_test_avg, Y_test)[0]
+        return rmse_train, rho_train, rmse_test, rho_test
+    def applyLatest(self, IX):
+        ensemble = self.ensembles[-1]
+        Y_pred = []
+        for m in ensemble:
+            Y_pred.append(m.predict(IX))
+        Y_pred = np.array(Y_pred)
+        Y_pred_avg = np.average(Y_pred, axis=0)
+        Y_pred_std = np.std(Y_pred, axis=0)
+        return Y_pred_avg, Y_pred_std
+    def evaluateLatest(self, IX, Y, record=False):
+        import scipy.stats
+        ensemble = self.ensembles[-1]
+        Y_pred = []
+        for m in ensemble:
+            Y_pred.append(m.predict(IX))
+        Y_pred = np.array(Y_pred)
+        Y_pred_avg = np.average(Y_pred, axis=0)
+        Y_pred_std = np.std(Y_pred, axis=0)
+        rmse = (np.sum((Y_pred_avg-Y)**2)/Y.shape[0])**0.5
+        rho_p = scipy.stats.pearsonr(Y_pred_avg, Y)[0]
+        if record:
+            self.preds.append(np.array([Y_pred_avg, Y_pred_std]).T)
+            self.trues.append(Y.reshape((-1,1)))
+        return Y_pred_avg, Y_pred_std, rmse, rho_p
+    def write(self, outfile='pred_i%d.txt'):
+        iterations = sorted(self.iteration_preds)
+        for it in iterations:
+            preds = np.concatenate(self.iteration_preds[it], axis=0)
+            trues = np.concatenate(self.iteration_trues[it], axis=0)
+            np.savetxt(outfile % it, np.concatenate([preds, trues], axis=1))
+        return
+
+
+
+
+
+
+
+
+
+
 
 
