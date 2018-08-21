@@ -650,6 +650,7 @@ bool FNodeCheck::check(FNode* fnode) {
 
 FGraph::FGraph(Options &options_ref) : options(&options_ref) {
     GLOG() << "Creating FGraph" << std::endl;
+    correlation_measure = options->get<std::string>("correlation_measure");
     // Unary ops
     uop_map["I"] = OP_MAP::get("I"); 
     uop_map["e"] = OP_MAP::get("e"); 
@@ -846,8 +847,19 @@ bpy::object FGraph::applyAndCorrelateNumpy(bpy::object &np_X, bpy::object &np_Y,
 
 void FGraph::applyAndCorrelate(matrix_t &X_in, matrix_t &X_out, matrix_t &Y_in, matrix_t &cov_out) {
     this->apply(X_in, X_out);
-    correlateMatrixColumnsPearson(X_out, Y_in, cov_out);
-    //correlateMatrixColumnsPearson(X_out, X_out, cov_out); // HACK for speed-check
+    if (correlation_measure == "moment") {
+        correlateMatrixColumnsPearson(X_out, Y_in, cov_out);
+    } else if (correlation_measure == "rank")
+        correlateMatrixColumnsSpearman(X_out, Y_in, cov_out);
+    else if (correlation_measure == "mixed") {
+        double rank_coeff = options->get<double>("rank_coeff");
+        matrix_t cov_out_rank = zero_matrix_t(cov_out.size1(), cov_out.size2());
+        correlateMatrixColumnsSpearman(X_out, Y_in, cov_out_rank);
+        correlateMatrixColumnsPearson(X_out, Y_in, cov_out);
+        cov_out = rank_coeff*cov_out_rank + (1.-rank_coeff)*cov_out;
+    } else {
+        throw soap::base::OutOfRange(correlation_measure);
+    }
 }
 
 void FGraph::save(std::string archfile) {
@@ -909,6 +921,32 @@ void correlateMatrixColumnsPearson(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov
     zscoreMatrixByColumn(X_in);
     zscoreMatrixByColumn(Y_in);
     cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_in), Y_in);
+}
+
+void correlateMatrixColumnsSpearman(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out) {
+    if ((X_in.size1() != Y_in.size1())
+        || (cov_out.size1() != X_in.size2())
+        || (cov_out.size2() != Y_in.size2()))
+        throw soap::base::SanityCheckFailed("Inconsistent matrix dimensions");
+    matrix_t X_ranks = zero_matrix_t(X_in.size1(), X_in.size2());
+    matrix_t Y_ranks = zero_matrix_t(Y_in.size1(), Y_in.size2());
+    mapMatrixColumnsOntoRanks(X_in, X_ranks);
+    mapMatrixColumnsOntoRanks(Y_in, Y_ranks);
+    zscoreMatrixByColumn(X_ranks);
+    zscoreMatrixByColumn(Y_ranks);
+    cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_ranks), Y_ranks);
+}
+
+void mapMatrixColumnsOntoRanks(matrix_t &M_in, matrix_t &M_out) {
+    std::vector<int> idcs(M_in.size1());
+    for (int col_idx=0; col_idx<M_in.size2(); ++col_idx) {
+        std::iota(idcs.begin(), idcs.end(), 0);
+        std::sort(idcs.begin(), idcs.end(),
+            [&](int i1, int i2) { return M_in(i1, col_idx) < M_in(i2, col_idx); });
+        for (int rank=0; rank<idcs.size(); ++rank) {
+            M_out(idcs[rank], col_idx) = rank;
+        }
+    }
 }
 
 }}

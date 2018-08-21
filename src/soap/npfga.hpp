@@ -461,6 +461,7 @@ class FGraph
   private:
     // Members
     Options *options;
+    std::string correlation_measure;
     std::vector<FNode*> root_fnodes;
     std::vector<FNode*> fnodes;
     std::vector<op_vec_t> uop_layers;
@@ -473,7 +474,9 @@ class FGraph
     void save(std::string archfile);
     FGraph *load(std::string archfile);
     template<class Archive>
-    void serialize(Archive &arch, const unsigned int version) {
+    void serialize(Archive &arch, const unsigned int version) { 
+        arch & options;
+        arch & correlation_measure;
         arch & root_fnodes;
         arch & fnodes;
         arch & uop_layers;
@@ -485,8 +488,10 @@ class FGraph
 };
 
 void zscoreMatrixByColumn(matrix_t &X);
+void mapMatrixColumnsOntoRanks(matrix_t &M_in, matrix_t &M_out);
 
 void correlateMatrixColumnsPearson(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out);
+void correlateMatrixColumnsSpearman(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out);
 
 }}
 

@@ -157,11 +157,15 @@ def generate_graph(
         uop_list, 
         bop_list, 
         unit_min_exp, 
-        unit_max_exp):
+        unit_max_exp,
+        correlation_measure,
+        rank_coeff=0.25):
     assert len(uop_list) == len(bop_list)
     fgraph_options = soap.Options()
     fgraph_options.set("unit_min_exp", unit_min_exp)
     fgraph_options.set("unit_max_exp", unit_max_exp)
+    fgraph_options.set("correlation_measure", correlation_measure)
+    fgraph_options.set("rank_coeff", rank_coeff) # used if correlation_measure == 'mixed'
     fgraph = soap.FGraph(fgraph_options)
     for f in features_with_props:
         fgraph.addRootNode(f[0], f[1], f[2], f[3], f[4])
@@ -790,21 +794,27 @@ class Booster(object):
         Y_test = self.Y_tests[0]
         Y_pred_train_avg, Y_pred_train_std = self.applyLatest(IX_train)
         Y_pred_test_avg, Y_pred_test_std = self.applyLatest(IX_test)
-        self.iteration_preds[self.iteration].append(np.array([Y_pred_test_avg, Y_pred_test_std]).T)
-        self.iteration_trues[self.iteration].append(Y_test.reshape((-1,1)))
+        if IX_test.shape[0] > 0:
+            self.iteration_preds[self.iteration].append(np.array([Y_pred_test_avg, Y_pred_test_std]).T)
+            self.iteration_trues[self.iteration].append(Y_test.reshape((-1,1)))
         self.Y_trains.append(Y_pred_train_avg)
         self.Y_tests.append(Y_pred_test_avg)
         import scipy.stats
         rmse_train = (np.sum((Y_pred_train_avg-Y_train)**2)/Y_train.shape[0])**0.5
         rho_train = scipy.stats.pearsonr(Y_pred_train_avg, Y_train)[0]
-        rmse_test = (np.sum((Y_pred_test_avg-Y_test)**2)/Y_test.shape[0])**0.5
-        rho_test = scipy.stats.pearsonr(Y_pred_test_avg, Y_test)[0]
+        if IX_test.shape[0] > 0:
+            rmse_test = (np.sum((Y_pred_test_avg-Y_test)**2)/Y_test.shape[0])**0.5
+            rho_test = scipy.stats.pearsonr(Y_pred_test_avg, Y_test)[0]
+        else:
+            rmse_test = np.nan
+            rho_test = np.nan
         return rmse_train, rho_train, rmse_test, rho_test
     def applyLatest(self, IX):
         ensemble = self.ensembles[-1]
         Y_pred = []
-        for m in ensemble:
-            Y_pred.append(m.predict(IX))
+        if IX.shape[0] > 0:
+            for m in ensemble:
+                Y_pred.append(m.predict(IX))
         Y_pred = np.array(Y_pred)
         Y_pred_avg = np.average(Y_pred, axis=0)
         Y_pred_std = np.std(Y_pred, axis=0)
@@ -827,9 +837,12 @@ class Booster(object):
     def write(self, outfile='pred_i%d.txt'):
         iterations = sorted(self.iteration_preds)
         for it in iterations:
-            preds = np.concatenate(self.iteration_preds[it], axis=0)
-            trues = np.concatenate(self.iteration_trues[it], axis=0)
-            np.savetxt(outfile % it, np.concatenate([preds, trues], axis=1))
+            if len(self.iteration_preds[it]) > 0:
+                preds = np.concatenate(self.iteration_preds[it], axis=0)
+                trues = np.concatenate(self.iteration_trues[it], axis=0)
+                np.savetxt(outfile % it, np.concatenate([preds, trues], axis=1))
+            else:
+                np.savetxt(outfile % it, np.array([]))
         return
 
 
