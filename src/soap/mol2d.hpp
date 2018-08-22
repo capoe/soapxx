@@ -19,20 +19,17 @@ namespace soap {
 class Mol2D
 {
 public:
-
 	Mol2D(Structure &structure);
    ~Mol2D();
-
 	double computeVolume(double res);
     double computeSurface(double res);
+    double computeTPSA(double res);
+    double computeFreeVolumeFraction(boost::python::numeric::array &centre, double probe_radius, double res);
 	static void registerPython();
-
 private:
-
     Structure *_structure;
 };
 
 }
-
 
 #endif /* _SOAP_MOL2D_HPP_ */

@@ -780,6 +780,8 @@ class Booster(object):
         IX_train = np.concatenate(self.IX_trains, axis=1)
         Y_train = self.Y_trains[0]
         ensemble = []
+        # TODO TODO TODO
+        sample_iterator = resample_range(0, IX_train.shape[0], IX_train.shape[0])
         for bootidx in range(bootstraps):
             resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
             m = sklearn.linear_model.LinearRegression()
@@ -794,11 +796,13 @@ class Booster(object):
         Y_test = self.Y_tests[0]
         Y_pred_train_avg, Y_pred_train_std = self.applyLatest(IX_train)
         Y_pred_test_avg, Y_pred_test_std = self.applyLatest(IX_test)
+        # Log results
         if IX_test.shape[0] > 0:
             self.iteration_preds[self.iteration].append(np.array([Y_pred_test_avg, Y_pred_test_std]).T)
             self.iteration_trues[self.iteration].append(Y_test.reshape((-1,1)))
         self.Y_trains.append(Y_pred_train_avg)
         self.Y_tests.append(Y_pred_test_avg)
+        # Return stats
         import scipy.stats
         rmse_train = (np.sum((Y_pred_train_avg-Y_train)**2)/Y_train.shape[0])**0.5
         rho_train = scipy.stats.pearsonr(Y_pred_train_avg, Y_train)[0]
@@ -819,21 +823,6 @@ class Booster(object):
         Y_pred_avg = np.average(Y_pred, axis=0)
         Y_pred_std = np.std(Y_pred, axis=0)
         return Y_pred_avg, Y_pred_std
-    def evaluateLatest(self, IX, Y, record=False):
-        import scipy.stats
-        ensemble = self.ensembles[-1]
-        Y_pred = []
-        for m in ensemble:
-            Y_pred.append(m.predict(IX))
-        Y_pred = np.array(Y_pred)
-        Y_pred_avg = np.average(Y_pred, axis=0)
-        Y_pred_std = np.std(Y_pred, axis=0)
-        rmse = (np.sum((Y_pred_avg-Y)**2)/Y.shape[0])**0.5
-        rho_p = scipy.stats.pearsonr(Y_pred_avg, Y)[0]
-        if record:
-            self.preds.append(np.array([Y_pred_avg, Y_pred_std]).T)
-            self.trues.append(Y.reshape((-1,1)))
-        return Y_pred_avg, Y_pred_std, rmse, rho_p
     def write(self, outfile='pred_i%d.txt'):
         iterations = sorted(self.iteration_preds)
         for it in iterations:
