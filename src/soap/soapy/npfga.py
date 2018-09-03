@@ -467,6 +467,65 @@ def run_cov_decomposition(fgraph, IX, Y, rand_IX_list, rand_Y, bootstrap, log=No
     covs_std = np.std(covs, axis=2)
     return input_tuples, covs_avg, covs_std
 
+def run_cov_decomposition_filter(fgraph, order, IX, Y, rand_IX_list, rand_Y, bootstrap, log):
+    fnodes = [ f for f in fgraph ]
+    log << log.mg << "Cov decomposition filter" << log.endl
+    keep = True
+    selected_idx = None 
+    scores = []
+    root_contributions_list = []
+    for rank in xrange(-1,-len(order)-1,-1):
+        fnode = fnodes[order[rank]]
+        row_tuples, cov_decomposition, cov_decomposition_std = soap.soapy.npfga.run_cov_decomposition_single(
+            fgraph=fgraph,
+            fnode=fnode,
+            IX=IX,
+            Y=Y,
+            rand_IX_list=rand_IX_list,
+            rand_Y=rand_Y,
+            bootstrap=bootstrap,
+            log=log)    
+        row_order = np.argsort(cov_decomposition[:,0])
+        for r in row_order:
+            log << "i...j = %-50s  cov(i..j) = %+1.4f (+-%1.4f)" % (
+                row_tuples[r], cov_decomposition[r,0], cov_decomposition_std[r,0]) << log.endl
+        root_tags = [ r.expr for r in fnode.getRoots() ]
+        root_contributions = { t: { "cov": [], "std": [] } for t in root_tags }
+        total_cov = np.sum(cov_decomposition)
+        log << "Total covariance for this channel is" << total_cov << log.endl
+        keep = True
+        for r in root_tags:
+            for row_idx, row_tuple in enumerate(row_tuples):
+                if r in row_tuple:
+                    root_contributions[r]["cov"].append(cov_decomposition[row_idx,0]/len(row_tuple))
+                    root_contributions[r]["std"].append(cov_decomposition_std[row_idx,0])
+            cov = np.array(root_contributions[r]["cov"])
+            std = np.array(root_contributions[r]["std"])
+            cov = np.sum(cov)
+            std = (std.dot(std))**0.5
+            root_contributions[r]["cov"] = cov
+            root_contributions[r]["std"] = std
+            if np.abs(cov) < 3.*std or cov*total_cov < 0.: # i.e., not significant or anticorrelated
+                flag = 'x'
+                keep = False
+            else:
+                flag = ''
+            log << "x=%s => rho1(x) = %+1.4f +- %+1.4f    %s" % (r, cov, std, flag) << log.endl
+        if keep:
+            selected_idx = order[rank]
+            #break
+        delta = np.std([ root_contributions[r]["cov"] for r in root_tags ])
+        log << "  => Score = |%1.4f| - %1.4f" % (total_cov, delta) << log.endl
+        if np.isnan(delta):
+            log << log.mr << "WARNING: NAN in covariance decomposition" << log.endl
+        else:
+            scores.append([ rank, np.abs(total_cov)-delta ])
+        root_contributions_list.append([ fnode.expr, root_contributions])
+    scores = sorted(scores, key=lambda s: -s[1])
+    #if selected_idx is None: raise RuntimeError("Filter returned none")
+    selected_idx = order[scores[0][0]]
+    return selected_idx, root_contributions_list
+
 def run_cov_decomposition_single(fgraph, fnode, IX, Y, rand_IX_list, rand_Y, bootstrap, log):
     log << log.mg << "Nonlinear covariance decomposition for '%s'" % fnode.expr << log.endl
     roots = fnode.getRoots()
