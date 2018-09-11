@@ -33,6 +33,7 @@ log.AddArg("tail_fraction", typ=float, default=0.01, help='Tail percentile used 
 log.AddArg("seed", typ=int, default=830292, help='RNG seed')
 log.AddArg("verbose", typ=bool, default=False, help='Verbosity toggle')
 # ANALYSIS
+log.AddArg("ranking", typ=str, default="cov", help="Ranking criterion: 'cov', 'cov*q', 'dcov*dq'")
 log.AddArg("decompose", typ=str, default="", help="Covariance decomposition: 'global', 'top', 'global+top'")
 options = log.Parse()
 
@@ -81,7 +82,7 @@ if options.write_xup:
 data_log = {
     "state": {
         "statefile": options.statefile,
-        "config_tags": [ c["tag"] for c in state_base["configs"] ],
+        "sample_tags": state_base["sample_tags"],
         "IX": state_base["IX"].tolist(),
         "Y": state_base["T"].tolist(),
     },
@@ -137,18 +138,23 @@ while not cv_iterator.isDone():
             log << log.mr << "WARNING Numerical instability:" << log.endl
             log << log.mr << " @ " << fnodes[corder[-1]].expr << log.endl
         corder = filter(lambda o: np.abs(covs[o]) <= 1+1e-10, corder)
-        top_idx = corder[-1]
-
-        # HACK >>>>
-        #merit_x = xq_values - xq_values_std
-        #merit_c = cq_values - cq_values_std
-        #merit = np.max(np.array([merit_x, merit_c]), axis=0)
-        #merit = merit*(np.abs(covs)-covs_std)
-        #top_idx = np.argmax(merit)
-        #print "Select:", tags[top_idx]
-        #raw_input('...')
-        # <<<<<<<<<
-
+        # Top-node selection
+        if options.ranking == "cov":
+            top_idx = corder[-1]
+        elif options.ranking == "cov*q":
+            merit_x = xq_values - xq_values_std
+            merit_c = cq_values - cq_values_std
+            merit = np.max(np.array([merit_x, merit_c]), axis=0)
+            merit = merit*(np.abs(covs)-covs_std)
+            top_idx = np.argmax(merit)
+        elif options.ranking == "dcov*dq":
+            merit_x = xq_values
+            merit_c = cq_values
+            merit = np.max(np.array([merit_x, merit_c]), axis=0)
+            merit = merit*(np.abs(covs)-covs_std)
+            top_idx = np.argmax(merit)
+        else: raise ValueError(options.ranking)
+        print "Select:", tags[top_idx]
         data_section = {
             "npfga_stats": {
                 "ftags": tags,
@@ -247,8 +253,7 @@ while not cv_iterator.isDone():
             }
         # Regression
         data_section["top"] = {
-            "expr":  fnodes[top_idx].expr,
-            "idx": corder[top_idx]
+            "expr":  fnodes[top_idx].expr
         }
         if booster is not None:
             log << "Regression using phi=%s" % fnodes[top_idx].expr << log.endl
@@ -257,7 +262,7 @@ while not cv_iterator.isDone():
             IX_up_train = fgraph.apply(IX_train, str(IX_train.dtype))[:,selected]
             IX_up_test = fgraph.apply(IX_test, str(IX_test.dtype))[:,selected]
             booster.dispatchX(iteration, IX_up_train, IX_up_test)
-            booster.train(bootstraps=5000)
+            booster.train(bootstraps=5000, method='residuals')
             rmse_train, rho_train, rmse_test, rho_test = booster.evaluate()
             log << "Train: RMSE=%1.4e RHO=%1.4e" % (rmse_train, rho_train) << log.endl
             log << "Test:  RMSE=%1.4e RHO=%1.4e" % (rmse_test, rho_test) << log.endl
