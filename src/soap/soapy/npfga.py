@@ -634,6 +634,7 @@ def run_factor_analysis(mode, fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_t
 def represent_graph_2d(fgraph):
     # POSITION NODES
     dphi_root = 2*np.pi/len(fgraph.map_generations[0])
+    radius_offset = 0.0
     radius_root = 1.0
     radius_scale = 2.5
     for gen in fgraph.generations:
@@ -641,14 +642,14 @@ def represent_graph_2d(fgraph):
         print "Positioning generation", gen
         for idx, node in enumerate(nodes):
             if gen == 0:
-                node.radius = radius_root
+                node.radius = radius_root + radius_offset
                 node.phi = idx*dphi_root
                 print "r=%1.2f phi=%1.2f %s" % (node.radius, node.phi, node.expr)
             elif len(node.parents) == 1:
                 # Unary case
                 par = node.parents[0]
-                node.radius = (1.+gen)**2*radius_root + radius_scale*(
-                    np.abs(node.cov*node.confidence))*radius_root
+                node.radius = (1.+gen-0.3)**2*radius_root + radius_scale*(
+                    np.abs(node.cov*node.confidence))*radius_root + radius_offset
                 node.phi = par.phi + (
                     np.abs(node.cov*node.confidence))*dphi_root/node.radius
             elif len(node.parents) == 2:
@@ -661,8 +662,8 @@ def represent_graph_2d(fgraph):
                     node.phi = phi_parents[0] + 0.5*dphi
                 else:
                     node.phi = (phi_parents[1] + 0.5*(2*np.pi - dphi)) % (2*np.pi)
-                node.radius = (1.+gen)**2*radius_root + radius_scale*(
-                    np.abs(node.cov*node.confidence))*radius_root
+                node.radius = (1.+gen+(0.2 if gen < 2 else 0))**2*radius_root + radius_scale*(
+                    np.abs(node.cov*node.confidence))*radius_root + radius_offset
                 node.phi = node.phi + (
                     np.abs(node.cov*node.confidence))*dphi_root/node.radius
     # LINKS BETWEEN NODES
@@ -778,6 +779,24 @@ class CVMC(object):
     def isDone(self):
         return self.step >= self.n_reps
 
+class CVUser(object):
+    def __init__(self, state, options):
+        self.tag = "cv_user"
+        self.n_samples = len(state)
+        self.n_reps = 1
+        self.step = 0
+        self.mask = np.ones((self.n_samples,), dtype='i8')
+        self.mask[options.test_on] = 0
+    def next(self):
+        assert not self.isDone()
+        info = "%s_i%03d" % (self.tag, self.step)
+        idcs_train = np.where(self.mask > 0)[0]
+        idcs_test = np.where(self.mask == 0)[0]
+        self.step += 1
+        return info, idcs_train, idcs_test
+    def isDone(self):
+        return self.step >= self.n_reps
+
 class CVNone(object):
     def __init__(self, state, options):
         self.tag = "cv_no"
@@ -797,6 +816,7 @@ class CVNone(object):
 cv_iterator = {
   "loo": CVLOO,
   "mc": CVMC,
+  "user": CVUser,
   "none": CVNone
 }
 
@@ -812,6 +832,8 @@ class Booster(object):
         self.Y_tests = []
         self.iteration = None
         # Kept across dispatches
+        self.iteration_train_preds = {}
+        self.iteration_train_trues = {}
         self.iteration_preds = {}
         self.iteration_trues = {}
     def dispatchY(self, iteration, Y_train, Y_test):
@@ -825,6 +847,8 @@ class Booster(object):
         if not self.iteration in self.iteration_preds:
             self.iteration_preds[self.iteration] = []
             self.iteration_trues[self.iteration] = []
+            self.iteration_train_preds[self.iteration] = []
+            self.iteration_train_trues[self.iteration] = []
     def dispatchX(self, iteration, IX_train, IX_test):
         assert iteration == self.iteration # Need to ::dispatchY first
         self.IX_trains.append(IX_train)
@@ -834,7 +858,7 @@ class Booster(object):
             return self.Y_trains[0], self.Y_tests[0]
         else:
             return self.Y_trains[-1]-self.Y_trains[0], self.Y_tests[-1]-self.Y_tests[0]
-    def train(self, bootstraps=100):
+    def train(self, bootstraps=1000):
         import sklearn.linear_model
         IX_train = np.concatenate(self.IX_trains, axis=1)
         Y_train = self.Y_trains[0]
@@ -856,6 +880,8 @@ class Booster(object):
         Y_pred_train_avg, Y_pred_train_std = self.applyLatest(IX_train)
         Y_pred_test_avg, Y_pred_test_std = self.applyLatest(IX_test)
         # Log results
+        self.iteration_train_preds[self.iteration].append(np.array([Y_pred_train_avg, Y_pred_train_std]).T)
+        self.iteration_train_trues[self.iteration].append(Y_train.reshape((-1,1)))
         if IX_test.shape[0] > 0:
             self.iteration_preds[self.iteration].append(np.array([Y_pred_test_avg, Y_pred_test_std]).T)
             self.iteration_trues[self.iteration].append(Y_test.reshape((-1,1)))
@@ -879,18 +905,25 @@ class Booster(object):
             for m in ensemble:
                 Y_pred.append(m.predict(IX))
         Y_pred = np.array(Y_pred)
-        Y_pred_avg = np.average(Y_pred, axis=0)
+        Y_pred_avg = np.median(Y_pred, axis=0)
         Y_pred_std = np.std(Y_pred, axis=0)
         return Y_pred_avg, Y_pred_std
-    def write(self, outfile='pred_i%d.txt'):
+    def write(self, trunc='pred_i%d'):
         iterations = sorted(self.iteration_preds)
+        outfile_test = trunc+'_test.txt'
+        outfile_train = trunc+'_train.txt'
         for it in iterations:
+            # Training predictions
+            preds = np.concatenate(self.iteration_train_preds[it], axis=0)
+            trues = np.concatenate(self.iteration_train_trues[it], axis=0)
+            np.savetxt(outfile_train % it, np.concatenate([preds, trues], axis=1))
+            # Test predictions
             if len(self.iteration_preds[it]) > 0:
                 preds = np.concatenate(self.iteration_preds[it], axis=0)
                 trues = np.concatenate(self.iteration_trues[it], axis=0)
-                np.savetxt(outfile % it, np.concatenate([preds, trues], axis=1))
+                np.savetxt(outfile_test % it, np.concatenate([preds, trues], axis=1))
             else:
-                np.savetxt(outfile % it, np.array([]))
+                np.savetxt(outfile_test % it, np.array([]))
         return
 
 
