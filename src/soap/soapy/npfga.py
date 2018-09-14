@@ -858,18 +858,31 @@ class Booster(object):
             return self.Y_trains[0], self.Y_tests[0]
         else:
             return self.Y_trains[-1]-self.Y_trains[0], self.Y_tests[-1]-self.Y_tests[0]
-    def train(self, bootstraps=1000):
+    def train(self, bootstraps=1000, method='samples'):
         import sklearn.linear_model
         IX_train = np.concatenate(self.IX_trains, axis=1)
         Y_train = self.Y_trains[0]
         ensemble = []
         # TODO TODO TODO
         sample_iterator = resample_range(0, IX_train.shape[0], IX_train.shape[0])
-        for bootidx in range(bootstraps):
-            resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
+        if method == 'samples':
+            for bootidx in range(bootstraps):
+                resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
+                m = sklearn.linear_model.LinearRegression()
+                m.fit(IX_train[resample_idcs], Y_train[resample_idcs])
+                ensemble.append(m)
+        elif method == 'residuals':
             m = sklearn.linear_model.LinearRegression()
-            m.fit(IX_train[resample_idcs], Y_train[resample_idcs])
-            ensemble.append(m)
+            m.fit(IX_train, Y_train)
+            Y_train_pred = m.predict(IX_train)
+            residuals = Y_train - Y_train_pred
+            for bootidx in range(bootstraps):
+                resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
+                Y_train_resampled = Y_train + residuals[resample_idcs]
+                m = sklearn.linear_model.LinearRegression()
+                m.fit(IX_train, Y_train_resampled)
+                ensemble.append(m)
+        else: raise ValueError(method)
         self.ensembles.append(ensemble)
     def evaluate(self):
         ensemble = self.ensembles[-1]
