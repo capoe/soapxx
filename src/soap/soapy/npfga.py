@@ -1,6 +1,7 @@
 import numpy as np
 import soap
 from soap.soapy.math import zscore
+import scipy.stats
 
 class PyFGraph(object):
     def __init__(self, fgraph):
@@ -820,11 +821,98 @@ cv_iterator = {
   "none": CVNone
 }
 
+class LSE(object):
+    def __init__(self, **kwargs):
+        self.method = kwargs["method"]
+        self.bootstraps = kwargs["bootstraps"]
+        self.ensemble = []
+        self.feature_weights = None
+    def fit(self, IX_train, Y_train, feature_weights=None):
+        import sklearn.linear_model
+        self.ensemble = []
+        sample_iterator = resample_range(0, IX_train.shape[0], IX_train.shape[0])
+        if self.method == 'samples':
+            for bootidx in range(self.bootstraps):
+                resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
+                m = sklearn.linear_model.LinearRegression()
+                m.fit(IX_train[resample_idcs], Y_train[resample_idcs])
+                self.ensemble.append(m)
+        elif self.method == 'residuals':
+            m = sklearn.linear_model.LinearRegression()
+            m.fit(IX_train, Y_train)
+            Y_train_pred = m.predict(IX_train)
+            residuals = Y_train - Y_train_pred
+            for bootidx in range(self.bootstraps):
+                resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
+                Y_train_resampled = Y_train + residuals[resample_idcs]
+                m = sklearn.linear_model.LinearRegression()
+                m.fit(IX_train, Y_train_resampled)
+                self.ensemble.append(m)
+        elif self.method == 'none':
+            m = sklearn.linear_model.LinearRegression()
+            m.fit(IX_train, Y_train)
+            self.ensemble.append(m)
+        elif self.method == 'features':
+            if feature_weights is None: feature_weights = np.ones((IX_train.shape[1],))
+            self.feature_weights = feature_weights
+            self.feature_idcs = []
+            n_features = IX_train.shape[1]
+            weights = []
+            for fidx in range(n_features):
+                print "Ensemble for feature", fidx
+                if self.bootstraps > 0:
+                    for bootidx in range(self.bootstraps):
+                        resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
+                        m = sklearn.linear_model.LinearRegression()
+                        m.fit(IX_train[resample_idcs][:, [fidx]], Y_train[resample_idcs])
+                        self.ensemble.append(m)
+                        self.feature_idcs.append([fidx])
+                        weights.append(feature_weights[fidx])
+                else:
+                    m = sklearn.linear_model.LinearRegression()
+                    m.fit(IX_train[:,[fidx]], Y_train)
+                    self.ensemble.append(m)
+                    y = m.predict(IX_train[:,[fidx]])
+                    self.feature_idcs.append([fidx])
+                    weights.append(feature_weights[fidx])
+            self.feature_weights = np.array(weights)
+        else: raise ValueError(self.method)
+    def predict(self, IX):
+        Y_pred = []
+        if self.method == 'features':
+            for midx, m in enumerate(self.ensemble):
+                Y_pred.append(m.predict(IX[:,self.feature_idcs[midx]]))
+            Y_pred = np.array(Y_pred)
+            Y_pred_med = []
+            Y_pred_std = []
+            for n in range(IX.shape[0]):
+                y = Y_pred[:,n]
+                order = np.argsort(y)
+                y = y[order]
+                w = self.feature_weights[order]
+                w = np.cumsum(w)
+                w = w/w[-1]
+                s = np.searchsorted(w, 0.5)
+                Y_pred_med.append(0.5*(y[s-1]+y[s]))
+                Y_pred_std.append(np.std(y))
+            avg = np.array(Y_pred_med)
+            std = np.array(Y_pred_std)
+            #avg = np.sum((Y_pred.T*self.feature_weights)/np.sum(self.feature_weights), axis=1)
+            #std = np.sum((((Y_pred-avg)**2).T*self.feature_weights)/np.sum(self.feature_weights), axis=1)**0.5
+            #avg = np.median(Y_pred, axis=0)
+            #std = np.std(Y_pred, axis=0)
+        else:
+            for m in self.ensemble:
+                Y_pred.append(m.predict(IX))
+            Y_pred = np.array(Y_pred)
+            avg = np.median(Y_pred, axis=0)
+            std = np.std(Y_pred, axis=0)
+        return avg, std
+
 class Booster(object):
     def __init__(self, options):
         self.options = options
         self.initialized = False
-        self.ensembles = []
         # Cleared whenever dispatched with iter=0
         self.IX_trains = []
         self.Y_trains = []
@@ -836,10 +924,10 @@ class Booster(object):
         self.iteration_train_trues = {}
         self.iteration_preds = {}
         self.iteration_trues = {}
+        self.regressors = []
     def dispatchY(self, iteration, Y_train, Y_test):
         self.iteration = iteration
         if self.iteration == 0:
-            self.ensembles = []
             self.IX_trains = []
             self.Y_trains = [ Y_train ]
             self.IX_tests = []
@@ -858,34 +946,15 @@ class Booster(object):
             return self.Y_trains[0], self.Y_tests[0]
         else:
             return self.Y_trains[-1]-self.Y_trains[0], self.Y_tests[-1]-self.Y_tests[0]
-    def train(self, bootstraps=1000, method='samples'):
-        import sklearn.linear_model
+    def train(self, regressor='lse', bootstraps=1000, method='samples', feature_weights=None):
+        if type(regressor) == str and regressor == 'lse':
+            regressor = LSE(bootstraps=bootstraps, method=method) 
         IX_train = np.concatenate(self.IX_trains, axis=1)
         Y_train = self.Y_trains[0]
-        ensemble = []
-        # TODO TODO TODO
-        sample_iterator = resample_range(0, IX_train.shape[0], IX_train.shape[0])
-        if method == 'samples':
-            for bootidx in range(bootstraps):
-                resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
-                m = sklearn.linear_model.LinearRegression()
-                m.fit(IX_train[resample_idcs], Y_train[resample_idcs])
-                ensemble.append(m)
-        elif method == 'residuals':
-            m = sklearn.linear_model.LinearRegression()
-            m.fit(IX_train, Y_train)
-            Y_train_pred = m.predict(IX_train)
-            residuals = Y_train - Y_train_pred
-            for bootidx in range(bootstraps):
-                resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
-                Y_train_resampled = Y_train + residuals[resample_idcs]
-                m = sklearn.linear_model.LinearRegression()
-                m.fit(IX_train, Y_train_resampled)
-                ensemble.append(m)
-        else: raise ValueError(method)
-        self.ensembles.append(ensemble)
+        if feature_weights is None: regressor.fit(IX_train, Y_train)
+        else: regressor.fit(IX_train, Y_train, feature_weights=feature_weights)
+        self.regressors.append(regressor)
     def evaluate(self):
-        ensemble = self.ensembles[-1]
         IX_train = np.concatenate(self.IX_trains, axis=1)
         IX_test = np.concatenate(self.IX_tests, axis=1)
         Y_train = self.Y_trains[0]
@@ -912,32 +981,40 @@ class Booster(object):
             rho_test = np.nan
         return rmse_train, rho_train, rmse_test, rho_test
     def applyLatest(self, IX):
-        ensemble = self.ensembles[-1]
+        regressor = self.regressors[-1]
         Y_pred = []
         if IX.shape[0] > 0:
-            for m in ensemble:
-                Y_pred.append(m.predict(IX))
-        Y_pred = np.array(Y_pred)
-        Y_pred_avg = np.median(Y_pred, axis=0)
-        Y_pred_std = np.std(Y_pred, axis=0)
+            Y_pred = regressor.predict(IX)
+        if type(Y_pred) == tuple:
+            Y_pred_avg = Y_pred[0]
+            Y_pred_std = Y_pred[1]
+        else:
+            Y_pred_avg = Y_pred
+            Y_pred_std = np.zeros(len(Y_pred))
+        #if len(Y_pred.shape) < 2:
+        #    Y_pred = Y_pred.reshape((1,-1))
+        #Y_pred_avg = np.median(Y_pred, axis=0)
+        #Y_pred_std = np.std(Y_pred, axis=0)
         return Y_pred_avg, Y_pred_std
-    def write(self, trunc='pred_i%d'):
+    def write(self, trunc='pred_i%d', log=None):
         iterations = sorted(self.iteration_preds)
         outfile_test = trunc+'_test.txt'
         outfile_train = trunc+'_train.txt'
         for it in iterations:
             # Training predictions
-            preds = np.concatenate(self.iteration_train_preds[it], axis=0)
-            trues = np.concatenate(self.iteration_train_trues[it], axis=0)
-            np.savetxt(outfile_train % it, np.concatenate([preds, trues], axis=1))
+            preds_train = np.concatenate(self.iteration_train_preds[it], axis=0)
+            trues_train = np.concatenate(self.iteration_train_trues[it], axis=0)
+            np.savetxt(outfile_train % it, np.concatenate([preds_train, trues_train], axis=1))
             # Test predictions
             if len(self.iteration_preds[it]) > 0:
-                preds = np.concatenate(self.iteration_preds[it], axis=0)
-                trues = np.concatenate(self.iteration_trues[it], axis=0)
-                np.savetxt(outfile_test % it, np.concatenate([preds, trues], axis=1))
+                preds_test = np.concatenate(self.iteration_preds[it], axis=0)
+                trues_test = np.concatenate(self.iteration_trues[it], axis=0)
+                np.savetxt(outfile_test % it, np.concatenate([preds_test, trues_test], axis=1))
             else:
+                preds_test = []
+                trues_test = []
                 np.savetxt(outfile_test % it, np.array([]))
-        return
+        return preds_train, trues_train, preds_test, trues_test
 
 
 
