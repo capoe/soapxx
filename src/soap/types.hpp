@@ -1,6 +1,11 @@
 #ifndef _SOAP_TYPES_H
 #define	_SOAP_TYPES_H
 
+
+#if PY_VERSION_HEX < 0x03000000
+#include "Python.h"
+#endif
+
 #include <vector>
 #include <string>
 #include <stdexcept>

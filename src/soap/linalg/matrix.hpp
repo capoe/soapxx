@@ -16,7 +16,11 @@ public:
     matrix(const double &v) { *this=v; }
     matrix(const matrix &m) { *this=m; }
     matrix(double  arr[9]) {*this=arr; }
+#if BOOST_VERSION >= 106400
+    matrix(const boost::python::numpy::ndarray &m) {
+#else
     matrix(const boost::python::numeric::array &m) {
+#endif
         _m[0]=boost::python::extract<double>(m[boost::python::make_tuple(0,0)]);
         _m[1]=boost::python::extract<double>(m[boost::python::make_tuple(0,1)]);
         _m[2]=boost::python::extract<double>(m[boost::python::make_tuple(0,2)]);
@@ -200,7 +204,11 @@ public:
 
     static void registerPython() {
         using namespace boost::python;
-        class_<matrix>("matrix", init<const boost::python::numeric::array&>())
+#if BOOST_VERSION >= 106400
+        class_<matrix>("matrix", init<const boost::python::numpy::ndarray&>())
+#else
+	class_<matrix>("matrix", init<const boost::python::numeric::array&>())
+#endif
            .def(self_ns::str(self_ns::self))
            .def("getRow", &matrix::getRow)
            .def("getCol", &matrix::getCol);

@@ -1,6 +1,8 @@
 // (c) Sandip De 
 // 16th Oct 2015
 // Lausanne 
+// Modified by: Berk Onat (b.onat@warwick.ac.uk)
+// May 2018, University of Warwick, UK
 // C++ implementation of python module to compute permanent of a matrix by random montecarlo 
 /* Functions to compute the permanent, given a numpy array */
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
@@ -14,6 +16,24 @@
 #include <iostream>
 #include "../numpy.hpp"
 // Array access macros.
+
+#if PY_VERSION_HEX >= 0x03000000
+#define NUMPY_IMPORT_ARRAY_RETVAL NULL
+#define PyInt_AsSsize_t PyLong_AsSsize_t
+#define PyArray_Check(op) PyObject_TypeCheck(op, &PyArray_Type)
+#define PyUString_Check PyUnicode_Check
+#define PyUString_GET_SIZE PyUnicode_GET_SIZE
+#define PyUString_FromFormat PyUnicode_FromFormat
+#define PyString_Type PyBytes_Type
+#define PyInt_Type PyLong_Type
+#define PyIntObject PyLongObject
+#define PyInt_FromLong PyLong_FromLong
+#define PyInt_AsLong PyLong_AsLong
+#define PyInt_AS_LONG PyLong_AS_LONG
+#else
+#define NUMPY_IMPORT_ARRAY_RETVAL
+#define PyBytes_FromString PyString_FromString
+#endif
 
 #define SM(x0, x1) (*(npy_double*) (( (char*) PyArray_DATA(matrix) + \
                     (x0) * PyArray_STRIDES(matrix)[0] +  \
@@ -70,11 +90,31 @@ static PyMethodDef methods[] = {
   { NULL, NULL, 0, NULL } // Sentinel
 };
 
+#if PY_VERSION_HEX >= 0x03000000
+
+static struct PyModuleDef _permanent =
+{
+  PyModuleDef_HEAD_INIT,
+  "_permanent", /* name of module */
+  "",          /* module documentation, may be NULL */
+  -1,          /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
+  methods
+};
+
+PyMODINIT_FUNC PyInit__permanent(void)
+{
+  return PyModule_Create(&_permanent);
+}
+
+#else
+
 // Module initialization
 PyMODINIT_FUNC init_permanent(void) {
   (void) Py_InitModule("_permanent", methods);
   import_array();
 }
+
+#endif
 
 double fact(int n)
 {
@@ -89,8 +129,8 @@ static npy_double _mcperm(PyArrayObject *matrix, PyFloatObject *eps, PyIntObject
     std::vector<int> idx(n);
 //    double eps=1e-3;
     double eps1=PyFloat_AS_DOUBLE(eps);
-    int ntry1=PyInt_AS_LONG(ntry);
-    int seed1=PyInt_AS_LONG(seed);
+    int ntry1=(int)PyInt_AS_LONG((PyObject*)ntry);
+    int seed1=(int)PyInt_AS_LONG((PyObject*)seed);
     for (int i=0; i<n; ++i) idx[i]=i;
     double pi, prm=0, prm2=0, fn=fact(n), ti=0;
     int i=0, istride=0, pstride=n*100; 

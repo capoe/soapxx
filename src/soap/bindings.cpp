@@ -1,3 +1,4 @@
+#include <boost/version.hpp>
 #include "bindings.hpp"
 #include "coulomb.hpp"
 #include "fieldtensor.hpp"
@@ -11,6 +12,10 @@ BOOST_PYTHON_MODULE(_soapxx)
 {
     using namespace boost::python;
 
+#if BOOST_VERSION >= 106400
+    Py_Initialize();
+    boost::python::numpy::initialize();
+#endif
     soap::Structure::registerPython();
     soap::Segment::registerPython();
     soap::Particle::registerPython();
