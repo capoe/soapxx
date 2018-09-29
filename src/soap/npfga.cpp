@@ -905,9 +905,10 @@ void zscoreMatrixByColumn(matrix_t &X) {
         x_avg /= X.size1();
         x2_avg /= X.size1();
         double x_std = std::sqrt(x2_avg - x_avg*x_avg);
+        if (x_std != x_std) x_std = 0.0; // if arg of sqrt < 0 TODO Fix numerical issues here
         for (int i=0; i<X.size1(); ++i) {
             X(i,j) -= x_avg;
-            X(i,j) /= (x_std+1e-20); // TODO Make epsilon=1e-20 an option
+            X(i,j) /= (x_std + 1e-20); // TODO Make epsilon=1e-20 an option
         }
     }
 }
