@@ -1,7 +1,7 @@
 
 ### Workflow
 
-Execute run.sh. This will create an output hdf5-file 'structures.xyz' containing the molecular graphs and molecular kernel matrix.
+Execute run.sh. This will create an output hdf5-file 'structures.hdf5' containing the molecular graphs and molecular kernel matrix.
 This NxN kernel matrix (where N is the number of structures) can be loaded using the h5py library:
 ```python
 import h5py
