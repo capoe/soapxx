@@ -1,0 +1,50 @@
+{
+  "basekernel": {
+    "type": "dot",
+    "dot": {
+      "xi": 3.0,
+      "delta": 1.0
+    }
+  },
+  "topkernel": {
+    "type": "rematch",
+    "rematch-hierarchical": {
+      "gamma": 0.01,
+      "bond-order": 3,
+      "concatenate": [3]
+    },
+    "rematch": {
+      "gamma": 0.01
+    },
+    "rematch-atomic": {
+      "gamma": 0.01
+    },
+    "average": {
+      "xi": 1.0,
+      "delta": 1.0
+    }
+  },
+  "descriptor": {
+    "type": "soap",
+    "soap": {
+      "spectrum.global": false,
+      "spectrum.gradients": false,
+      "spectrum.2l1_norm": false,
+      "radialbasis.type" : "gaussian",
+      "radialbasis.mode" : "adaptive",
+      "radialbasis.N" : 9,
+      "radialbasis.sigma": 0.5,
+      "radialbasis.integration_steps": 15,
+      "radialcutoff.Rc": 3.5,
+      "radialcutoff.Rc_width": 0.5,
+      "radialcutoff.type": "heaviside",
+      "radialcutoff.center_weight": 1.0,
+      "angularbasis.type": "spherical-harmonic",
+      "angularbasis.L": 6,
+      "kernel.adaptor": "specific-unique",
+      "exclude_centers": ["H"],
+      "exclude_targets": [],
+      "type_list": ["Br", "C", "Cl", "F", "H", "I", "N", "O", "P", "S"]
+    }
+  }
+}
