@@ -35,13 +35,13 @@ if(DEFINED ENV{BOOST_ROOT})
 else(DEFINED ENV{BOOST_ROOT})
     message("-- Note: BOOST_ROOT not set. Let's see whether we can find BOOST anyway.")
 endif(DEFINED ENV{BOOST_ROOT})
-find_package(Boost COMPONENTS python mpi filesystem serialization)
+find_package(Boost COMPONENTS python filesystem serialization)
 include_directories(${Boost_INCLUDE_DIRS})
 
-find_package(MPI REQUIRED)
-include_directories(${MPI_INCLUDE_PATH})
+# find_package(MPI REQUIRED)
+# include_directories(${MPI_INCLUDE_PATH})
 
-set(SOAPXX_LINK_LIBRARIES ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${MPI_LIBRARIES} ${GSL_LIBRARIES})
+set(SOAPXX_LINK_LIBRARIES ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${GSL_LIBRARIES})
 
 # SUMMARIZE INCLUDES & LIBS
 get_property(local_dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)

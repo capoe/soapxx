@@ -1,6 +1,5 @@
 #! /usr/bin/env python
 import soap
-import ase.io
 import json
 import numpy as np
 import pickle
@@ -471,7 +470,7 @@ def read_filter_configs(
         key=lambda c: c.info['label'],
         log=None):
     if log: log << "Reading" << config_file << log.endl
-    configs = ase.io.read(config_file, index=index)
+    configs = soap.tools.io.read(config_file, index=index)
     if log: log << log.item << "Have %d initial configurations" % len(configs) << log.endl
     if do_remove_duplicates:
         configs, duplics = remove_duplicates(configs, key=key)

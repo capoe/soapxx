@@ -6,15 +6,9 @@ from .. import _soapxx as soap
 from ..soapy import momo
 from ..soapy import elements
 
-try:
-    import ase
-    import ase.io
-except ImportError:
-    print("Note: ase.io import failed. Install PYTHON-ASE to harvest full reader functionality.")
-
 def structures_from_xyz(xyz_file, **kwargs):
     # Read xyz via ASE
-    ase_configs = ase.io.read(xyz_file, index=':')
+    ase_configs = soap.tools.io.read(xyz_file, index=':')
     return structures_from_ase(
         ase_configs=ase_configs, 
         **kwargs)
@@ -266,8 +260,7 @@ class AseConfigList(object):
         read_fct=None,
         read_fct_args={}):
         if read_fct == None:
-            import ase.io
-            read_fct = ase.io.read
+            read_fct = soap.tools.io.read
             read_fct_args = { 'index':':' }        
         self.configs = []
         config_idx = -1

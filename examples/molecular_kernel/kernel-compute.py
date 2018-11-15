@@ -1,7 +1,6 @@
 #! /usr/bin/env python
 import soap
 import soap.soapy.graph as pygraph
-import ase.io
 import json
 import numpy as np
 import pickle
