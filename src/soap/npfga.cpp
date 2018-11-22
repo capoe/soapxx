@@ -23,7 +23,7 @@ FNodeDimension::FNodeDimension(std::string dimstr) {
     for (auto it=fields.begin(); it!=fields.end(); ++it) {
         std::vector<std::string> unit_power = soap::base::Tokenizer(*it, "^").ToVector();
         std::string unit = unit_power[0];
-        double power = (unit_power.size() > 1) ? 
+        double power = (unit_power.size() > 1) ?
             soap::lexical_cast<double, std::string>(unit_power[1], "invalid power") : 1.0;
         this->addFactor(unit, power);
     }
@@ -32,7 +32,7 @@ FNodeDimension::FNodeDimension(std::string dimstr) {
 std::string FNodeDimension::calculateString() {
     std::string out = "";
     for (auto it=dim_map.begin(); it!=dim_map.end(); ++it) {
-        out += "*" + it->first + "^" + 
+        out += "*" + it->first + "^" +
             soap::lexical_cast<std::string, double>(it->second, "unit error");
     }
     return out;
@@ -152,14 +152,14 @@ std::string OMult::format(std::vector<std::string> &argstr) {
 }
 
 bool OExp::checkInput(FNode *f1) {
-    return f1->isDimensionless() 
+    return f1->isDimensionless()
         && !(f1->containsOperator("e"))
         && (f1->getOperator()->getTag() != "l");
 }
 
 bool OLog::checkInput(FNode *f1) {
-    return f1->isDimensionless() 
-        && f1->notNegative() 
+    return f1->isDimensionless()
+        && f1->notNegative()
         && f1->notZero()
         && (f1->getOperator()->getTag() != "e")
         && !(f1->containsOperator("l"));
@@ -170,12 +170,12 @@ bool OMod::checkInput(FNode *f1) {
 }
 
 bool OSqrt::checkInput(FNode *f1) {
-    return f1->notNegative() 
+    return f1->notNegative()
         && (f1->getOperator()->getTag() != "2");
 }
 
 bool OInv::checkInput(FNode *f1) {
-    return f1->notZero() 
+    return f1->notZero()
         && (f1->getOperator()->getTag() != "r");
 }
 
@@ -322,8 +322,8 @@ OP_MAP::OP_MAP() {
 // =====
 
 FNode::FNode(Operator *oper, std::string varname, std::string maybe_neg,
-        std::string maybe_zero_arg, std::string dimstr, bool is_root, double unit_prefac) 
-        : unit_prefactor(unit_prefac), prefactor(1.0), value(0.0), instruction(NULL), 
+        std::string maybe_zero_arg, std::string dimstr, bool is_root, double unit_prefac)
+        : unit_prefactor(unit_prefac), prefactor(1.0), value(0.0), instruction(NULL),
           op(oper), tag(varname), is_root(is_root), generation_idx(0) {
     if (maybe_neg != "+-" && maybe_neg != "+" && maybe_neg != "-") throw soap::base::OutOfRange(maybe_neg);
     if (maybe_zero_arg != "+0" && maybe_zero_arg != "-0") throw soap::base::OutOfRange(maybe_zero_arg);
@@ -336,30 +336,30 @@ FNode::FNode(Operator *oper, std::string varname, std::string maybe_neg,
     dimension = FNodeDimension(dimstr);
 
     GLOG() << (boost::format("Created %1$snode: %2$-30s  []=%3$-15s  pre=%4$1.2f  +0=%5$d  +-=%6$d")
-        % (is_root ? "root " : "") % varname % dimension.calculateString() 
+        % (is_root ? "root " : "") % varname % dimension.calculateString()
         % prefactor % maybe_zero % maybe_negative).str() << std::endl;
 }
 
 FNode::FNode(Operator *oper, FNode *par1, FNode *par2, bool maybe_neg, bool maybe_z)
-        : unit_prefactor(1.0), prefactor(1.0), value(0.0), instruction(NULL), 
-          maybe_negative(maybe_neg), maybe_zero(maybe_z), 
+        : unit_prefactor(1.0), prefactor(1.0), value(0.0), instruction(NULL),
+          maybe_negative(maybe_neg), maybe_zero(maybe_z),
           op(oper), is_root(false) {
     parents.push_back(par1);
     parents.push_back(par2);
-    generation_idx = (par1->getGenerationIdx() >= par2->getGenerationIdx()) ? 
+    generation_idx = (par1->getGenerationIdx() >= par2->getGenerationIdx()) ?
         par1->getGenerationIdx()+1 : par2->getGenerationIdx() +1 ;
 }
 
 FNode::FNode(Operator *oper, FNode *par1, bool maybe_neg, bool maybe_z)
-        : unit_prefactor(1.0), prefactor(1.0), value(0.0), instruction(NULL), 
-          maybe_negative(maybe_neg), maybe_zero(maybe_z), 
+        : unit_prefactor(1.0), prefactor(1.0), value(0.0), instruction(NULL),
+          maybe_negative(maybe_neg), maybe_zero(maybe_z),
           op(oper), is_root(false) {
     parents.push_back(par1);
     generation_idx = par1->getGenerationIdx()+1;
 }
 
 FNode::FNode()
-        : unit_prefactor(1.0), prefactor(1.0), value(0.0), 
+        : unit_prefactor(1.0), prefactor(1.0), value(0.0),
           instruction(NULL), maybe_negative(true), maybe_zero(true),
           op(OP_MAP::get("I")), is_root(false) {
 }
@@ -430,7 +430,7 @@ bool FNode::containsOperator(std::string optag) {
     else {
         for (auto par: parents) {
             if (par->containsOperator(optag)) {
-                contains = true; 
+                contains = true;
                 break;
             }
         }
@@ -525,7 +525,7 @@ Instruction::Instruction(Operator *oper, std::vector<Instruction*> &args_in)
                 it->second->prefactor *= a->prefactor;
                 it->second->power += a->power;
                 delete a;
-            } 
+            }
             else {
                 argmap[argstr] = a;
                 args_short.push_back(a);
@@ -551,12 +551,12 @@ Instruction::Instruction(Operator *oper, std::vector<Instruction*> &args_in)
         }
     }
     std::sort(args.begin(), args.end(), [](Instruction *i1, Instruction *i2) {
-        return i1->getBasename() <= i2->getBasename(); 
+        return i1->getBasename() <= i2->getBasename();
     });
 }
 
 void Instruction::raiseToPower(double p) {
-    if (op->getTag() == "*" || op->getTag() == ":") { 
+    if (op->getTag() == "*" || op->getTag() == ":") {
         for (auto arg: args) arg->raiseToPower(p);
     } else {
         prefactor = std::pow(prefactor, p);
@@ -570,7 +570,7 @@ bool Instruction::containsConstant() {
     else {
         for (auto arg: args) {
             if (arg->containsConstant()) {
-                contains = true; 
+                contains = true;
                 break;
             }
         }
@@ -586,7 +586,7 @@ std::string Instruction::getBasename() {
     } else {
         std::vector<std::string> argstrs;
         for (auto a: args) {
-            std::string format_str = 
+            std::string format_str =
                 (args.size() > 1 && OP_PRIORITY[op->getTag()] > OP_PRIORITY[a->op->getTag()]) ?
                 "(%1$s)" : "";
             argstrs.push_back(a->stringify(format_str));
@@ -601,7 +601,7 @@ std::string Instruction::stringify(std::string format) {
         ;
     } else {
         expr = this->getBasename();
-        std::string prestr = (std::abs(prefactor-1.0) > 1e-20) ? 
+        std::string prestr = (std::abs(prefactor-1.0) > 1e-20) ?
             (boost::format("%1$+1.0f*") % prefactor).str() : "";
         std::string powstr = (std::abs(power-1.0) > 1e-20) ?
             (boost::format("^%1$1.1f") % power).str() : "";
@@ -652,25 +652,25 @@ FGraph::FGraph(Options &options_ref) : options(&options_ref) {
     GLOG() << "Creating FGraph" << std::endl;
     correlation_measure = options->get<std::string>("correlation_measure");
     // Unary ops
-    uop_map["I"] = OP_MAP::get("I"); 
-    uop_map["e"] = OP_MAP::get("e"); 
-    uop_map["l"] = OP_MAP::get("l"); 
-    uop_map["|"] = OP_MAP::get("|"); 
-    uop_map["s"] = OP_MAP::get("s"); 
-    uop_map["r"] = OP_MAP::get("r"); 
-    uop_map["2"] = OP_MAP::get("2"); 
+    uop_map["I"] = OP_MAP::get("I");
+    uop_map["e"] = OP_MAP::get("e");
+    uop_map["l"] = OP_MAP::get("l");
+    uop_map["|"] = OP_MAP::get("|");
+    uop_map["s"] = OP_MAP::get("s");
+    uop_map["r"] = OP_MAP::get("r");
+    uop_map["2"] = OP_MAP::get("2");
     // Binary ops
-    bop_map["+"] = OP_MAP::get("+"); 
-    bop_map["-"] = OP_MAP::get("-"); 
-    bop_map["*"] = OP_MAP::get("*"); 
-    bop_map[":"] = OP_MAP::get(":"); 
+    bop_map["+"] = OP_MAP::get("+");
+    bop_map["-"] = OP_MAP::get("-");
+    bop_map["*"] = OP_MAP::get("*");
+    bop_map[":"] = OP_MAP::get(":");
 }
 
 FGraph::~FGraph() {
     for (auto it=fnodes.begin(); it!=fnodes.end(); ++it) delete *it;
 }
 
-void FGraph::addRootNode(std::string varname, std::string maybe_neg, 
+void FGraph::addRootNode(std::string varname, std::string maybe_neg,
         std::string maybe_zero, double unit_prefactor, std::string unit) {
     bool is_root = true;
     FNode *new_node = new FNode(uop_map["I"], varname, maybe_neg, maybe_zero, unit, is_root, unit_prefactor);
@@ -704,7 +704,7 @@ void FGraph::addLayer(std::string uops_str, std::string bops_str) {
 
 void FGraph::generateLayer(op_vec_t &uops, op_vec_t &bops) {
     FNodeCheck fnode_check(
-        options->get<double>("unit_min_exp"), 
+        options->get<double>("unit_min_exp"),
         options->get<double>("unit_max_exp"));
     // Unary layer
     std::vector<FNode*> new_nodes;
@@ -771,7 +771,7 @@ void FGraph::registerNewNode(FNode *new_node) {
             mssg = "[dupli]";
         }
     }
-    if (!new_node->isRoot()) GLOG() << (boost::format("%1$10s %2$50s == %3$-50s") 
+    if (!new_node->isRoot()) GLOG() << (boost::format("%1$10s %2$50s == %3$-50s")
         % mssg % new_node->calculateTag() % expr) << std::endl;
     // Add node to containers or delete
     if (keep) {
@@ -810,8 +810,8 @@ void FGraph::apply(matrix_t &input, matrix_t &output) {
 }
 
 boost::python::object FGraph::evaluateSingleNodeNumpy(
-        FNode *fnode, 
-        boost::python::object &np_input, 
+        FNode *fnode,
+        boost::python::object &np_input,
         std::string np_dtype) {
     matrix_t input;
     soap::linalg::numpy_converter npc(np_dtype.c_str());
@@ -849,9 +849,11 @@ void FGraph::applyAndCorrelate(matrix_t &X_in, matrix_t &X_out, matrix_t &Y_in, 
     this->apply(X_in, X_out);
     if (correlation_measure == "moment") {
         correlateMatrixColumnsPearson(X_out, Y_in, cov_out);
-    } else if (correlation_measure == "rank")
+    } else if (correlation_measure == "rank") {
         correlateMatrixColumnsSpearman(X_out, Y_in, cov_out);
-    else if (correlation_measure == "mixed") {
+    } else if (correlation_measure == "auroc") {
+        correlateMatrixColumnsAUROC(X_out, Y_in, cov_out);
+    } else if (correlation_measure == "mixed") {
         double rank_coeff = options->get<double>("rank_coeff");
         matrix_t cov_out_rank = zero_matrix_t(cov_out.size1(), cov_out.size2());
         correlateMatrixColumnsSpearman(X_out, Y_in, cov_out_rank);
@@ -938,6 +940,43 @@ void correlateMatrixColumnsSpearman(matrix_t &X_in, matrix_t &Y_in, matrix_t &co
     cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_ranks), Y_ranks);
 }
 
+void correlateMatrixColumnsAUROC(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out) {
+    if ((X_in.size1() != Y_in.size1())
+        || (cov_out.size1() != X_in.size2())
+        || (cov_out.size2() != Y_in.size2()))
+        throw soap::base::SanityCheckFailed("Inconsistent matrix dimensions");
+
+    for (int yidx=0; yidx<Y_in.size2(); ++yidx) {
+        int n_samples = X_in.size1();
+        int n_pos = 0;
+        for (int s=0; s<n_samples; ++s) n_pos += Y_in(s,yidx);
+        int n_neg = n_samples - n_pos;
+        std::vector<int> order(n_samples);
+        for (int xidx=0; xidx<X_in.size2(); ++xidx) {
+            std::iota(order.begin(), order.end(), 0);
+            std::sort(order.begin(), order.end(), [&](int i1, int i2) {
+                return X_in(i1,xidx) > X_in(i2,xidx); });
+            double n_cum = 0;
+            double fp0 = 0.0;
+            double tp0 = 0.0;
+            double fp = 0.0;
+            double tp = 0.0;
+            double auroc = 0.0;
+            for (int s=1; s<=n_samples; ++s) {
+                n_cum += Y_in(order[s-1], yidx);
+                tp = n_cum/n_pos;
+                fp = (s-n_cum)/n_neg;
+                auroc += 0.5*(tp+tp0)*(fp-fp0);
+                tp0 = tp;
+                fp0 = fp;
+            }
+            if (auroc < 0.5) auroc = 1.-auroc;
+            auroc = 2*(auroc-0.5);
+            cov_out(xidx, yidx) = auroc;
+        }
+    }
+}
+
 void mapMatrixColumnsOntoRanks(matrix_t &M_in, matrix_t &M_out) {
     std::vector<int> idcs(M_in.size1());
     for (int col_idx=0; col_idx<M_in.size2(); ++col_idx) {
@@ -963,4 +1002,3 @@ BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OSqrt);
 BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OInv);
 BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::O2);
 BOOST_CLASS_EXPORT_IMPLEMENT(soap::npfga::OIdent);
-

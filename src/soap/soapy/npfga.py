@@ -28,12 +28,15 @@ class PyFGraph(object):
         self.fnode_map = { f.expr: f for f in self.fnodes }
         for f in self.fnodes: f.resolveParents(self.fnode_map)
         return
-    def rank(self, key=lambda f: np.abs(f.cov*f.confidence)):
+    def rank(self, cumulative=False, key=lambda f: np.abs(f.cov*f.confidence)):
         scores = [ key(f) for f in self.fnodes ]
         scores_cum = np.cumsum(sorted(scores))
         ranked = sorted(self.fnodes, key=key)
         for idx, r in enumerate(ranked):
-            r.rank = scores_cum[idx]/scores_cum[-1]*key(r)
+            if cumulative == True:
+                r.rank = scores_cum[idx]/scores_cum[-1]*key(r)
+            else:
+                r.rank = key(r)
         return
 
 class PyFGraphStats(object):

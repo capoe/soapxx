@@ -114,11 +114,11 @@ struct FNodeCheck
     }
 };
 
-class FNode 
+class FNode
 {
   public:
     FNode();
-    FNode(Operator *op, std::string varname, std::string varplus, 
+    FNode(Operator *op, std::string varname, std::string varplus,
         std::string varzero, std::string dimstr, bool is_root, double unit_prefactor);
     FNode(Operator *op, FNode *par1, bool maybe_negative, bool maybe_zero);
     FNode(Operator *op, FNode *par1, FNode *par2, bool maybe_negative, bool maybe_zero);
@@ -266,7 +266,7 @@ class OIdent : public Operator
     }
 };
 
-class OExp : public Operator 
+class OExp : public Operator
 {
   public:
     OExp() { tag = "e"; }
@@ -281,7 +281,7 @@ class OExp : public Operator
     }
 };
 
-class OLog : public Operator 
+class OLog : public Operator
 {
   public:
     OLog() { tag = "l"; }
@@ -313,7 +313,7 @@ class OMod : public Operator
 
 class OSqrt : public Operator
 {
-  public:   
+  public:
     OSqrt() { tag = "s"; }
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
@@ -327,7 +327,7 @@ class OSqrt : public Operator
 
 class OInv : public Operator
 {
-  public:   
+  public:
   OInv() { tag = "r"; }
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
@@ -341,7 +341,7 @@ class OInv : public Operator
 
 class O2 : public Operator
 {
-  public:   
+  public:
     O2() { tag = "2"; }
     bool checkInput(FNode *f1);
     FNode *generate(FNode *f1);
@@ -381,7 +381,7 @@ class OMinus : public Operator
         arch & boost::serialization::base_object<Operator>(*this);
     }
 };
-    
+
 class OMult : public Operator
 {
   public:
@@ -440,7 +440,7 @@ class FGraph
     FGraph(Options &options);
     ~FGraph();
     // Methods
-    void addRootNode(std::string varname, std::string varplus, 
+    void addRootNode(std::string varname, std::string varplus,
         std::string varzero, double unit_prefactor, std::string unit);
     node_list_t &getRoots() { return root_fnodes; }
     bpy::list getRootsPython();
@@ -452,8 +452,8 @@ class FGraph
     void applyAndCorrelate(matrix_t &X_in, matrix_t &X_out, matrix_t &Y_in, matrix_t &cov_out);
     void evaluateSingleNode(FNode *fnode, matrix_t &input, matrix_t &output);
     int size() { return fnodes.size(); }
-    fgraph_it_t beginNodes() { return fnodes.begin(); } 
-    fgraph_it_t endNodes() { return fnodes.end(); } 
+    fgraph_it_t beginNodes() { return fnodes.begin(); }
+    fgraph_it_t endNodes() { return fnodes.end(); }
     bpy::object applyNumpy(bpy::object &np_input, std::string np_dtype);
     bpy::object applyAndCorrelateNumpy(bpy::object &np_X, bpy::object &np_y, std::string np_dtype);
     bpy::object evaluateSingleNodeNumpy(FNode *fnode, bpy::object &np_input, std::string np_dtype);
@@ -474,7 +474,7 @@ class FGraph
     void save(std::string archfile);
     FGraph *load(std::string archfile);
     template<class Archive>
-    void serialize(Archive &arch, const unsigned int version) { 
+    void serialize(Archive &arch, const unsigned int version) {
         arch & options;
         arch & correlation_measure;
         arch & root_fnodes;
@@ -492,6 +492,7 @@ void mapMatrixColumnsOntoRanks(matrix_t &M_in, matrix_t &M_out);
 
 void correlateMatrixColumnsPearson(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out);
 void correlateMatrixColumnsSpearman(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out);
+void correlateMatrixColumnsAUROC(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out);
 
 }}
 
