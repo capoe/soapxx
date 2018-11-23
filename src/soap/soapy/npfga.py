@@ -157,10 +157,10 @@ def calculate_exceedence(covs_harm, covs_sample, epsilon=1e-10, scale_fct=lambda
     return exs
 
 def generate_graph(
-        features_with_props, 
-        uop_list, 
-        bop_list, 
-        unit_min_exp, 
+        features_with_props,
+        uop_list,
+        bop_list,
+        unit_min_exp,
         unit_max_exp,
         correlation_measure,
         rank_coeff=0.25):
@@ -179,10 +179,10 @@ def generate_graph(
     return fgraph
 
 def calculate_null_distribution(
-        fgraph, 
-        rand_IX_list, 
-        rand_Y, 
-        options, 
+        fgraph,
+        rand_IX_list,
+        rand_Y,
+        options,
         log,
         file_out=False):
     npfga_dtype = rand_IX_list[0].dtype
@@ -262,10 +262,10 @@ def calculate_null_distribution(
 def rank_ptest(
         tags,
         covs,
-        exs, 
-        exs_cum, 
-        rand_exs_rank, 
-        rand_exs_rank_cum, 
+        exs,
+        exs_cum,
+        rand_exs_rank,
+        rand_exs_rank_cum,
         file_out=False):
     n_channels = exs.shape[0]
     idcs_sorted = np.argsort(exs)[::-1]
@@ -298,11 +298,11 @@ def rank_ptest(
         p_first = 0.5*(p0+p1)
         p_first_list[c] = p_first
         p_rank_list[c] = p_rank
-    if file_out: 
+    if file_out:
         np.savetxt('out_exs_phys.txt', np.array([
-            exs_cum[::-1,0], 
-            exs[idcs_sorted], 
-            p_rank_list[idcs_sorted], 
+            exs_cum[::-1,0],
+            exs[idcs_sorted],
+            p_rank_list[idcs_sorted],
             p_first_list[idcs_sorted]]).T)
     q_values = [ 1.-p_first_list[c] for c in range(n_channels) ]
     q_values_nth = [ 1.-p_rank_list[c] for c in range(n_channels) ]
@@ -319,7 +319,7 @@ def resample_range(start, end, n):
         idcs = np.random.randint(start, end, size=(end-start,))
         yield i, idcs
     return
-        
+
 def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
     """
     Required options fields: bootstrap, tail_fraction
@@ -475,7 +475,7 @@ def run_cov_decomposition_filter(fgraph, order, IX, Y, rand_IX_list, rand_Y, boo
     fnodes = [ f for f in fgraph ]
     log << log.mg << "Cov decomposition filter" << log.endl
     keep = True
-    selected_idx = None 
+    selected_idx = None
     scores = []
     root_contributions_list = []
     for rank in xrange(-1,-len(order)-1,-1):
@@ -488,7 +488,7 @@ def run_cov_decomposition_filter(fgraph, order, IX, Y, rand_IX_list, rand_Y, boo
             rand_IX_list=rand_IX_list,
             rand_Y=rand_Y,
             bootstrap=bootstrap,
-            log=log)    
+            log=log)
         row_order = np.argsort(cov_decomposition[:,0])
         for r in row_order:
             log << "i...j = %-50s  cov(i..j) = %+1.4f (+-%1.4f)" % (
@@ -816,7 +816,7 @@ class CVNone(object):
         return info, idcs_train, idcs_test
     def isDone(self):
         return self.step >= self.n_reps
-        
+
 cv_iterator = {
   "loo": CVLOO,
   "mc": CVMC,
@@ -825,34 +825,47 @@ cv_iterator = {
 }
 
 class LSE(object):
+    """Bootstrapper operating on specified prediction model
+
+    Parameters
+    ----------
+    method: bootstrapping approach, can be 'samples', 'residuals' or 'features'
+    bootstraps: number of bootstrap n_samples
+    model: regressor/classifier object, e.g., sklearn.linear_model.LinearRegressionself,
+        should implement fit and predict methods
+    model_args: constructor arguments for model object
+    """
     def __init__(self, **kwargs):
         self.method = kwargs["method"]
         self.bootstraps = kwargs["bootstraps"]
+        self.model = kwargs["model"]
+        self.model_args = kwargs["model_args"] if "model_args" in kwargs else {}
         self.ensemble = []
         self.feature_weights = None
     def fit(self, IX_train, Y_train, feature_weights=None):
-        import sklearn.linear_model
         self.ensemble = []
         sample_iterator = resample_range(0, IX_train.shape[0], IX_train.shape[0])
         if self.method == 'samples':
-            for bootidx in range(self.bootstraps):
+            while len(self.ensemble) < self.bootstraps:
                 resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
-                m = sklearn.linear_model.LinearRegression()
+                m = self.model(**self.model_args)
+                Y_train_boot = Y_train[resample_idcs]
+                if np.std(Y_train_boot) < 1e-10: continue
                 m.fit(IX_train[resample_idcs], Y_train[resample_idcs])
                 self.ensemble.append(m)
         elif self.method == 'residuals':
-            m = sklearn.linear_model.LinearRegression()
+            m = self.model(**self.model_args)
             m.fit(IX_train, Y_train)
             Y_train_pred = m.predict(IX_train)
             residuals = Y_train - Y_train_pred
             for bootidx in range(self.bootstraps):
                 resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
                 Y_train_resampled = Y_train + residuals[resample_idcs]
-                m = sklearn.linear_model.LinearRegression()
+                m = self.model(**self.model_args)
                 m.fit(IX_train, Y_train_resampled)
                 self.ensemble.append(m)
         elif self.method == 'none':
-            m = sklearn.linear_model.LinearRegression()
+            m = self.model(**self.model_args)
             m.fit(IX_train, Y_train)
             self.ensemble.append(m)
         elif self.method == 'features':
@@ -866,13 +879,13 @@ class LSE(object):
                 if self.bootstraps > 0:
                     for bootidx in range(self.bootstraps):
                         resample_idcs = np.random.randint(IX_train.shape[0], size=(IX_train.shape[0],))
-                        m = sklearn.linear_model.LinearRegression()
+                        m = self.model(**self.model_args)
                         m.fit(IX_train[resample_idcs][:, [fidx]], Y_train[resample_idcs])
                         self.ensemble.append(m)
                         self.feature_idcs.append([fidx])
                         weights.append(feature_weights[fidx])
                 else:
-                    m = sklearn.linear_model.LinearRegression()
+                    m = self.model(**self.model_args)
                     m.fit(IX_train[:,[fidx]], Y_train)
                     self.ensemble.append(m)
                     y = m.predict(IX_train[:,[fidx]])
@@ -949,15 +962,21 @@ class Booster(object):
             return self.Y_trains[0], self.Y_tests[0]
         else:
             return self.Y_trains[-1]-self.Y_trains[0], self.Y_tests[-1]-self.Y_tests[0]
-    def train(self, regressor='lse', bootstraps=1000, method='samples', feature_weights=None):
+    def train(self, regressor='lse', bootstraps=1000, method='samples', feature_weights=None, model_args={}):
         if type(regressor) == str and regressor == 'lse':
-            regressor = LSE(bootstraps=bootstraps, method=method) 
+            import sklearn.linear_model
+            model = sklearn.linear_model.LinearRegression
+            regressor = LSE(bootstraps=bootstraps, method=method, model=model, model_args=model_args)
+        elif type(regressor) == str and regressor == 'logit':
+            import sklearn.linear_model
+            model = sklearn.linear_model.LogisticRegression
+            regressor = LSE(bootstraps=bootstraps, method=method, model=model, model_args=model_args)
         IX_train = np.concatenate(self.IX_trains, axis=1)
         Y_train = self.Y_trains[0]
         if feature_weights is None: regressor.fit(IX_train, Y_train)
         else: regressor.fit(IX_train, Y_train, feature_weights=feature_weights)
         self.regressors.append(regressor)
-    def evaluate(self):
+    def evaluate(self, method='moment'):
         IX_train = np.concatenate(self.IX_trains, axis=1)
         IX_test = np.concatenate(self.IX_tests, axis=1)
         Y_train = self.Y_trains[0]
@@ -973,16 +992,28 @@ class Booster(object):
         self.Y_trains.append(Y_pred_train_avg)
         self.Y_tests.append(Y_pred_test_avg)
         # Return stats
-        import scipy.stats
-        rmse_train = (np.sum((Y_pred_train_avg-Y_train)**2)/Y_train.shape[0])**0.5
-        rho_train = scipy.stats.pearsonr(Y_pred_train_avg, Y_train)[0]
-        if IX_test.shape[0] > 0:
-            rmse_test = (np.sum((Y_pred_test_avg-Y_test)**2)/Y_test.shape[0])**0.5
-            rho_test = scipy.stats.pearsonr(Y_pred_test_avg, Y_test)[0]
+        if method == 'auroc':
+            import sklearn.metrics
+            auc_train = sklearn.metrics.roc_auc_score(Y_train, Y_pred_train_avg)
+            mcc_train = sklearn.metrics.matthews_corrcoef(Y_train, Y_pred_train_avg)
+            if IX_test.shape[0] > 1:
+                auc_test = sklearn.metrics.roc_auc_score(Y_test, Y_pred_test_avg)
+                mcc_test = sklearn.metrics.roc_auc_score(Y_test, Y_pred_test_avg)
+            else:
+                auc_test = np.nan
+                mcc_test = np.nan
+            return auc_train, mcc_train, auc_test, mcc_test
         else:
-            rmse_test = np.nan
-            rho_test = np.nan
-        return rmse_train, rho_train, rmse_test, rho_test
+            import scipy.stats
+            rmse_train = (np.sum((Y_pred_train_avg-Y_train)**2)/Y_train.shape[0])**0.5
+            rho_train = scipy.stats.pearsonr(Y_pred_train_avg, Y_train)[0]
+            if IX_test.shape[0] > 0:
+                rmse_test = (np.sum((Y_pred_test_avg-Y_test)**2)/Y_test.shape[0])**0.5
+                rho_test = scipy.stats.pearsonr(Y_pred_test_avg, Y_test)[0]
+            else:
+                rmse_test = np.nan
+                rho_test = np.nan
+            return rmse_train, rho_train, rmse_test, rho_test
     def applyLatest(self, IX):
         regressor = self.regressors[-1]
         Y_pred = []
@@ -1018,15 +1049,3 @@ class Booster(object):
                 trues_test = []
                 np.savetxt(outfile_test % it, np.array([]))
         return preds_train, trues_train, preds_test, trues_test
-
-
-
-
-
-
-
-
-
-
-
-

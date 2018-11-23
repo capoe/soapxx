@@ -945,17 +945,19 @@ void correlateMatrixColumnsAUROC(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_o
         || (cov_out.size1() != X_in.size2())
         || (cov_out.size2() != Y_in.size2()))
         throw soap::base::SanityCheckFailed("Inconsistent matrix dimensions");
-
+    // For each target channel ...
     for (int yidx=0; yidx<Y_in.size2(); ++yidx) {
         int n_samples = X_in.size1();
         int n_pos = 0;
         for (int s=0; s<n_samples; ++s) n_pos += Y_in(s,yidx);
         int n_neg = n_samples - n_pos;
         std::vector<int> order(n_samples);
+        // ... and for each feature channel ....
         for (int xidx=0; xidx<X_in.size2(); ++xidx) {
             std::iota(order.begin(), order.end(), 0);
             std::sort(order.begin(), order.end(), [&](int i1, int i2) {
                 return X_in(i1,xidx) > X_in(i2,xidx); });
+            // ... calculate AUROC
             double n_cum = 0;
             double fp0 = 0.0;
             double tp0 = 0.0;
@@ -970,6 +972,7 @@ void correlateMatrixColumnsAUROC(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_o
                 tp0 = tp;
                 fp0 = fp;
             }
+            // Flip & project AUC onto [0,1] range
             if (auroc < 0.5) auroc = 1.-auroc;
             auroc = 2*(auroc-0.5);
             cov_out(xidx, yidx) = auroc;
