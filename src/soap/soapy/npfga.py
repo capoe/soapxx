@@ -830,8 +830,8 @@ class LSE(object):
     Parameters
     ----------
     method: bootstrapping approach, can be 'samples', 'residuals' or 'features'
-    bootstraps: number of bootstrap n_samples
-    model: regressor/classifier object, e.g., sklearn.linear_model.LinearRegressionself,
+    bootstraps: number of bootstrap samples
+    model: regressor/classifier object, e.g., sklearn.linear_model.LinearRegression,
         should implement fit and predict methods
     model_args: constructor arguments for model object
     """
