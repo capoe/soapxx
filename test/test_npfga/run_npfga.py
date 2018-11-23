@@ -25,7 +25,7 @@ log.AddArg("n_iters", typ=int, default=1, help='Number of NPFGA iterations')
 log.AddArg("uop", typ=(list,str), default=["el|sr2"], help='Unary operator sequence') #, "r2" ])
 log.AddArg("bop", typ=(list,str), default=["+-:*"], help='Binary operator sequence') #, "+-" ])
 # FILTERING
-log.AddArg("correlation_measure", typ=str, default="moment", help="'moment', 'rank' or 'mixed'")
+log.AddArg("correlation_measure", typ=str, default="moment", help="'moment', 'rank', 'auroc', or 'mixed'")
 log.AddArg("rank_coeff", typ=float, default=0.2, help="'moment', 'rank' or 'mixed'")
 log.AddArg("bootstrap", typ=int, default=0, help='Number of bootstrap samples used when calculating feature statistics')
 log.AddArg("sample", typ=int, default=1000, help='Number of random samples for constructing null distributions')
@@ -110,6 +110,7 @@ while not cv_iterator.isDone():
     data_cv_instance = {
         "cv_info": {
             "cv_tag": cv_info_str,
+            "sample_tags": state["sample_tags"],
             "idcs_train": idcs_train.tolist() if type(idcs_train) != list else idcs_train,
             "idcs_test": idcs_test.tolist() if type(idcs_test) != list else idcs_test
         },
@@ -234,10 +235,13 @@ while not cv_iterator.isDone():
             log << "Decomposition filter" << log.endl
             cov_cutoff = np.abs(covs[top_idx])-0.5*covs_std[top_idx]
             corder_short = []
-            for rank in xrange(-1, -len(corder)-1, -1):
-                if np.abs(covs[corder[rank]]) >= cov_cutoff:
-                    log << "- Candidate '%s'" % tags[corder[rank]] << log.endl
-                    corder_short.append(corder[rank])
+            #for rank in xrange(-1, -len(corder)-1, -1):
+            #    if np.abs(covs[corder[rank]]) >= cov_cutoff:
+            #        log << "- Candidate '%s'" % tags[corder[rank]] << log.endl
+            #        corder_short.append(corder[rank])
+            top_n = 20
+            corder_short = [ corder[i] for i in xrange(-1, -top_n-1, -1) ]
+            ftags_short = [ fnodes[c].expr for c in corder_short ]
             corder_short.reverse()
             top_idx, root_contributions = soap.soapy.npfga.run_cov_decomposition_filter(
                 fgraph=fgraph,
@@ -262,14 +266,18 @@ while not cv_iterator.isDone():
             IX_up_train = fgraph.apply(IX_train, str(IX_train.dtype))[:,selected]
             IX_up_test = fgraph.apply(IX_test, str(IX_test.dtype))[:,selected]
             booster.dispatchX(iteration, IX_up_train, IX_up_test)
-            booster.train(bootstraps=5000, method='residuals')
-            rmse_train, rho_train, rmse_test, rho_test = booster.evaluate()
+            if options.correlation_measure == 'auroc':
+                booster.train(bootstraps=5000, method='samples', regressor='logit', model_args={"class_weight": "balanced", "C": 1})
+            else:
+                booster.train(bootstraps=5000, method='residuals', regressor='lse')
+            rmse_train, rho_train, rmse_test, rho_test = booster.evaluate(method=options.correlation_measure)
             log << "Train: RMSE=%1.4e RHO=%1.4e" % (rmse_train, rho_train) << log.endl
             log << "Test:  RMSE=%1.4e RHO=%1.4e" % (rmse_test, rho_test) << log.endl
-            np.savetxt("%s/cov_%s_%s.tab" % (
-                options.output_folder, 
-                cv_info_str+"_iter%d" % iteration, 
-                state["tag"]), np.concatenate([ IX_up_train, Y_train.reshape((-1,1))], axis=1))
+            #raw_input('...')
+            ofs = open('%s/cov_%s_%s.tab' % (options.output_folder, cv_info_str+"_iter%d" % iteration, state["tag"]), 'w')
+            for ii, idx_train in enumerate(idcs_train): ofs.write('%d %+1.7e %+1.7e %s\n' % (
+                idx_train, IX_up_train[ii,0], Y_train[ii], state["sample_tags"][idx_train]))
+            ofs.close()
             data_section["regression"] = {
                 "IX_up_train": IX_up_train.tolist(),
                 "IX_up_test": IX_up_test.tolist(),
