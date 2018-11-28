@@ -713,16 +713,23 @@ def represent_graph_2d(fgraph):
             coords.append([x_i, y_i, w])
         return coords
     curves = []
+    curve_info = []
     for fnode in fgraph.fnodes:
         if len(fnode.parents) == 1:
+            curve_info.append({ "target": fnode.expr, "source": fnode.parents[0].expr })
             curves.append(connect_straight(fnode.parents[0], fnode))
         elif len(fnode.parents) == 2:
+            curve_info.append({ "target": fnode.expr, "source": fnode.parents[0].expr })
             curves.append(connect_arc(fnode.parents[0], fnode.parents[1], fnode))
+            curve_info.append({ "target": fnode.expr, "source": fnode.parents[1].expr })
             curves.append(connect_arc(fnode.parents[1], fnode.parents[0], fnode))
         else: pass
     # Sort curves so important ones are in the foreground
-    curves = sorted(curves, key=lambda c: c[0][-1])
-    return fgraph, curves
+    order = np.argsort([ c[0][-1] for c in curves ])
+    #curves = sorted(curves, key=lambda c: c[0][-1])
+    curves = [ curves[_] for _ in order ]
+    curve_info = [ curve_info[_] for _ in order]
+    return fgraph, curves, curve_info
 
 class RandomizeMatrix(object):
     def __init__(self, method):
@@ -825,14 +832,14 @@ cv_iterator = {
 }
 
 class LSE(object):
-    """Bootstrapper operating on specified prediction model
+    """Bootstrapper operating on user-specified prediction model
 
     Parameters
     ----------
     method: bootstrapping approach, can be 'samples', 'residuals' or 'features'
     bootstraps: number of bootstrap samples
     model: regressor/classifier object, e.g., sklearn.linear_model.LinearRegression,
-        should implement fit and predict methods
+        must implement fit and predict methods
     model_args: constructor arguments for model object
     """
     def __init__(self, **kwargs):

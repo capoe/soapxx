@@ -133,11 +133,14 @@ class BondNetwork(object):
             # Update H
             self.H.fill(0.28)
             np.fill_diagonal(self.H, 0.0)
-            bool_D = np.zeros(self.R0.shape, dtype='i4')
-            bool_R = np.zeros(dR.shape, dtype='i4')
-            bool_D[np.where(self.R0 > 0.8)] = 1
-            bool_R[np.where(dR > 0.8)] = 1
-            self.H[np.where((bool_D+bool_R) > 1)] = 0.0
+            # >>>
+            # TODO This was an attempt at truncating the interaction range:
+            #bool_D = np.zeros(self.R0.shape, dtype='i4')
+            #bool_R = np.zeros(dR.shape, dtype='i4')
+            #bool_D[np.where(self.R0 > 0.8)] = 1
+            #bool_R[np.where(dR > 0.8)] = 1
+            #self.H[np.where((bool_D+bool_R) > 1)] = 0.0
+            # <<<
             # Compute forces
             Fx_harm = self.H * (dR - self.R0) * dX  # Xij = xi-xj. Thus dR > R0 => Fij ~ -(xi-xj) is force experienced by j
             Fy_harm = self.H * (dR - self.R0) * dY
