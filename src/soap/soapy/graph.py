@@ -312,12 +312,16 @@ class TopKernelRematchAtomic(object):
 class TopKernelAverage(object):
     def __init__(self, options, basekernel):
         self.basekernel = basekernel
+        self.normalise = True
+        if "normalise" in options:
+            self.normalise = options["normalise"]
         return
     def compute(self, g1, g2, log=None):
         p1_avg = np.average(g1.P, axis=0)
         p2_avg = np.average(g2.P, axis=0)
-        p1_avg = p1_avg/np.dot(p1_avg,p1_avg)**0.5
-        p2_avg = p2_avg/np.dot(p2_avg,p2_avg)**0.5
+        if self.normalise:
+            p1_avg = p1_avg/np.dot(p1_avg,p1_avg)**0.5
+            p2_avg = p2_avg/np.dot(p2_avg,p2_avg)**0.5
         return self.basekernel.compute(p1_avg, p2_avg)
     def preprocess(self, g, log=None):
         return g
