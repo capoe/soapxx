@@ -972,8 +972,7 @@ void correlateMatrixColumnsAUROC(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_o
                 tp0 = tp;
                 fp0 = fp;
             }
-            // Flip & project AUC onto [0,1] range
-            if (auroc < 0.5) auroc = 1.-auroc;
+            // Project AUC onto [-1,1] range
             auroc = 2*(auroc-0.5);
             cov_out(xidx, yidx) = auroc;
         }
