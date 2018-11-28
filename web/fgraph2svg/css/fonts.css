@@ -1,0 +1,20 @@
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  !font-weight: 400;
+  src: url(./lato.ttf) format('truetype');
+}
+
+@font-face {
+  font-family: 'GillSans';
+  font-style: normal;
+  !font-weight: 400;
+  src: url(./gillsans.ttf) format('truetype');
+}
+
+@font-face {
+  font-family: 'GillSansLight';
+  font-style: normal;
+  !font-weight: 400;
+  src: url(./gillsans-light.ttf) format('truetype');
+}

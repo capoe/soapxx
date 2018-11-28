@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/d3.v3.min.js" charset="utf-8"></script>
+    <script src="./js/utils.js"></script>
+    <script src="./js/jspdf.debug.js"></script>
+    <script src="./js/svg2pdf.js"></script>
+    <script src="./js/save.js"></script>
+    <script src="./js/dictionary.js"></script>
+    <title>NPFGA</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="./css/npfga.css">
+    <link rel="stylesheet" type="text/css" href="./css/slider.css">
+    <link rel="stylesheet" type="text/css" href="./css/fonts.css">
+</head>
+
+<body onload="init();" spellcheck="false">
+
+<div id="graph-infobox" class="tooltip" style="left:50px;top:50px;background-color:rgba(255,255,255,0.7);">
+    <div id="info-tag"></div>
+    <div id="info-size"></div>
+</div>
+
+<div id="graph-tip" class="tooltip">
+</div>
+
+
+<div id="svg-container" style="width:700px;height:700px;float:left;background-color:#ffffff;">
+    <div id="menu">
+        <div class="inline-bt" id="bt0a">OR</div>
+        <div class="inline-bt" id="bt0b">AR</div>
+        <div class="inline-bt" id="bt1">OR:OR</div>
+        <div class="inline-bt" id="bt2">OR:AR</div>
+        <div class="inline-bt" id="bt3">AR:AR</div>
+        <!--input id="kth" type="number" name="kth" min="0.8" max="1.0" step="0.001" value="0.80"-->
+        <input class="slider" id="kth-slider" type="range" name="kth-slider" min="0.0" max="1.0" step="0.001" value="0.0" style="width:75px;height:10px;background-color:rgba(0,0,0,0);">
+        <div class="inline-bt" id="bt4">0.10</div>
+    </div>
+</div>
+
+<div id="node_table_container" style="overflow-y:scroll;width:350px;height:700px;float:left;background-color:#ffffff;">
+</div>
+<div id="sample_table_container" style="overflow-y:scroll;width:300px;height:700px;float:left;background-color:#ffffff;">
+</div>
+<div id="include_table_container" style="overflow-y:scroll;width:300px;height:700px;float:left;background-color:#ffffff;">
+</div>
+<!--div id="compound-table-container" style="overflow-y:scroll;width:350px;height:350px;float:left;background-color:#ffffff;">
+</div-->
+
+<script>
+
+function init_interface() {
+    $("#kth-slider").on("change", function() {
+        var th = $(this).val()
+        $("#bt4").text(utils.round(parseFloat(th),2));
+        apply_threshold(th);
+    });
+}
+
+function map_xy(x, y) {
+    return [x*100+200, y*100+200];
+}
+
+function map_x(x, config) {
+    var x_mapped = config.x0 + config.DX*(x-config.min_x)/(config.max_x - config.min_x);
+    //console.log(x, x_mapped)
+    return x_mapped;
+}
+
+
+function map_y(y, config) {
+    y_mapped = config.y0 + config.DY - config.DY*(y-config.min_y)/(config.max_y - config.min_y);
+    //console.log(y, y_mapped);
+    return y_mapped;
+}
+
+function zoom() {
+    svg.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+}
+
+function update_layout() {
+}
+
+function load_graph_data(tag) {
+    d3.select("svg").remove();
+    if (dataset)
+        $("#"+dataset.replace(".","_")).css("color", "#333333");
+    dataset = tag;
+    $("#"+dataset.replace(".","_")).css("color", "#0066ff");
+
+    var nodesfile = "fgraph2json/"+tag+"_nodes.json";
+    var linksfile = "fgraph2json/"+tag+"_links.json";
+    var resolvefile = "fgraph2json/"+tag+"_resolve.json";
+    var statefile = "fgraph2json/"+tag+"_state.json";
+    console.log("Loading '"+tag+"': "+nodesfile+" "+linksfile+" "+resolvefile);
+
+    utils.request_load_data(
+        nodesfile,
+        function(d,c) { nodes_map = d; },
+        {},
+        function() {
+            utils.request_load_data(
+                linksfile,
+                function(d,c) { links_map = d; },
+                {},
+                function() {
+                    utils.request_load_data(
+                        resolvefile,
+                        function(d,c) { resolve = d; },
+                        {},
+                        function() {
+                            utils.request_load_data(
+                                statefile,
+                                function(d,c) { samples = d; },
+                                {},
+                                function() {
+                                    load_graph(nodes_map, links_map, config);
+                                }) // Load state data
+                        }) // Load id map
+                }) // Load link data
+        }); // Load node data
+}
+
+function load_graph(gnodes_map, glinks_map) {
+
+    nodes = [];
+    for (var key in gnodes_map) {
+        nodes.push(gnodes_map[key]);
+    }
+    links = [];
+    var lidx = 0;
+    for (var tgt in glinks_map) {
+        ref = glinks_map[tgt];
+        for (var src in ref) {
+            links.push(ref[src]);
+        }
+    }
+
+    console.log("Sorting nodes ...");
+    var nidx = 0;
+    nodes.forEach(function(n) { 
+        n.weight = Math.abs(n.c*n.q); 
+        if (n.weight < colorbar.z0) colorbar.z0 = n.weight;
+        if (n.weight > colorbar.z1) colorbar.z1 = n.weight;
+        n.idx = nidx;
+        nidx += 1;
+    });
+    nodes.sort(function(a,b) { return nodes_map[a.id].weight - nodes_map[b.id].weight; });
+
+    load_node_table(nodes);
+    load_sample_table(samples);
+
+    console.log("Sorting links ...");
+    var lidx = 0;
+    links.forEach(function (n) {
+        n.idx = lidx;
+        lidx += 1;
+    });
+    n_groups = group(lidx)+1;
+    links.sort(function(a,b) { return nodes_map[resolve[a.t]].weight - nodes_map[resolve[b.t]].weight; });
+
+    console.log("Generating svg ...");
+
+    d3.select("svg").remove();
+    svg = d3.select("#svg-container")
+        .append("svg")
+        .attr("id", "graph")
+        .attr("width", config.w)
+        .attr("height", config.h)
+            .append("g")
+            .call(d3.behavior.zoom().scaleExtent([1,8]).on("zoom", zoom))
+                .append("g");
+    config.svg = svg;
+
+    svg.append("rect")
+        .attr("class", "substrate")
+        .attr("width", config.w)
+        .attr("height", config.h);
+
+    var line_fct = d3.svg.line()
+        .x(function(d) { return map_x(config.scale*d[0], config); })
+        .y(function(d) { return map_y(config.scale*d[1], config); });
+
+    svg.selectAll("glinks")
+        .data(links)
+        .enter()
+        .append("path")
+        .attr("class", function(d) { return resolve[d.t] + " link" + group(d.idx); })
+        .attr("d", function(d) { return line_fct(d.xy); })
+        .attr("weight", function(d) { return nodes_map[resolve[d.t]].weight; })
+        .attr("style", function(d) {
+            var f = gnodes_map[resolve[d.t]].weight;
+            var col = colorbar.apply(f);
+            var lw = colorbar.lw(f);
+            return "stroke:" + col + ";stroke-width:"+lw+"px;fill:none;"
+        });
+
+    svg.selectAll("gnodes")
+        .data(nodes)
+        .enter()
+        .append("circle")
+        .attr("id", function(d) { return d.id; })
+        .attr("class", function(d) { return "dpt node"+group(d.idx); })
+        .attr("weight", function(d) { return d.weight; })
+        .on("click", function(d) {
+            console.log(d.id, d.expr);
+            unhighlight(highid);
+            highlight(d.id);
+        })
+        .on("mouseover", function(d) {
+            update_graph_infobox(d, d3.event);
+        })
+        .on("mouseout", function(d) {
+            update_graph_infobox(d, d3.event, reset=true);
+        })
+        .attr("style", function(d) {
+            var f = d.weight;
+            var col = colorbar.apply(f);
+            return "stroke:" + col + ";";
+        })
+        .attr("r", function(d) { return 3*Math.abs(d.c)+0.1; })
+        .attr("cx", function(d) { return map_x(config.scale*d.x, config); })
+        .attr("cy", function(d) { return map_y(config.scale*d.y, config); });
+}
+
+function load_node_table(nodes) {
+    console.log("Compiling node table ...");
+    $("#node_table").remove();
+    $("#node_table_header").remove();
+    $("#node_table_container")
+        .append($("<div></div>")
+            .attr("id", "node_table_header")
+            .attr("class", "table-header")
+            .css("text-align", "center")
+            .html("Feature nodes")
+        ).append($("<table></table>")
+            .attr("id", "node_table")
+            .addClass("row-header")
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            //.css("padding", "5px")
+                            //.html(i+1)
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .css("text-align", "left")
+                            .html("Expression")
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .html("Correlation")
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .html("Signal")
+                     )
+            )
+        );
+    for (var i = nodes.length-1; i >= 0; --i) {
+        var d = nodes[i];
+        var row = $('<tr></tr>')
+            .addClass("row")
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            //.css("padding", "5px")
+                            //.html(i+1)
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "left")
+                    .append(
+                        $('<div></div>')
+                            .attr("class", "row-hover")
+                            .html((d.expr.length < 15)? d.expr : d.expr.substr(0,15)+"...")
+                            .attr("nodeid", d.id)
+                            .css("cursor", "pointer")
+                            .on("mouseover", function() {
+                                unhighlight(highid);
+                                console.log($(this).attr("nodeid"));
+                                highlight($(this).attr("nodeid"));
+                                update_node_info(nodes_map[$(this).attr("nodeid")], d3.event);
+                            })
+                            .on("click", function() {
+                                unhighlight(highid);
+                                console.log($(this).attr("nodeid"));
+                                highlight($(this).attr("nodeid"));
+                            })
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "center")
+                    .append(
+                        $('<div></div>')
+                            .html(utils.round(d.c,4))
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "center")
+                    .append(
+                        $('<div></div>')
+                            .html(utils.round(d.q, 4))
+                     )
+            );
+        $("#node_table").append(row);
+    }
+}
+
+function load_sample_table(samples) {
+    console.log("Compiling sample table ...");
+    $("#sample_table").remove();
+    $("#sample_table_header").remove();
+    $("#sample_table_container")
+        .append($("<div></div>")
+            .attr("id", "sample_table_header")
+            .attr("class", "table-header")
+            .css("text-align", "center")
+            .html("Samples")
+        ).append($("<table></table>")
+            .attr("id", "sample_table")
+            .addClass("row-header")
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            //.css("padding", "5px")
+                            //.html(i+1)
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .css("text-align", "left")
+                            .html("Tag")
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .html("Activity")
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .html("")
+                     )
+            )
+        );
+    for (var i = 0; i < samples["sample_tags"].length; ++i) {
+        var d = { "tag": samples["sample_tags"][i], "activity": samples["Y"][i] }
+        var row = $('<tr></tr>')
+            .addClass("row")
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            //.css("padding", "5px")
+                            //.html(i+1)
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "left")
+                    .append(
+                        $('<div></div>')
+                            .attr("class", "row-hover")
+                            .html(d.tag)
+                            .attr("tag", d.tag)
+                            .css("cursor", "pointer")
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "center")
+                    .append(
+                        $('<div></div>')
+                            .html(utils.round(parseFloat(d.activity),2))
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "center")
+                    .append(
+                        $('<div></div>')
+                            .html("")
+                     )
+            );
+        $("#sample_table").append(row);
+    //});
+    }
+}
+
+
+function group(idx) {
+    return parseInt(idx/10000);
+}
+
+function highlight(id, leaf=true) {
+    $("."+id).show();
+    $("#"+id).show();
+    $("."+id).css({ "stroke-width": 2.5 });
+    $("#"+id).css({ "fill": "#00ff66" });
+    $("."+id).css({ "opacity": 1.0 });
+    $("#"+id).css({ "opacity": 1.0 });
+    if (leaf) highid = id;
+    nodes_map[id].pars.forEach(function (p) {
+        highlight(resolve[p], false);
+    });
+}
+
+function unhighlight(id) {
+    if (id) {
+        $("."+id).css({ "stroke-width": config.lw });
+        $("#"+id).css({ "fill": "#333333" });
+        $("."+id).css({ "opacity": 0.5 });
+        $("#"+id).css({ "opacity": 0.5 });
+        nodes_map[id].pars.forEach(function (p) {
+            unhighlight(resolve[p]);
+        });
+    }
+}
+
+function apply_threshold(th) {
+    for (var idx=0; idx<n_groups; ++idx) {
+        $(".link"+idx).each(function() {
+            if ($(this).attr("weight") < th) {
+                $(this).hide();
+            } else {
+                $(this).show();
+            }
+        });
+        $(".node"+idx).each(function() {
+            if ($(this).attr("weight") < th) {
+                $(this).hide();
+            } else {
+                $(this).show();
+            }
+        });
+    }
+}
+
+function update_graph_infobox(d, e, reset=false) {
+    if (reset) {
+        if (highid != d.id) unhighlight(d.id);
+        //$("."+d.id)
+        //    .css("stroke-width", function() { return 0.1; })
+        //    .css("opacity", 0.5);
+        ////$("#label-"+d.tag)
+        ////    .css("font-size", function() { return $(this).attr("def-fontsize") });
+        $("#graph-tip")
+            .text("")
+            .css("opacity", 0.0)
+            .css("left", e.pageX)
+            .css("top", e.pageY);
+    }
+    else {
+        highlight(d.id, false);
+        $("#info-tag")
+            .text(d.expr);
+        $("#info-size")
+            .text("(c="+utils.round(d.c,4)+"  q="+utils.round(d.q,4)+")");
+        //$("."+d.id)
+        //    .css("stroke-width", function() { return 1.5; })
+        //    .css("opacity", 1.0);
+        $("#graph-tip")
+            .text(d.expr)
+            .css("opacity", 0.7)
+            .css("left", e.pageX+10)
+            .css("top", e.pageY+10);
+    }
+}
+
+function update_node_info(d, e) {
+        $("#info-tag")
+            .text(d.expr);
+        $("#info-size")
+            .text("(c="+utils.round(d.c,4)+"  q="+utils.round(d.q,4)+")");
+}
+
+var includes = null;
+var nodes_map = null;
+var links_map = null;
+var nodes = null;
+var links = null;
+var samples = null;
+var resolve = null;
+var dataset = null;
+var highid = null;
+var n_groups = 1;
+
+function load_includes_table(includes) {
+    $("#include_table").remove();
+    $("#include_table_header").remove();
+    $("#include_table_container")
+        .append($("<div></div>")
+            .attr("id", "include_table_header")
+            .attr("class", "table-header")
+            .css("text-align", "center")
+            .html("Datasets")
+        ).append($("<table></table>")
+            .attr("id", "include_table")
+            .addClass("row-header")
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            //.css("padding", "5px")
+                            //.html(i+1)
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .css("text-align", "left")
+                            .html("Tag")
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .html("Graph size")
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            .html("")
+                     )
+            )
+        );
+    for (var i = 0; i < includes.length; ++i) {
+        var d = includes[i];
+        var row = $('<tr></tr>')
+            .addClass("row")
+            .attr("id", d.tag.replace(".","_"))
+            .append(
+                $('<td></td>')
+                    .append(
+                        $('<div></div>')
+                            //.css("padding", "5px")
+                            //.html(i+1)
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "left")
+                    .append(
+                        $('<div></div>')
+                            .attr("class", "row-hover")
+                            .html(d.tag)
+                            .attr("tag", d.tag)
+                            .css("cursor", "pointer")
+                            .on("click", function() {
+                                load_graph_data($(this).attr("tag"));
+                            })
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "center")
+                    .append(
+                        $('<div></div>')
+                            .html(d.n_features)
+                     )
+            )
+            .append(
+                $('<td></td>')
+                    .css("text-align", "center")
+                    .append(
+                        $('<div></div>')
+                            .html("")
+                     )
+            );
+        $("#include_table").append(row);
+    }
+
+}
+
+function load_resources() {
+    utils.request_load_data(
+        "fgraph2json/include.json",
+        function(d,c) { 
+            includes = d; 
+            console.log(includes);
+            load_includes_table(includes);
+        },
+        {},
+        function() {
+            load_graph_data("m2_sol_conv_sol-ext");
+        });
+}
+
+var config = {
+    scale: 0.04,
+    menu_width: 0,
+    min_x: -4.0,
+    max_x: +4.0,
+    dx: 0.5,
+    w_col: 175,
+    n_rows_max_wrap: 20,
+    adjust_n_rows_max_wrap: true,
+    w: 700,
+    h: 700,
+    group_selected: null,
+    x0: 100,
+    DX: 500,
+    y0: 100,
+    DY: 500,
+    min_x: -0.52,
+    max_x: +0.52,
+    min_y: -0.52,
+    max_y: +0.52,
+    pt_size: 2,
+    pt_size_min: 1,
+    svg: null,
+    dpts: null,
+    lw: 0.5,
+    adjust_colorscale: true
+};
+
+var colorbar = {
+    "z0": config.adjust_colorscale ? 1.0 : 0.0,
+    "z1": config.adjust_colorscale ? 0.0 : 1.0,
+    "c": ["#fcfcfc", "#0066ff", "#ff00ff"],
+    "t": [ -0.01, 0.5, 1.01 ],
+    "apply": function(z) {
+        var f = (z-colorbar.z0)/(colorbar.z1-colorbar.z0)
+        var c = "#000000";
+        for (var i=0; i < colorbar.t.length; ++i) {
+            if (colorbar.t[i] < f & colorbar.t[i+1] >= f) {
+                var ff = (f-colorbar.t[i])/(colorbar.t[i+1]-colorbar.t[i]);
+                c = utils.interpolate_color(colorbar.c[i], colorbar.c[i+1], ff);
+            }
+        }
+        return c;
+    },
+    "lw": function(z) {
+        //var f = (z-colorbar.z0)/(colorbar.z1-colorbar.z0);
+        //return 0.05+f*0.1;
+        return config.lw;
+    }
+}
+
+
+function init() {
+    load_resources();
+    init_interface();
+}
+
+</script>
+
+</body>
+</html>

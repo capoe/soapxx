@@ -1,0 +1,6 @@
+0. Generate visualization input using fgraph2json.py.
+1. Execute `bash serve.sh` to start local HTTP server.
+2. Access server page in browser under 127.0.0.1:8888.
+3. Select a dataset from the rightmost column.
+4. Try zooming, dragging and clicking on the canvas.
+
