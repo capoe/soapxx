@@ -10,7 +10,7 @@ import soap
 log = rmt.log
 
 log.Connect()
-log.AddArg("statefile", typ=str, help="Path to binary file storing state object with fields: 'IX', 'T', 'tag', 'features_with_props'")
+log.AddArg("statefile", typ=str, help="Path to binary file storing state object with fields: 'IX', 'T', 'tag', 'features_with_props', 'sample_tags'")
 log.AddArg("output_folder", typ=str, default='out_npfga', help='Output folder')
 log.AddArg("write_jar", typ=bool, default=False, help='Toggle graph archiving')
 log.AddArg("write_xup", typ=bool, default=False, help='Write feature array')
@@ -25,7 +25,7 @@ log.AddArg("n_iters", typ=int, default=1, help='Number of NPFGA iterations')
 log.AddArg("uop", typ=(list,str), default=["el|sr2"], help='Unary operator sequence') #, "r2" ])
 log.AddArg("bop", typ=(list,str), default=["+-:*"], help='Binary operator sequence') #, "+-" ])
 # FILTERING
-log.AddArg("correlation_measure", typ=str, default="moment", help="'moment', 'rank', 'auroc', or 'mixed'")
+log.AddArg("correlation_measure", typ=str, default="moment", help="'moment', 'rank' or 'mixed'")
 log.AddArg("rank_coeff", typ=float, default=0.2, help="'moment', 'rank' or 'mixed'")
 log.AddArg("bootstrap", typ=int, default=0, help='Number of bootstrap samples used when calculating feature statistics')
 log.AddArg("sample", typ=int, default=1000, help='Number of random samples for constructing null distributions')
@@ -266,14 +266,10 @@ while not cv_iterator.isDone():
             IX_up_train = fgraph.apply(IX_train, str(IX_train.dtype))[:,selected]
             IX_up_test = fgraph.apply(IX_test, str(IX_test.dtype))[:,selected]
             booster.dispatchX(iteration, IX_up_train, IX_up_test)
-            if options.correlation_measure == 'auroc':
-                booster.train(bootstraps=5000, method='samples', regressor='logit', model_args={"class_weight": "balanced", "C": 1})
-            else:
-                booster.train(bootstraps=5000, method='residuals', regressor='lse')
-            rmse_train, rho_train, rmse_test, rho_test = booster.evaluate(method=options.correlation_measure)
+            booster.train(bootstraps=5000, method='residuals')
+            rmse_train, rho_train, rmse_test, rho_test = booster.evaluate()
             log << "Train: RMSE=%1.4e RHO=%1.4e" % (rmse_train, rho_train) << log.endl
             log << "Test:  RMSE=%1.4e RHO=%1.4e" % (rmse_test, rho_test) << log.endl
-            #raw_input('...')
             ofs = open('%s/cov_%s_%s.tab' % (options.output_folder, cv_info_str+"_iter%d" % iteration, state["tag"]), 'w')
             for ii, idx_train in enumerate(idcs_train): ofs.write('%d %+1.7e %+1.7e %s\n' % (
                 idx_train, IX_up_train[ii,0], Y_train[ii], state["sample_tags"][idx_train]))
@@ -302,8 +298,8 @@ while not cv_iterator.isDone():
             fgraph_file = "fgraph_%s_%s.arch" % (
                 cv_info_str+"_iter%d" % iteration, 
                 state["tag"])
-            fgraph.save("%s/%s" % (
-                options.output_folder, fgraph_file))
+            fgraph.save(str("%s/%s" % (
+                options.output_folder, fgraph_file)))
             data_section["fgraph"] = fgraph_file
         # Log top feature
         logtag = fnodes[top_idx].expr
