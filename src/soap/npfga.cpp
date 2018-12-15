@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <assert.h>
 #include <fstream>
+#include <numeric>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>

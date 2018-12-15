@@ -27,7 +27,7 @@ endif(${CMAKE_VERSION} VERSION_GREATER 3.1)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # FIND PACKAGES
-find_package(PythonLibs)
+find_package(PythonLibs 2.7)
 include_directories(${PYTHON_INCLUDE_DIRS})
 
 if(DEFINED ENV{BOOST_ROOT})
