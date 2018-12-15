@@ -9,6 +9,7 @@ source soap/SOAPRC
 ```
 
 ### Dependencies
-- boost (python mpi filesystem serialization)
-- openmpi
+- Boost (python filesystem serialization)
 - GSL or MKL (MKL + intel compilers are recommended)
+- Python packages: numpy, scipy, h5py, sklearn, psutil
+
