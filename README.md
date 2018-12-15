@@ -9,7 +9,10 @@ source soap/SOAPRC
 ```
 
 ### Dependencies
-- Boost (python filesystem serialization)
+- Boost (components: python filesystem serialization)
 - GSL or MKL (MKL + intel compilers are recommended)
 - Python packages: numpy, scipy, h5py, sklearn, psutil
+
+### Notes
+- boost::python needs to be compiled against the same Python version as used in the compilation (the latter being defined by the PYTHON_LIBRARY variable in build/CMakeCache.txt). To configure the Python version in the Boost installation, edit the project-config.jam configuration file of the Boost source directory accordingly. Note that Python3 is not presently supported.
 
