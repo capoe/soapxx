@@ -1,3 +1,7 @@
+<div align="center">
+    <img src="https://raw.githubusercontent.com/capoe/soapxx/web/meda/soapxx.png" alt="logo"></img>
+</div>
+
 # soapxx
 
 ### Installation
