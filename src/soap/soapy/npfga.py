@@ -178,22 +178,28 @@ def generate_graph(
     fgraph.generate()
     return fgraph
 
-def calculate_null_distribution(
+def fgraph_apply_batch(
         fgraph,
-        rand_IX_list,
-        rand_Y,
+        IX_list,
+        Y,
+        log):
+    npfga_dtype = IX_list[0].dtype
+    covs = np.zeros((len(IX_list), len(fgraph)), dtype=npfga_dtype)
+    Y = Y.reshape((-1,1))
+    for i, IX in enumerate(IX_list):
+        log << log.back << "Randomized control, instance" << i << log.flush
+        covs[i,:] = fgraph.applyAndCorrelate(IX, Y, str(npfga_dtype))[:,0]
+    log << log.endl
+    return covs
+
+def calculate_null_distribution(
+        rand_covs,
         options,
         log,
         file_out=False):
-    npfga_dtype = rand_IX_list[0].dtype
-    rand_covs = np.zeros((len(rand_IX_list), len(fgraph)), dtype=npfga_dtype)
-    rand_Y = rand_Y.reshape((-1,1))
-    for i, rand_IX in enumerate(rand_IX_list):
-        log << log.back << "Randomized control, instance" << i << log.flush
-        rand_covs[i,:] = fgraph.applyAndCorrelate(rand_IX, rand_Y, str(npfga_dtype))[:,0]
-    log << log.endl
+    npfga_dtype = rand_covs.dtype
     # Dimensions and threshold
-    n_channels = len(fgraph)
+    n_channels = rand_covs.shape[1]
     n_samples = rand_covs.shape[0]
     p_threshold = 1. - options.tail_fraction
     i_threshold = int(p_threshold*n_samples+0.5)
@@ -320,17 +326,133 @@ def resample_range(start, end, n):
         yield i, idcs
     return
 
+def calculate_fnode_complexities(fgraph, op_complexity_map):
+    root_dependencies = {}
+    for fnode in fgraph:
+        parents = fnode.getParents()
+        c = op_complexity_map[fnode.op_tag] + sum([ f.q for f in parents ])
+        fnode.q = c
+        if fnode.is_root: 
+            root_dependencies[fnode.expr] = { "cplx": fnode.q, "deps": { fnode.expr } }
+        else:
+            deps = set()
+            for p in parents:
+                deps = deps.union(root_dependencies[p.expr]["deps"])
+            root_dependencies[fnode.expr] = { "cplx": fnode.q, "deps": deps }
+    cplxs = [ f.q for f in fgraph ]
+    return np.array(cplxs), sorted(set(cplxs))
+
+def calculate_null_and_test(tags, covs, rand_covs, options, log, with_stats):
+    pots_1xC, ranks_Cx1, ranks_Sx1, null_exs_SxC, null_order_covs_SxC, null_covs_SxC, cov_scaling_fct = calculate_null_distribution(
+        rand_covs,
+        options=options,
+        log=log)
+    # Test statistic: abs(cov)
+    covs_abs = np.abs(covs)
+    cq_values, cq_values_nth = soap.soapy.npfga.rank_ptest(
+        tags=tags,
+        covs=covs_abs,
+        exs=covs_abs,
+        exs_cum=ranks_Cx1,
+        rand_exs_rank=null_order_covs_SxC,
+        rand_exs_rank_cum=ranks_Sx1)
+    # Test statistic: exs(cov)
+    exs = calculate_exceedence(pots_1xC, covs_abs, scale_fct=cov_scaling_fct)
+    xq_values, xq_values_nth = soap.soapy.npfga.rank_ptest(
+        tags=tags,
+        covs=covs_abs,
+        exs=exs,
+        exs_cum=ranks_Cx1,
+        rand_exs_rank=null_exs_SxC,
+        rand_exs_rank_cum=ranks_Sx1)
+    if with_stats:
+        cstats = PyFGraphStats(tags, covs, covs_abs, cq_values, cq_values_nth, null_order_covs_SxC, null_covs_SxC, cov_scaling_fct)
+        xstats = PyFGraphStats(tags, covs, exs, xq_values, xq_values_nth, null_exs_SxC, null_covs_SxC, cov_scaling_fct)
+    else:
+        cstats = None
+        xstats = None
+    return null_order_covs_SxC, null_exs_SxC, covs_abs, exs, cstats, xstats
+
+def run_npfga_with_phasing(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
+    # Hard-coded options
+    edge_pctile = 100.
+    null_edge_pctiles = [ 10. ]
+    op_complexity_map = {
+       "I": 0.0,
+       "r": 0.75,
+       "2": 0.75,
+       "s": 1.00,
+       "|": 1.25,
+       "e": 1.50,
+       "l": 1.50,
+       "*": 1.75,
+       ":": 2.00,
+       "+": 2.25,
+       "-": 2.25
+    }
+    # Precompute covariances across all channels
+    fnodes_all = [ f for f in fgraph ]
+    rand_covs_all = fgraph_apply_batch(fgraph, rand_IX_list, rand_Y, log)
+    covs_all = fgraph.applyAndCorrelate(
+        IX,
+        Y.reshape((-1,1)),
+        str(IX.dtype))[:,0]
+    # Calculate complexities to inform phasing
+    fnode_complexities, phase_thresholds = calculate_fnode_complexities(
+        fgraph, op_complexity_map)
+    phase_null_exs_top = []
+    phase_null_cov_top = []
+    phase_exs_top = []
+    phase_cov_top = []
+    phase_feature_idcs = []
+    phase_cstats = []
+    phase_xstats = []
+    # Incrementally grow the active subgraph and evaluate
+    for phase in phase_thresholds:
+        phase_idcs = np.where(fnode_complexities <= phase)[0]
+        phase_feature_idcs.append(phase_idcs)
+        null_order_covs_SxC, null_exs_SxC, covs, exs, cstats, xstats = calculate_null_and_test(
+            tags=[ fnodes_all[_].expr for _ in phase_idcs ],
+            covs=covs_all[phase_idcs],
+            rand_covs=rand_covs_all[:, phase_idcs],
+            options=options,
+            log=log,
+            with_stats=True)
+        phase_cstats.append(cstats)
+        phase_xstats.append(xstats)
+        # Store phased distributions
+        covs_abs = np.abs(covs)
+        phase_null_cov_top.append(null_order_covs_SxC[:,0])
+        phase_cov_top.append(np.percentile(covs_abs, edge_pctile))
+        phase_null_exs_top.append(null_exs_SxC[:,0])
+        phase_exs_top.append(np.percentile(exs, edge_pctile))
+    phase_null_exs_top = np.array(phase_null_exs_top).T # n_random_samples x n_phases
+    phase_null_cov_top = np.array(phase_null_cov_top).T # n_random_samples x n_phases
+    phase_exs_top = np.array(phase_exs_top).T # n_phases
+    phase_cov_top = np.array(phase_cov_top).T # n_phases
+    phase_offset_exs = np.zeros(phase_exs_top.shape, phase_exs_top.dtype)
+    phase_offset_cov = np.zeros(phase_cov_top.shape, phase_cov_top.dtype)
+    for pct in null_edge_pctiles:
+        pct_null_exs = np.percentile(phase_null_exs_top, pct, axis=0)
+        pct_null_cov = np.percentile(phase_null_cov_top, pct, axis=0)
+        phase_offset_exs = phase_offset_exs + phase_exs_top - pct_null_exs
+        phase_offset_cov = phase_offset_cov + phase_cov_top - pct_null_cov
+    phase_offset_exs = phase_offset_exs/len(null_edge_pctiles)
+    phase_offset_cov = phase_offset_cov/len(null_edge_pctiles)
+    return phase_feature_idcs, phase_cstats, phase_xstats, phase_offset_cov, phase_offset_exs
+
 def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
     """
     Required options fields: bootstrap, tail_fraction
     """
     # C = #channels, S = #samples
+    rand_covs = fgraph_apply_batch(fgraph, rand_IX_list, rand_Y, log)
+    # TODO For all phases ... >>>
     pots_1xC, ranks_Cx1, ranks_Sx1, null_exs_SxC, null_order_covs_SxC, null_covs_SxC, cov_scaling_fct = soap.soapy.npfga.calculate_null_distribution(
-        fgraph=fgraph,
-        rand_IX_list=rand_IX_list,
-        rand_Y=rand_Y.reshape((-1,1)),
+        rand_covs,
         options=options,
         log=log)
+    # TODO <<< -> store
     # Bootstrap
     data_iterator = resample_IX_Y(IX, Y, options.bootstrap) if options.bootstrap > 0 else zip([0], [IX], [Y])
     n_resamples = options.bootstrap if options.bootstrap > 0 else 1
@@ -347,6 +469,7 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
             Y_i.reshape((-1,1)),
             str(IX_i.dtype))[:,0]
         tags = [ f.expr for f in fgraph ]
+        # TODO For all phases ... >>>
         # Test statistic: abs(cov)
         covs_abs = np.abs(covs)
         cq_values, cq_values_nth = soap.soapy.npfga.rank_ptest(
@@ -371,6 +494,7 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
         cq_samples_nth[:,sample_idx] = cq_values_nth
         xq_samples[:,sample_idx] = xq_values
         xq_samples_nth[:,sample_idx] = xq_values_nth
+        # TODO <<< store
     if log: log << log.endl
     # Bootstrap avgs and stddevs
     covs = np.average(cov_samples, axis=1)

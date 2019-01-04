@@ -455,6 +455,10 @@ Instruction *FNode::getOrCalculateInstruction() {
     return instruction;
 }
 
+std::string FNode::getOperatorTag() {
+    return op->getTag();
+}
+
 void FNode::registerPython() {
     using namespace boost::python;
     class_<FNode, FNode*>("FNode", init<>())
@@ -463,6 +467,7 @@ void FNode::registerPython() {
         .add_property("generation", &FNode::getGenerationIdx)
         .add_property("is_root", &FNode::isRoot)
         .add_property("tag", &FNode::calculateTag)
+        .add_property("op_tag", &FNode::getOperatorTag)
         .add_property("expr", &FNode::getExpr)
         .add_property("cov", &FNode::getCovariance, &FNode::setCovariance)
         .add_property("q", &FNode::getConfidence, &FNode::setConfidence);

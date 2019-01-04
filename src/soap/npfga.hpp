@@ -141,6 +141,7 @@ class FNode
     void setConfidence(double q_value) { stats.q = q_value; }
     void setCovariance(double cov) { stats.cov = cov; }
     void seed(double v) { value = unit_prefactor*prefactor*v; }
+    std::string getOperatorTag();
     double &evaluate();
     double &evaluateRecursive();
     std::vector<FNode*> &getParents() { return parents; }
