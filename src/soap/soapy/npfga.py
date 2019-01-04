@@ -203,7 +203,7 @@ def calculate_null_distribution(
     n_samples = rand_covs.shape[0]
     p_threshold = 1. - options.tail_fraction
     i_threshold = int(p_threshold*n_samples+0.5)
-    log << "Tail contains %d samples" % (n_samples-i_threshold) << log.endl
+    if log: log << "Tail contains %d samples" % (n_samples-i_threshold) << log.endl
     # Random-sampling convariance matrix
     # Rows -> sampling instances
     # Cols -> feature channels
@@ -227,15 +227,15 @@ def calculate_null_distribution(
     t_max = np.max(thresholds)
     t_std = np.std(thresholds)
     t_avg = np.average(thresholds)
-    log << "Channel-dependent thresholds: min avg max +/- std = %1.2f %1.2f %1.2f +/- %1.4f" % (
+    if log: log << "Channel-dependent thresholds: min avg max +/- std = %1.2f %1.2f %1.2f +/- %1.4f" % (
         t_min, t_avg, t_max, t_std) << log.endl
     # Peaks over threshold: calculate excesses for random samples
-    log << "Calculating excess for random samples" << log.endl
+    if log: log << "Calculating excess for random samples" << log.endl
     pots = rand_covs[i_threshold:n_samples,:]
     pots = pots.shape[0]/np.sum(1./(pots+1e-10), axis=0) # harmonic average
     rand_exs_mat = np.zeros((n_samples,n_channels), dtype=npfga_dtype)
     for s in range(n_samples):
-        log << log.back << "- Sample %d/%d" % (s+1, n_samples) << log.flush
+        if log: log << log.back << "- Sample %d/%d" % (s+1, n_samples) << log.flush
         rand_cov_sample = rand_cov_mat[s]
         exs = calculate_exceedence(pots, rand_cov_sample, scale_fct=cov_scaling_fct)
         #exs = -np.average((pots+1e-10-rand_cov_sample)/(pots+1e-10), axis=0)
@@ -262,7 +262,7 @@ def calculate_null_distribution(
     if file_out: np.savetxt('out_exs_rank_rand.txt', np.concatenate([ rand_exs_rank_cum, rand_exs_rank ], axis=1))
     # ... Histogram
     if file_out: np.savetxt('out_exs_rand.txt', np.array([rand_exs_cum[:,0], rand_exs_avg, rand_exs_std]).T)
-    log << log.endl
+    if log: log << log.endl
     return pots, rand_exs_cum, rand_exs_rank_cum, rand_exs_rank, rand_covs_rank, rand_covs, cov_scaling_fct
 
 def rank_ptest(
@@ -374,6 +374,7 @@ def calculate_null_and_test(tags, covs, rand_covs, options, log, with_stats):
     return null_order_covs_SxC, null_exs_SxC, covs_abs, exs, cstats, xstats
 
 def run_npfga_with_phasing(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
+    log << log.mg << "Running NPFGA with phasing" << log.endl
     # Hard-coded options
     edge_pctile = 100.
     null_edge_pctiles = [ 10. ]
@@ -408,15 +409,16 @@ def run_npfga_with_phasing(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
     phase_cstats = []
     phase_xstats = []
     # Incrementally grow the active subgraph and evaluate
-    for phase in phase_thresholds:
+    for pidx, phase in enumerate(phase_thresholds):
         phase_idcs = np.where(fnode_complexities <= phase)[0]
+        log << "Evaluating phase %2d: %5d nodes" % (pidx, len(phase_idcs)) << log.endl
         phase_feature_idcs.append(phase_idcs)
         null_order_covs_SxC, null_exs_SxC, covs, exs, cstats, xstats = calculate_null_and_test(
             tags=[ fnodes_all[_].expr for _ in phase_idcs ],
             covs=covs_all[phase_idcs],
             rand_covs=rand_covs_all[:, phase_idcs],
             options=options,
-            log=log,
+            log=None, #log,
             with_stats=True)
         phase_cstats.append(cstats)
         phase_xstats.append(xstats)
