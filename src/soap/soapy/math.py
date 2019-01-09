@@ -1,5 +1,22 @@
 import numpy as np
 
+class CDF(object):
+    def __init__(self, samples, transform=None, maxlen=None):
+        self.samples = samples
+        if transform != None:
+            self.samples = transform(self.samples)
+        if maxlen != None:
+            np.random.shuffle(self.samples)
+            self.samples = self.samples[0:maxlen]
+        self.samples = np.sort(self.samples)
+        self.length = len(self.samples)
+        self.epsilon = 1./self.length
+    def evaluate(self, x):
+        upper_edge_idcs = np.searchsorted(self.samples, x)
+        return (upper_edge_idcs+0.5)/(self.length+1)
+    def evaluateComplement(self, x):
+        return 1. - self.evaluate(x)
+
 def find_all_tuples_of_size(n, array):
     combos = []
     if n == 0:
