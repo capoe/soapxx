@@ -10,6 +10,9 @@ import datetime
 import os
 import psutil
 
+def chunk_list(l, n):
+    return [ l[i:i+n] for i in xrange(0, len(l), n) ]
+
 def run(log, cmdline_options, json_options):
 
     # Read options
@@ -31,89 +34,92 @@ def run(log, cmdline_options, json_options):
     soap.tools.partition.ligand_size_lower = 5 # TODO Make an option
     label_key = cmdline_options.label_key
 
-    h5_file = cmdline_options.hdf5_out
-    h5 = h5py.File(h5_file, 'w')
+    if cmdline_options.graph:
+        h5_file = cmdline_options.hdf5_out
+        h5 = h5py.File(h5_file, 'w')
 
-    # Read and select configurations
-    configs_A = pygraph.read_filter_configs(
-        cmdline_options.config_file, 
-        index=':', 
-        filter_types=filter_types, 
-        types=descriptor_options['type_list'], 
-        do_remove_duplicates=True, 
-        key=lambda c: c.info[label_key], 
-        log=log)
-    configs_A, configs_A2 = soap.soapy.learn.subsample_array(
-        configs_A, n_select=n_select, method=subsample_method, stride_shift=0)
-    configs = configs_A
+        # Read and select configurations
+        configs_A = pygraph.read_filter_configs(
+            cmdline_options.config_file, 
+            index=':', 
+            filter_types=filter_types, 
+            types=descriptor_options['type_list'], 
+            do_remove_duplicates=True, 
+            key=lambda c: c.info[label_key], 
+            log=log)
+        configs_A, configs_A2 = soap.soapy.learn.subsample_array(
+            configs_A, n_select=n_select, method=subsample_method, stride_shift=0)
+        configs = configs_A
 
-    # Index; find all chemical elements in dataset
-    for idx, c in enumerate(configs):
-        c.info['idx'] = idx
-        if not 'label' in c.info:
-            c.info['label'] = c.info[label_key]
-    if compile_types:
-        types_global = []
+        # Index; find all chemical elements in dataset
         for idx, c in enumerate(configs):
-            types_global = types_global + c.get_chemical_symbols()
-            types_global = list(set(types_global))
-        types_global = sorted(types_global)
-        log << "Compiled global types list:" << types_global << log.endl
-        descriptor_options['type_list'] = types_global
-    else:
-        log << "Using global types from options:" << descriptor_options['type_list'] << log.endl
+            c.info['idx'] = idx
+            if not 'label' in c.info:
+                c.info['label'] = c.info[label_key]
+        if compile_types:
+            types_global = []
+            for idx, c in enumerate(configs):
+                types_global = types_global + c.get_chemical_symbols()
+                types_global = list(set(types_global))
+            types_global = sorted(types_global)
+            log << "Compiled global types list:" << types_global << log.endl
+            descriptor_options['type_list'] = types_global
+        else:
+            log << "Using global types from options:" << descriptor_options['type_list'] << log.endl
 
-    # COMPUTE GRAPHS
-    log << "Computing graphs ..." << log.endl
-    log << "Descriptor: %s (fragment-based: %s)" % (descriptor_type, fragment_based) << log.endl
-    log << json.dumps(descriptor_options, indent=2, sort_keys=True) << log.endl
-    h5.attrs['options'] = json.dumps(options)
-    h5.attrs['options.descriptor'] = json.dumps(descriptor_options)
-    h5_graphs = h5.create_group('/graphs')
-    # Create chunks to reduce memory storage
-    def chunk_list(l, n):
-        return [ l[i:i+n] for i in xrange(0, len(l), n) ]
-    chunks = chunk_list(configs, 30)
-    if n_procs < 2:
-        log << "Computing graphs, single-threaded ..." << log.endl
-        for chunk in chunks:
-            graphs = []
-            for config in chunk:
-                graph = pygraph.mp_compute_graph(
-                    config=config,
+        # COMPUTE GRAPHS
+        log << "Computing graphs ..." << log.endl
+        log << "Descriptor: %s (fragment-based: %s)" % (descriptor_type, fragment_based) << log.endl
+        log << json.dumps(descriptor_options, indent=2, sort_keys=True) << log.endl
+        h5.attrs['options'] = json.dumps(options)
+        h5.attrs['options.descriptor'] = json.dumps(descriptor_options)
+        h5_graphs = h5.create_group('/graphs')
+        # Create chunks to reduce memory storage
+        chunks = chunk_list(configs, 30)
+        if n_procs < 2:
+            log << "Computing graphs, single-threaded ..." << log.endl
+            for chunk in chunks:
+                graphs = []
+                for config in chunk:
+                    graph = pygraph.mp_compute_graph(
+                        config=config,
+                        fragment_based=fragment_based,
+                        descriptor_type=descriptor_type,
+                        descriptor_options=descriptor_options,
+                        log=log)
+                    graphs.append(graph)
+                log << "Save chunk to h5 ..." << log.endl
+                for g in graphs:
+                    g.save_to_h5(h5_graphs)
+        else:
+            log << "Computing graphs, multi-threaded (n_procs=%d) ..." % n_procs << log.endl
+            for chunk in chunks:
+                graphs = soap.soapy.util.mp_compute_vector(
+                    kfct=pygraph.mp_compute_graph,
+                    g_list=chunk,
+                    n_procs=n_procs,
                     fragment_based=fragment_based,
                     descriptor_type=descriptor_type,
                     descriptor_options=descriptor_options,
-                    log=log)
-                graphs.append(graph)
-            log << "Save chunk to h5 ..." << log.endl
-            for g in graphs:
-                g.save_to_h5(h5_graphs)
+                    log=soap.soapy.momo.OSIO())
+                log << "Save chunk to h5 ..." << log.endl
+                for g in graphs:
+                    g.save_to_h5(h5_graphs)
+                del graphs
+        log << "Graphs complete." << log.endl
+        
+        # SAVE NAMES, CLASS LABELS
+        labels = np.zeros((len(h5_graphs),), dtype=[('idx','i8'),('tag','a32')])
+        for g in h5_graphs.iteritems():
+            idx = int(g[0])
+            tag = g[1].attrs['label']
+            labels[idx] = (idx, tag)
+        h5_labels = h5.create_group('labels')
+        h5_labels.create_dataset('label_mat', data=labels)
     else:
-        log << "Computing graphs, multi-threaded (n_procs=%d) ..." % n_procs << log.endl
-        for chunk in chunks:
-            graphs = soap.soapy.util.mp_compute_vector(
-                kfct=pygraph.mp_compute_graph,
-                g_list=chunk,
-                n_procs=n_procs,
-                fragment_based=fragment_based,
-                descriptor_type=descriptor_type,
-                descriptor_options=descriptor_options,
-                log=soap.soapy.momo.OSIO())
-            log << "Save chunk to h5 ..." << log.endl
-            for g in graphs:
-                g.save_to_h5(h5_graphs)
-            del graphs
-    log << "Graphs complete." << log.endl
-    
-    # SAVE NAMES, CLASS LABELS
-    labels = np.zeros((len(h5_graphs),), dtype=[('idx','i8'),('tag','a32')])
-    for g in h5_graphs.iteritems():
-        idx = int(g[0])
-        tag = g[1].attrs['label']
-        labels[idx] = (idx, tag)
-    h5_labels = h5.create_group('labels')
-    h5_labels.create_dataset('label_mat', data=labels)
+        h5_file = cmdline_options.hdf5_out
+        h5 = h5py.File(h5_file, 'r')
+        h5_graphs = h5['graphs']
 
     if cmdline_options.kernel:
         # COMPUTE KERNEL
@@ -128,7 +134,7 @@ def run(log, cmdline_options, json_options):
         if n_procs < 2:
             kmat = np.zeros((len(h5_graphs),len(h5_graphs)), dtype='float32')
             if mp_kernel_block_size > 0:
-                blocks = matrix_blocks_by_row(np.arange(len(h5_graphs)), block_size=mp_kernel_block_size, upper_triangular=True)
+                blocks = pygraph.matrix_blocks_by_row(np.arange(len(h5_graphs)), block_size=mp_kernel_block_size, upper_triangular=True)
                 for row_block in blocks:
                     if len(row_block) < 1: continue
                     # LOAD ROW ITEMS
@@ -181,7 +187,7 @@ def run(log, cmdline_options, json_options):
                     mp_graphs.append(g)
             else:
                 mp_graphs = h5_graphs
-            blocks = matrix_blocks(np.arange(len(mp_graphs)), block_size=block_size, upper_triangular=True)
+            blocks = pygraph.matrix_blocks(np.arange(len(mp_graphs)), block_size=block_size, upper_triangular=True)
             if mp_hdf5_read_parallel:
                 log << "Creating mp_hdf5_read_parallel kfct_primed" << log.endl
                 h5.close()
@@ -278,6 +284,7 @@ if __name__ == "__main__":
     log.AddArg('select', typ=int, default=-1, help="Actives to select")
     log.AddArg('n_procs', typ=int, default=1, help="Number of processors")
     log.AddArg('mp_kernel_block_size', typ=int, default=-1, help="Linear block size for kernel computation")
+    log.AddArg('graph', typ=bool, default=True, help="Whether or not to compute graph first. If not, load from hdf5_out.")
     log.AddArg('kernel', typ=bool, default=True, help="Whether or not to compute kernel")
     cmdline_options = log.Parse()
     json_options = soap.soapy.util.json_load_utf8(open(cmdline_options.options))
