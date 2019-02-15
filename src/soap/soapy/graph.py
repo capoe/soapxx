@@ -539,7 +539,7 @@ def compute_ftd(struct, options, fragment_based):
     IX, IR, types = adaptor.adapt(ftspectrum, return_pos_matrix=True)
     return IX, IR, types
 
-def compute_soap(struct, options, fragment_based):
+def compute_soap(struct, options, fragment_based=False):
     # OPTIONS
     options_soap = soap.Options()
     for key, val in options.items():

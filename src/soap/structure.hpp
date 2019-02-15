@@ -17,6 +17,31 @@ namespace soap {
 class Segment;
 class Structure;
 
+struct Multitype
+{
+    typedef std::map<std::string, double> typemap_t;
+    typedef std::map<std::string, double>::iterator typemap_it_t;
+    Multitype() {};
+   ~Multitype() {};
+    void clear() { _typemap.clear(); }
+    // Single-type interface
+    void set(std::string type) { this->clear(); _typemap[type] = 1.0; _typestr = type; }
+    std::string &getString() { return _typestr; }
+    // Multi-type interface
+    void add(std::string type, double weight) { _typemap[type] = weight; _typestr += type; }
+    double getWeight(std::string type) { return _typemap[type]; }
+    int size() { return _typemap.size(); }
+    typemap_it_t begin() { return _typemap.begin(); }
+    typemap_it_t end() { return _typemap.end(); }
+    typemap_t _typemap;
+    std::string _typestr;
+    template<class Archive>
+	void serialize(Archive &arch, const unsigned int version) {
+    	arch & _typemap;
+		return;
+	}
+};
+
 class Particle
 {
 public:
@@ -41,8 +66,10 @@ public:
     void setTypeId(int id) { _type_id = id; }
     int &getTypeId() { return _type_id; }
     // Type
-    void setType(std::string type) { _type = type; }
-    std::string &getType() { return _type; }
+    void setType(std::string type) { _mtype.set(type); }
+    std::string &getType() { return _mtype.getString(); }
+    void addType(std::string t, double w) { _mtype.add(t, w); }
+    Multitype &getMultitype() { return _mtype; }
     // Mass
     void setMass(double mass) { _mass = mass; }
     double &getMass() { return _mass; }
@@ -54,7 +81,7 @@ public:
     double &getSigma() { return _sigma; }
     // Segment
     Segment *getSegment() { return _segment; }
-    
+
     static void registerPython();
 
     template<class Archive>
@@ -63,7 +90,7 @@ public:
     	arch & _id;
     	arch & _name;
     	arch & _type_id;
-    	arch & _type;
+        arch & _mtype;
     	arch & _pos;
     	arch & _mass;
     	arch & _weight;
@@ -77,7 +104,7 @@ private:
     int _id;
     std::string _name;
     int _type_id;
-    std::string _type;
+    Multitype _mtype;
     // Observables
     vec _pos;
     double _mass;

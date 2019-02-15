@@ -132,7 +132,7 @@ void AtomicSpectrum::invert(map_xnkl_t &map_xnkl, xnkl_t *xnkl_generic_coherent,
     return;
 }
 
-void AtomicSpectrum::addQnlm(std::string type, qnlm_t &nb_expansion) {
+void AtomicSpectrum::addQnlm(std::string type, double weight, qnlm_t &nb_expansion) {
     assert(nb_expansion.getBasis() == _basis &&
         "Should not sum expansions linked against different bases.");
     map_qnlm_t::iterator it = _map_qnlm.find(type);
@@ -140,24 +140,26 @@ void AtomicSpectrum::addQnlm(std::string type, qnlm_t &nb_expansion) {
         _map_qnlm[type] = new BasisExpansion(_basis);
         it = _map_qnlm.find(type);
     }
-    it->second->add(nb_expansion);
-    _qnlm_generic->add(nb_expansion);
+    it->second->add(nb_expansion, weight);
+    _qnlm_generic->add(nb_expansion, weight);
     return;
 }
 
 void AtomicSpectrum::addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion) {
-    std::string type = nb->getType();
+    auto mtype = nb->getMultitype();
     int id = nb->getId();
-    this->addQnlm(type, *nb_expansion);
-
+    for (auto it=mtype.begin(); it!=mtype.end(); ++it) {
+        this->addQnlm(it->first, it->second, *nb_expansion);
+    }
     if (nb == this->getCenter()) {
         delete nb_expansion; // <- gradients should be zero, do not store
         //std::cout << "DO NOT STORE" << std::endl;
     }
     else {
+        if (mtype.size() > 1) throw soap::base::NotImplemented("Gradients with multitype");
+        std::string type = nb->getType();
         auto it = _map_pid_qnlm.find(id);
         if (it != _map_pid_qnlm.end()) {
-
             // There is already an entry for this pid - hence, this must be an image of the actual particle.
             // Add coefficients & gradients to existing density expansion.
             // This sanity check is no longer adequate:
@@ -407,4 +409,3 @@ void AtomicSpectrum::registerPython() {
 }
 
 }
-

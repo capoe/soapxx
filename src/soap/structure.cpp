@@ -12,7 +12,7 @@ void Particle::null() {
 	_pos = vec(0,0,0);
 	_name = "?";
 	_type_id = -1;
-	_type = "?";
+    _mtype.clear();
 	_mass = 0.;
 	_weight = 0.;
 	_sigma = 0.;
@@ -24,7 +24,7 @@ void Particle::model(Particle &model) {
     _pos = model._pos;
     _name = model._name;
     _type_id = model._type_id;
-    _type = model._type;
+    _mtype = model._mtype;
     _mass = model._mass;
     _weight = model._weight;
     _sigma = model._sigma;
@@ -44,7 +44,8 @@ void Particle::registerPython() {
 		.add_property("type_id", make_function(&Particle::getTypeId, copy_non_const()), &Particle::setTypeId)
 		.add_property("mass", make_function(&Particle::getMass, copy_non_const()), &Particle::setMass)
 		.add_property("weight", make_function(&Particle::getWeight, copy_non_const()), &Particle::setWeight)
-		.add_property("sigma", make_function(&Particle::getSigma, copy_non_const()), &Particle::setSigma);
+		.add_property("sigma", make_function(&Particle::getSigma, copy_non_const()), &Particle::setSigma)
+        .def("addType", &Particle::addType);
 }
 
 // =======
@@ -92,7 +93,7 @@ void Structure::model(Structure &structure) {
     _id = structure._id;
     _label = structure._label;
     this->setBoundary(structure._box->getBox());
-    // Segments, particles 
+    // Segments, particles
     for (segment_it_t sit = structure.beginSegments(); sit != structure.endSegments(); ++sit) {
         Segment &new_seg = this->addSegment();
         for (particle_it_t pit = (*sit)->beginParticles(); pit != (*sit)->endParticles(); ++pit) {

@@ -2,6 +2,7 @@
 #include "coulomb.hpp"
 #include "fieldtensor.hpp"
 #include "npfga.hpp"
+#include "kernel.hpp"
 
 namespace soap {
 
@@ -35,6 +36,10 @@ BOOST_PYTHON_MODULE(_soapxx)
 
     soap::npfga::FNode::registerPython();
     soap::npfga::FGraph::registerPython();
+
+    soap::TopKernelFactory::registerAll();
+    soap::BaseKernelFactory::registerAll();
+    soap::Kernel::registerPython();
 
     boost::python::def("silence", &soap::GLOG_SILENCE);
     boost::python::def("verbose", &soap::GLOG_VERBOSE);

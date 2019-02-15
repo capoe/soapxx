@@ -53,7 +53,7 @@ public:
 	vec &getCenterPos() { return _center_pos; }
 	Basis *getBasis() { return _basis; }
 	// QNLM METHODS
-    void addQnlm(std::string type, qnlm_t &nb_expansion);
+    void addQnlm(std::string type, double weight, qnlm_t &nb_expansion);
     void addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion);
     qnlm_t *getQnlm(std::string type);
     qnlm_t *getQnlmGeneric() { return _qnlm_generic; }

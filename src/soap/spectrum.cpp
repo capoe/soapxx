@@ -25,7 +25,7 @@ Spectrum::Spectrum(std::string archfile) :
 }
 
 Spectrum::Spectrum() :
-	_log(NULL), _options(NULL), _structure(NULL), _basis(NULL), _own_basis(true), _global_atomic(NULL) { 
+	_log(NULL), _options(NULL), _structure(NULL), _basis(NULL), _own_basis(true), _global_atomic(NULL) {
     ;
 }
 
