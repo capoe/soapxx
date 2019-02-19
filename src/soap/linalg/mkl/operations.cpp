@@ -28,7 +28,7 @@ void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &r) {
     MKL_INT incr = 1;
     double *mkl_x = const_cast<double*>(&x.data()[0]);
     double *mkl_y = const_cast<double*>(&y.data()[0]);
-    return LAPACKE_ddot(n, x, incr, y, incr);
+    r = cblas_ddot(n, mkl_x, incr, mkl_y, incr);
 }
 
 void linalg_cholesky_solve( ub::vector<double> &x, ub::matrix<double> &A, ub::vector<double> &b ){
