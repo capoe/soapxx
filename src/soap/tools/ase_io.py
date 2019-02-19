@@ -2,6 +2,7 @@
 import json
 import numpy as np
 import os
+from .. import _soapxx as soap
 
 # ==============
 # READ/FILTER IO
@@ -114,6 +115,35 @@ class AtomASE(object):
 class IO(object):
     def __init__(self):
         return
+    def convert(self, config, tag="?", sigma=0.5, weight=None, typemap=None):
+        R = config.get_positions()
+        T = config.get_chemical_symbols()
+        N = R.shape[0]
+        if weight is None: weight = np.ones((N,))
+        if type(sigma) in [float, np.float64, np.float32]:
+            sigma = sigma*np.ones((N,))
+        if config.pbc.all(): 
+            box = np.array([config.cell[0], config.cell[1], config.cell[2]])
+        elif not config.pbc.any(): 
+            box = np.zeros((3,3))
+        else: 
+            raise NotImplementedError("<IO::convert> Partial periodicity not implemented.")
+        struct = soap.Structure(tag)
+        struct.box = box
+        segment = struct.addSegment()
+        for i in range(R.shape[0]):
+            r = R[i]
+            t = T[i]
+            particle = struct.addParticle(segment)
+            particle.pos = r
+            particle.weight = weight[i]
+            particle.sigma = sigma[i]
+            if typemap is None: particle.type = T[i]
+            else:
+                colour = typemap[T[i]]
+                for channel_idx, c in enumerate(colour):
+                    particle.addType(typemap["channels"][channel_idx], c)
+        return struct
     def read(
             self,
             config_file,

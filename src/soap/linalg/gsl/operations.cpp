@@ -18,6 +18,12 @@ void linalg_cholesky_decompose( ub::matrix<double> &A){
         (void)gsl_linalg_cholesky_decomp ( &A_view.matrix );
 }
 
+void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &r) {
+    gsl_vector_view gsl_x = gsl_vector_view_array(&x(0), x.size());
+    gsl_vector_view gsl_y = gsl_vector_view_array(&y(0), y.size());
+    gsl_blas_ddot(&gsl_x.vector, &gsl_y.vector, &r);
+}
+
 void linalg_cholesky_solve(ub::vector<double> &x, ub::matrix<double> &A, ub::vector<double> &b){
     /* calling program should catch the error error code GSL_EDOM
      * thrown by gsl_linalg_cholesky_decomp and take

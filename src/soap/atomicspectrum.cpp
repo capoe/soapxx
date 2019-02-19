@@ -141,7 +141,7 @@ void AtomicSpectrum::addQnlm(std::string type, double weight, qnlm_t &nb_expansi
         it = _map_qnlm.find(type);
     }
     it->second->add(nb_expansion, weight);
-    _qnlm_generic->add(nb_expansion, weight);
+    //_qnlm_generic->add(nb_expansion, weight); // NOTE Deprecated
     return;
 }
 
@@ -155,8 +155,11 @@ void AtomicSpectrum::addQnlmNeighbour(Particle *nb, qnlm_t *nb_expansion) {
         delete nb_expansion; // <- gradients should be zero, do not store
         //std::cout << "DO NOT STORE" << std::endl;
     }
+    else if (mtype.size() > 1) {
+        // TODO Implement gradient increment with particle multitypes
+        //throw soap::base::NotImplemented("Gradients with multitype");
+    } 
     else {
-        if (mtype.size() > 1) throw soap::base::NotImplemented("Gradients with multitype");
         std::string type = nb->getType();
         auto it = _map_pid_qnlm.find(id);
         if (it != _map_pid_qnlm.end()) {
@@ -187,7 +190,7 @@ void AtomicSpectrum::mergeQnlm(AtomicSpectrum *other, double scale, bool gradien
     assert(other->getBasis() == _basis &&
         "Should not merge atomic spectra linked against different bases.");
     // Type-agnostic (=generic) density expansion
-    _qnlm_generic->add(*other->getQnlmGeneric(), scale);
+    //_qnlm_generic->add(*other->getQnlmGeneric(), scale); // NOTE Deprecated
     // Type-resolved (=specific) density expansions
     map_qnlm_t &map_qnlm_other = other->getQnlmMap();
     for (auto it = map_qnlm_other.begin(); it != map_qnlm_other.end(); ++it) {
@@ -314,19 +317,22 @@ void AtomicSpectrum::computePower() {
             _map_xnkl[types] = powex;
         }
     }
-    // Generic coherent
-    GLOG() << " g/c" << std::flush;
-    if (_xnkl_generic_coherent) delete _xnkl_generic_coherent;
-    _xnkl_generic_coherent = new PowerExpansion(_basis);
-    _xnkl_generic_coherent->computeCoefficients(_qnlm_generic, _qnlm_generic);
-    // Generic incoherent
-    GLOG() << " g/i" << std::flush;
-    if (_xnkl_generic_incoherent) delete _xnkl_generic_incoherent;
-    _xnkl_generic_incoherent = new PowerExpansion(_basis);
-    map_xnkl_t::iterator it;
-    for (it = _map_xnkl.begin(); it != _map_xnkl.end(); ++it) {
-        _xnkl_generic_incoherent->add(it->second);
-    }
+
+    // NOTE Deprecated >>>
+    // // Generic coherent
+    // GLOG() << " g/c" << std::flush;
+    // if (_xnkl_generic_coherent) delete _xnkl_generic_coherent;
+    // _xnkl_generic_coherent = new PowerExpansion(_basis);
+    // _xnkl_generic_coherent->computeCoefficients(_qnlm_generic, _qnlm_generic);
+    // // Generic incoherent
+    // GLOG() << " g/i" << std::flush;
+    // if (_xnkl_generic_incoherent) delete _xnkl_generic_incoherent;
+    // _xnkl_generic_incoherent = new PowerExpansion(_basis);
+    // map_xnkl_t::iterator it;
+    // for (it = _map_xnkl.begin(); it != _map_xnkl.end(); ++it) {
+    //     _xnkl_generic_incoherent->add(it->second);
+    // }
+    // <<<<<<<<<<<<<<<<<<<<
     GLOG() << std::endl;
 }
 

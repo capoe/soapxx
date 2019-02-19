@@ -17,6 +17,7 @@ namespace soap { namespace linalg {
      */
     void linalg_invert( ub::matrix<double> &A, ub::matrix<double> &V );
 
+    void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &result);
  
     /**
      * \brief determines Cholesky decomposition of matrix A

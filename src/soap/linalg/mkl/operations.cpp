@@ -23,6 +23,14 @@ void linalg_cholesky_decompose( ub::matrix<double> &A){
         throw std::runtime_error("Matrix not symmetric positive definite");
 }
 
+void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &r) {
+    MKL_INT n = x.size();
+    MKL_INT incr = 1;
+    double *mkl_x = const_cast<double*>(&x.data()[0]);
+    double *mkl_y = const_cast<double*>(&y.data()[0]);
+    return LAPACKE_ddot(n, x, incr, y, incr);
+}
+
 void linalg_cholesky_solve( ub::vector<double> &x, ub::matrix<double> &A, ub::vector<double> &b ){
     /* calling program should catch the error error code
      * thrown by LAPACKE_dpotrf and take

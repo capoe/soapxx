@@ -40,8 +40,8 @@ def covalent_cutoff(rad1, rad2):
 
 def calculate_connectivity_mat(distance_mat, type_vec, cutoff=None):
     dim = distance_mat.shape[0]
-    connectivity_mat = np.zeros((dim,dim), dtype=bool)
     if cutoff != None:
+        connectivity_mat = np.zeros((dim,dim), dtype=bool)
         for i in range(dim):
             for j in range(dim):
                 if distance_mat[i,j] < constant:
@@ -49,17 +49,20 @@ def calculate_connectivity_mat(distance_mat, type_vec, cutoff=None):
                 else:
                     connectivity_mat[i,j] = False
     else:
-        for i in range(dim):
-            for j in range(dim):
-                t1 = type_vec[i]
-                t2 = type_vec[j]
-                r1 = COVRAD_TABLE[t1]
-                r2 = COVRAD_TABLE[t2]
-                r12 = distance_mat[i,j]
-                if r12 <= covalent_cutoff(r1, r2):
-                    connectivity_mat[i,j] = True
-                else:
-                    connectivity_mat[i,j] = False
+        cr = np.array([ COVRAD_TABLE[t] for t in type_vec ])
+        rrcut = 1.15*np.add.outer(cr,cr)
+        connectivity_mat = (np.heaviside(-distance_mat+rrcut, 0)).astype(bool)
+        #for i in range(dim):
+        #    for j in range(dim):
+        #        t1 = type_vec[i]
+        #        t2 = type_vec[j]
+        #        r1 = COVRAD_TABLE[t1]
+        #        r2 = COVRAD_TABLE[t2]
+        #        r12 = distance_mat[i,j]
+        #        if r12 <= covalent_cutoff(r1, r2):
+        #            connectivity_mat[i,j] = True
+        #        else:
+        #            connectivity_mat[i,j] = False
     return connectivity_mat
 
 # COVALENCE RADII (from Cambridge Structural Database, table see http://en.wikipedia.org/wiki/Covalent_radius)
