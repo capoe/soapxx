@@ -45,6 +45,7 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::DMap::registerPython();
     soap::DMapMatrix::registerPython();
     soap::BlockLaplacian::registerPython();
+    soap::Proto::registerPython();
 
     boost::python::def("silence", &soap::GLOG_SILENCE);
     boost::python::def("verbose", &soap::GLOG_VERBOSE);

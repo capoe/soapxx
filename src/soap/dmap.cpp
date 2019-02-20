@@ -6,6 +6,8 @@
 #include "soap/linalg/operations.hpp"
 //#include "soap/linalg/Eigen/Dense"
 
+#include "soap/options.hpp"
+
 namespace soap {
 
 DMap::DMap() {
@@ -181,5 +183,74 @@ void BlockLaplacian::registerPython() {
         .def("save", &BlockLaplacian::save)
         .def("load", &BlockLaplacian::load);
 }
+
+Proto::Proto() {
+    Options options;
+    options.set("radialcutoff.Rc", 3.75);
+    options.set("radialcutoff.Rc_width", 0.5);
+    options.set("radialcutoff.center_weight", 1.0);
+    cutoff = CutoffFunctionOutlet().create("shifted-cosine");
+    cutoff->configure(options);
+}
+
+Proto::~Proto() {
+    if (cutoff) delete cutoff;
+    cutoff = NULL;
+    for (auto it=Gnab.begin(); it!=Gnab.end(); ++it) delete *it;
+    Gnab.clear();
+}
+
+void Proto::parametrize(DMapMatrix &AX, DMapMatrix &BX, BlockLaplacian &DAB) {
+    GLOG() << "Build Proto from AX x BX = " << AX.size() << " x " << BX.size() << std::endl;
+    GLOG() << cutoff->calculateWeight(3.0) << std::endl;
+    GLOG() << cutoff->calculateWeight(3.5) << std::endl;
+    GLOG() << cutoff->calculateWeight(4.0) << std::endl;
+}
+
+boost::python::object Proto::projectPython(DMapMatrix &AX, DMapMatrix &BX, double xi, std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    matrix_t output(AX.size(), BX.size());
+    this->project(AX, BX, xi, output);
+    return npc.ublas_to_numpy<double>(output);
+}
+
+void Proto::project(DMapMatrix &AX, DMapMatrix &BX, double xi, matrix_t &output) {
+    ;
+}
+
+void Proto::registerPython() {
+    using namespace boost::python;
+    class_<Proto, Proto*>("Proto", init<>())
+        .def("project", &Proto::projectPython)
+        .def("parametrize", &Proto::parametrize);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 }

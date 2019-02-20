@@ -10,6 +10,8 @@
 #include "soap/spectrum.hpp"
 //#include "soap/linalg/Eigen/Dense"
 
+#include "soap/cutoff.hpp"
+
 namespace soap {
 
 namespace ub = boost::numeric::ublas;
@@ -88,6 +90,24 @@ struct BlockLaplacian
     blocks_t blocks;
     int n_rows;
     int n_cols;
+};
+
+class Proto
+{
+  public:
+    typedef double dtype_t;
+    typedef std::vector<BlockLaplacian*> Gnab_t;
+    typedef ub::matrix<dtype_t> matrix_t;
+    Proto();
+    ~Proto();
+    void parametrize(DMapMatrix &AX, DMapMatrix &BX, BlockLaplacian &DAB);
+    bpy::object projectPython(DMapMatrix &AX, DMapMatrix &BX, 
+        double xi, std::string np_dtype);
+    void project(DMapMatrix &AX, DMapMatrix &BX, double xi, matrix_t &output);
+    static void registerPython(); 
+  private:
+    Gnab_t Gnab;
+    CutoffFunction *cutoff;
 };
 
 }
