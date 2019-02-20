@@ -7,6 +7,14 @@ namespace soap { namespace linalg {
 
 using namespace std;
 
+void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &r) {
+    MKL_INT n = x.size();
+    MKL_INT incr = 1;
+    double *mkl_x = const_cast<double*>(&x.data()[0]);
+    double *mkl_y = const_cast<double*>(&y.data()[0]);
+    r = cblas_ddot(n, mkl_x, incr, mkl_y, incr);
+}
+
 void linalg_cholesky_decompose( ub::matrix<double> &A){
     // Cholesky decomposition using MKL
     // input matrix A will be changed
@@ -21,14 +29,6 @@ void linalg_cholesky_decompose( ub::matrix<double> &A){
     info = LAPACKE_dpotrf( LAPACK_ROW_MAJOR , uplo , n, pA, n );
     if ( info != 0 )
         throw std::runtime_error("Matrix not symmetric positive definite");
-}
-
-void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &r) {
-    MKL_INT n = x.size();
-    MKL_INT incr = 1;
-    double *mkl_x = const_cast<double*>(&x.data()[0]);
-    double *mkl_y = const_cast<double*>(&y.data()[0]);
-    r = cblas_ddot(n, mkl_x, incr, mkl_y, incr);
 }
 
 void linalg_cholesky_solve( ub::vector<double> &x, ub::matrix<double> &A, ub::vector<double> &b ){

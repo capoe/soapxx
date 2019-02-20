@@ -3,6 +3,7 @@
 #include "fieldtensor.hpp"
 #include "npfga.hpp"
 #include "kernel.hpp"
+#include "dmap.hpp"
 
 namespace soap {
 
@@ -24,9 +25,6 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::PowerExpansion::registerPython();
     soap::Mol2D::registerPython();
 
-    soap::DMap::registerPython();
-    soap::DMapMatrix::registerPython();
-
     soap::EnergySpectrum::registerPython();
     soap::HierarchicalCoulomb::registerPython();
     soap::AtomicSpectrumHC::registerPython();
@@ -43,6 +41,10 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::TopKernelFactory::registerAll();
     soap::BaseKernelFactory::registerAll();
     soap::Kernel::registerPython();
+
+    soap::DMap::registerPython();
+    soap::DMapMatrix::registerPython();
+    soap::BlockLaplacian::registerPython();
 
     boost::python::def("silence", &soap::GLOG_SILENCE);
     boost::python::def("verbose", &soap::GLOG_VERBOSE);

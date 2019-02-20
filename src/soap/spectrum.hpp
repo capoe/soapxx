@@ -23,59 +23,9 @@ namespace soap {
 namespace ub = boost::numeric::ublas;
 namespace bpy = boost::python;
 
-class Spectrum;
-class AtomicSpectrum;
-
-struct DMap
-{
-    typedef double dtype_t;
-    typedef ub::vector<dtype_t> vec_t;
-    //typedef Eigen::VectorXf vec_t;
-    typedef std::map<std::pair<std::string, std::string>, vec_t*> dmap_t;
-    DMap();
-    ~DMap();
-    dmap_t::iterator begin() { return dmap.begin(); }
-    dmap_t::iterator end() { return dmap.end(); }
-    int size() { return dmap.size(); }
-    void multiply(double c);
-    double dot(DMap *other);
-    void adapt(AtomicSpectrum *spectrum);
-    dmap_t dmap;
-    static void registerPython();
-    template<class Archive>
-    void serialize(Archive &arch, const unsigned int version) {
-        //arch & dmap;
-    }
-};
-
-struct DMapMatrix
-{
-    typedef double dtype_t;
-    typedef ub::matrix<dtype_t> ub_matrix_t;
-    //typedef Eigen::MatrixXf matrix_t;
-    typedef ub::matrix<dtype_t> matrix_t;
-    typedef std::vector<DMap*> dmm_t;
-    DMapMatrix();
-    ~DMapMatrix();
-    void dot(DMapMatrix *other, ub_matrix_t &output);
-    bpy::object dotNumpy(DMapMatrix *other, std::string np_dtype);
-    void append(Spectrum *spectrum);
-    void save(std::string archfile);
-    void load(std::string archfile);
-    dmm_t::iterator begin() { return dmm.begin(); }
-    dmm_t::iterator end() { return dmm.end(); }
-    int size() { return dmm.size(); }
-    dmm_t dmm;
-    static void registerPython();
-    template<class Archive>
-    void serialize(Archive &arch, const unsigned int version) {
-        arch & dmm;
-    }
-};
-
 class Spectrum
 {
-public:
+  public:
 	typedef std::vector<AtomicSpectrum*> atomspec_array_t;
 	typedef std::vector<AtomicSpectrum*>::iterator atomic_it_t;
 	typedef std::map<std::string, atomspec_array_t> map_atomspec_array_t;
@@ -137,7 +87,7 @@ public:
 		return;
 	}
 
-private:
+  private:
 
 	Logger *_log;
 	Options *_options;
@@ -154,7 +104,7 @@ private:
 
 class PairSpectrum
 {
-public:
+  public:
 	PairSpectrum(
 	    Structure &struct1,
         Structure &struct2,
@@ -173,7 +123,7 @@ public:
 			.def("saveAndClean", &PairSpectrum::saveAndClean);
 	}
 
-private:
+  private:
     Structure *_struct1;
 	Structure *_struct2;
 	Options *_options;
@@ -295,4 +245,4 @@ class SpectrumOverlap
 }
 
 
-#endif /* _SOAP_RADIALBASIS_HPP_ */
+#endif /* _SOAP_SPECTRUM_HPP_ */
