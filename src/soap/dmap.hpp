@@ -32,20 +32,24 @@ struct DMap
     double dot(DMap *other);
     void adapt(AtomicSpectrum *spectrum);
     dmap_t dmap;
+    std::string filter;
     static void registerPython();
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & dmap;
+        arch & filter;
     }
 };
 
-struct DMapMatrix
+class DMapMatrix
 {
+  public:
     typedef double dtype_t;
     typedef ub::matrix<dtype_t> ub_matrix_t;
     //typedef Eigen::MatrixXf matrix_t;
     typedef ub::matrix<dtype_t> matrix_t;
     typedef std::vector<DMap*> dmm_t;
+    typedef std::map<std::string, DMapMatrix*> views_t;
     DMapMatrix();
     ~DMapMatrix();
     void dot(DMapMatrix *other, ub_matrix_t &output);
@@ -53,15 +57,23 @@ struct DMapMatrix
     void append(Spectrum *spectrum);
     void save(std::string archfile);
     void load(std::string archfile);
+    void addView(std::string filter);
+    DMapMatrix *getView(std::string filter);
     dmm_t::iterator begin() { return dmm.begin(); }
     dmm_t::iterator end() { return dmm.end(); }
     int size() { return dmm.size(); }
-    dmm_t dmm;
     static void registerPython();
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & dmm;
+        arch & views;
+        arch & is_view;
     }
+  private:
+    DMapMatrix(bool set_as_view);
+    dmm_t dmm;
+    views_t views;
+    bool is_view;
 };
 
 struct BlockLaplacian
@@ -71,6 +83,7 @@ struct BlockLaplacian
     typedef std::vector<block_t*> blocks_t;
     BlockLaplacian();
     ~BlockLaplacian();
+    block_t *addBlock(int n_rows, int n_cols);
     void appendNumpy(boost::python::object &np_array, std::string np_dtype);
     void save(std::string archfile);
     void load(std::string archfile);
@@ -108,6 +121,8 @@ class Proto
   private:
     Gnab_t Gnab;
     CutoffFunction *cutoff;
+    DMapMatrix *AXM;
+    DMapMatrix *BXM;
 };
 
 }

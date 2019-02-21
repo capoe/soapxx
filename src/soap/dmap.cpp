@@ -21,10 +21,6 @@ DMap::~DMap() {
     dmap.clear();
 }
 
-DMapMatrix::DMapMatrix() {
-    ;
-}
-
 double DMap::dot(DMap *other) {
     if (other->size() < this->size()) return other->dot(this);
     double res = 0.0;
@@ -70,6 +66,7 @@ void DMap::adapt(AtomicSpectrum *atomic) {
     }
     double norm = std::sqrt(this->dot(this));
     this->multiply(1./norm);
+    filter = atomic->getCenterType();
 }
 
 void DMap::registerPython() {
@@ -77,11 +74,40 @@ void DMap::registerPython() {
     class_<DMap, DMap*>("DMap", init<>());
 }
 
+DMapMatrix::DMapMatrix() : is_view(false) {
+    ;
+}
+
+DMapMatrix::DMapMatrix(bool set_as_view) : is_view(set_as_view) {
+    ;
+}
+
 DMapMatrix::~DMapMatrix() {
-    for (auto it=dmm.begin(); it!=dmm.end(); ++it) {
-        delete (*it);
+    if (!is_view) {
+        for (auto it=dmm.begin(); it!=dmm.end(); ++it) delete (*it);
     }
     dmm.clear();
+    for (auto it=views.begin(); it!=views.end(); ++it) delete it->second;
+    views.clear();
+}
+
+void DMapMatrix::addView(std::string filter) {
+    DMapMatrix *view = new DMapMatrix(true);
+    for (auto it=begin(); it!=end(); ++it) {
+        if ((*it)->filter == filter) {
+            view->dmm.push_back(*it);
+        }
+    }
+    auto it = views.find(filter);
+    if (it != views.end()) delete it->second;
+    views[filter] = view;
+}
+
+DMapMatrix *DMapMatrix::getView(std::string filter) {
+    auto it = views.find(filter);
+    if (it == views.end())
+        throw soap::base::OutOfRange("View with filter="+filter);
+    return it->second;
 }
 
 void DMapMatrix::append(Spectrum *spectrum) {
@@ -134,6 +160,8 @@ void DMapMatrix::registerPython() {
     using namespace boost::python;
     class_<DMapMatrix, DMapMatrix*>("DMapMatrix", init<>())
         .def("__len__", &DMapMatrix::size)
+        .def("addView", &DMapMatrix::addView)
+        .def("getView", &DMapMatrix::getView, return_value_policy<reference_existing_object>())
         .def("append", &DMapMatrix::append)
         .def("dot", &DMapMatrix::dotNumpy)
         .def("load", &DMapMatrix::load)
@@ -150,6 +178,13 @@ BlockLaplacian::~BlockLaplacian() {
     }
     blocks.clear();
 }
+
+BlockLaplacian::block_t *BlockLaplacian::addBlock(int n_rows, int n_cols) {
+    block_t *new_block = new block_t(n_rows, n_cols);
+    blocks.push_back(new_block);
+    return new_block;
+}
+
 
 void BlockLaplacian::appendNumpy(boost::python::object &np_array, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
@@ -202,9 +237,29 @@ Proto::~Proto() {
 
 void Proto::parametrize(DMapMatrix &AX, DMapMatrix &BX, BlockLaplacian &DAB) {
     GLOG() << "Build Proto from AX x BX = " << AX.size() << " x " << BX.size() << std::endl;
-    GLOG() << cutoff->calculateWeight(3.0) << std::endl;
-    GLOG() << cutoff->calculateWeight(3.5) << std::endl;
-    GLOG() << cutoff->calculateWeight(4.0) << std::endl;
+    AXM = &AX;
+    BXM = &BX;
+    // TODO Formulate in terms of basis expansion with dedicated objects
+    // such as in Gnab = basis->evaluate(DAB).
+    // Example here: Flat radial basis with cutoff
+    GLOG() << "Expanding pair distances" << std::endl;
+    for (auto it=Gnab.begin(); it!=Gnab.end(); ++it) delete *it;
+    Gnab.clear();
+    int n_basis_fcts = 1;
+    auto *new_gab = new BlockLaplacian();
+    int i_block = 0;
+    for (auto it=DAB.begin(); it!= DAB.end(); ++it, ++i_block) {
+        GLOG() << "\r" << " - Block " << i_block << std::flush;
+        auto &dab_block = *(*it);
+        auto &gab_block = *(new_gab->addBlock(dab_block.size1(), dab_block.size2()));
+        for (int i=0; i<dab_block.size1(); ++i) {
+            for (int j=0; j<dab_block.size2(); ++j) {
+                gab_block(i,j) = cutoff->calculateWeight(dab_block(i,j));
+            }
+        }
+    }
+    GLOG() << std::endl;
+    Gnab.push_back(new_gab);
 }
 
 boost::python::object Proto::projectPython(DMapMatrix &AX, DMapMatrix &BX, double xi, std::string np_dtype) {
@@ -215,7 +270,10 @@ boost::python::object Proto::projectPython(DMapMatrix &AX, DMapMatrix &BX, doubl
 }
 
 void Proto::project(DMapMatrix &AX, DMapMatrix &BX, double xi, matrix_t &output) {
-    ;
+    //K_aA = AX.dot(*AXM);
+    //K_Bb = BXM->dot(BX);
+    //GK_Ab = Gnab[0]->dotRight(KBb);
+    //output = K_aA.dot(GK_Ab);
 }
 
 void Proto::registerPython() {
@@ -224,33 +282,5 @@ void Proto::registerPython() {
         .def("project", &Proto::projectPython)
         .def("parametrize", &Proto::parametrize);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 }
