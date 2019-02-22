@@ -14,6 +14,18 @@ void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &r) {
     gsl_blas_ddot(&gsl_x.vector, &gsl_y.vector, &r);
 }
 
+void linalg_matrix_dot(ub::matrix<double> &A, ub::matrix<double> &B, ub::matrix<double> &C) {
+    throw std::runtime_error("gsl::linalg_matrix_dot not implemented (only mkl)");
+}
+
+void linalg_matrix_block_dot(
+    ub::matrix<double> &A, 
+    ub::matrix<double> &B, 
+    ub::matrix<double> &C,
+    int i_off, int j_off) {
+    throw std::runtime_error("gsl::linalg_matrix_block_dot not implemented (only mkl)");
+}
+
 void linalg_cholesky_decompose( ub::matrix<double> &A){
         // Cholesky decomposition using GSL
         const size_t N = A.size1();

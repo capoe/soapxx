@@ -23,23 +23,29 @@ DMap::~DMap() {
 
 double DMap::dot(DMap *other) {
     if (other->size() < this->size()) return other->dot(this);
-    double res = 0.0;
+    dtype_t res = 0.0;
+    dtype_t r12 = 0.0;
     for (auto it=dmap.begin(); it!=dmap.end(); ++it) {
         auto jt = other->dmap.find(it->first);
         if (jt != other->end()) {
-            auto &c1 = *(it->second);
-            auto &c2 = *(jt->second);
-            double r12 = 0.0;
-            soap::linalg::linalg_dot(c1, c2, r12);
-            res += r12;
+            // Manual version, for speed-up see library version below
+            //auto &c1 = *(it->second);
+            //auto &c2 = *(jt->second);
             //res += c1.dot(c2);
             //res += ub::inner_prod(c1, c2);
             //for (int i=0; i<c1.size(); ++i) {
             //    res += c1(i)*c2(i);
             //}
+            soap::linalg::linalg_dot(*(it->second), *(jt->second), r12);
+            res += r12;
         }
     }
-    return res;
+    return double(res);
+}
+
+double DMap::dotFilter(DMap *other) {
+    if (other->filter != this->filter) return 0.0;
+    else return this->dot(other);
 }
 
 void DMap::multiply(double c) {
@@ -52,7 +58,8 @@ void DMap::multiply(double c) {
 void DMap::adapt(AtomicSpectrum *atomic) {
     auto spec = atomic->getXnklMap();
     for (auto it=spec.begin(); it!=spec.end(); ++it) {
-        if (it->first.first > it->first.second) continue; // E.g., only C:H, not H:C
+        // Exclude symmetric redundancies (e.g., project C:H, but not H:C
+        if (it->first.first > it->first.second) continue; 
         auto coeff = it->second->getCoefficients();
         int length = coeff.size1()*coeff.size2();
         auto v = new vec_t(length);
@@ -71,11 +78,18 @@ void DMap::adapt(AtomicSpectrum *atomic) {
 
 void DMap::registerPython() {
     using namespace boost::python;
-    class_<DMap, DMap*>("DMap", init<>());
+    class_<DMap, DMap*>("DMap", init<>())
+        .add_property("filter", &DMap::getFilter)
+        .def("dot", &DMap::dot)
+        .def("dotFilter", &DMap::dotFilter);
 }
 
 DMapMatrix::DMapMatrix() : is_view(false) {
     ;
+}
+
+DMapMatrix::DMapMatrix(std::string archfile) : is_view(false) {
+    this->load(archfile);
 }
 
 DMapMatrix::DMapMatrix(bool set_as_view) : is_view(set_as_view) {
@@ -123,8 +137,8 @@ void DMapMatrix::append(Spectrum *spectrum) {
     }
 }
 
-void DMapMatrix::dot(DMapMatrix *other, ub_matrix_t &output) {
-    assert(output.size1() == this->size() && output.size2() == other->size() &&
+void DMapMatrix::dot(DMapMatrix *other, matrix_t &output) {
+    assert(output.size1() == this->rows() && output.size2() == other->rows() &&
         "Output matrix dimensions incompatible with input"); 
     int i = 0;
     for (auto it=begin(); it!=end(); ++it, ++i) {
@@ -135,10 +149,52 @@ void DMapMatrix::dot(DMapMatrix *other, ub_matrix_t &output) {
     }
 }
 
+void DMapMatrix::dotFilter(DMapMatrix *other, matrix_t &output) {
+    assert(output.size1() == this->rows() && output.size2() == other->rows() &&
+        "Output matrix dimensions incompatible with input"); 
+    int i = 0;
+    for (auto it=begin(); it!=end(); ++it, ++i) {
+        int j = 0;
+        for (auto jt=other->begin(); jt!=other->end(); ++jt, ++j) {
+            output(i,j) = (*it)->dotFilter(*jt);
+        }
+    }
+}
+
+void dmm_inner_product(DMapMatrix &AX, DMapMatrix &BX, double power, 
+        bool filter, DMapMatrix::matrix_t &output) {
+    assert(output.size1() == AX.rows() && output.size2() == BX.rows() &&
+        "Output matrix dimensions incompatible with input"); 
+    if (filter) {
+        int i = 0;
+        for (auto it=AX.begin(); it!=AX.end(); ++it, ++i) {
+            int j = 0;
+            for (auto jt=BX.begin(); jt!=BX.end(); ++jt, ++j) {
+                output(i,j) = std::pow((*it)->dotFilter(*jt), power);
+            }
+        }
+    } else {
+        int i = 0;
+        for (auto it=AX.begin(); it!=AX.end(); ++it, ++i) {
+            int j = 0;
+            for (auto jt=BX.begin(); jt!=BX.end(); ++jt, ++j) {
+                output(i,j) = std::pow((*it)->dot(*jt), power);
+            }
+        }
+    }
+}
+
 boost::python::object DMapMatrix::dotNumpy(DMapMatrix *other, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
-    ub_matrix_t output(this->size(), other->size());
+    matrix_t output(this->rows(), other->rows());
     this->dot(other, output);
+    return npc.ublas_to_numpy<double>(output);
+}
+
+boost::python::object DMapMatrix::dotFilterNumpy(DMapMatrix *other, std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    matrix_t output(this->rows(), other->rows());
+    this->dotFilter(other, output);
     return npc.ublas_to_numpy<double>(output);
 }
 
@@ -159,17 +215,25 @@ void DMapMatrix::load(std::string archfile) {
 void DMapMatrix::registerPython() {
     using namespace boost::python;
     class_<DMapMatrix, DMapMatrix*>("DMapMatrix", init<>())
-        .def("__len__", &DMapMatrix::size)
+        .def(init<std::string>())
+        .add_property("rows", &BlockLaplacian::rows)
+        .def("__len__", &DMapMatrix::rows)
+        .def("__getitem__", &DMapMatrix::getRow, return_value_policy<reference_existing_object>())
         .def("addView", &DMapMatrix::addView)
         .def("getView", &DMapMatrix::getView, return_value_policy<reference_existing_object>())
         .def("append", &DMapMatrix::append)
         .def("dot", &DMapMatrix::dotNumpy)
+        .def("dotFilter", &DMapMatrix::dotFilterNumpy)
         .def("load", &DMapMatrix::load)
         .def("save", &DMapMatrix::save);
 }
 
 BlockLaplacian::BlockLaplacian() : n_rows(0), n_cols(0) {
     ;
+}
+
+BlockLaplacian::BlockLaplacian(std::string archfile) : n_rows(0), n_cols(0) {
+    this->load(archfile);
 }
 
 BlockLaplacian::~BlockLaplacian() {
@@ -179,8 +243,10 @@ BlockLaplacian::~BlockLaplacian() {
     blocks.clear();
 }
 
-BlockLaplacian::block_t *BlockLaplacian::addBlock(int n_rows, int n_cols) {
-    block_t *new_block = new block_t(n_rows, n_cols);
+BlockLaplacian::block_t *BlockLaplacian::addBlock(int n_rows_block, int n_cols_block) {
+    block_t *new_block = new block_t(n_rows_block, n_cols_block);
+    n_rows += n_rows_block;
+    n_cols += n_cols_block;
     blocks.push_back(new_block);
     return new_block;
 }
@@ -209,11 +275,51 @@ void BlockLaplacian::load(std::string archfile) {
 	return;
 }
 
+boost::python::object BlockLaplacian::dotNumpy(
+        boost::python::object &np_other, std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    block_t other;
+    npc.numpy_to_ublas<dtype_t>(np_other, other);
+    block_t output(this->rows(), other.size2());
+    this->dot(other, output);
+    return npc.ublas_to_numpy<double>(output);
+}
+
+void BlockLaplacian::dot(block_t &other, block_t &output) {
+    assert(n_cols == other.size1() && output.size1() == n_rows 
+        && output.size2() == other.size2() && "Inconsistent matrix dimensions");
+    int i_off = 0;
+    int j_off = 0;
+    for (auto it=begin(); it!=end(); ++it) {
+        block_t &block = *(*it);
+        // Manual version, for speed-up see library version below
+        //for (int i=0; i<block.size1(); ++i) {
+        //    for (int k=0; k<other.size2(); ++k) {
+        //        double out_ik = 0.0;
+        //        for (int j=0; j<block.size2(); ++j) {
+        //            out_ik += block(i,j)*other(j_off+j, k);
+        //        }
+        //        output(i_off+i,k) = out_ik;
+        //    }
+        //}
+        soap::linalg::linalg_matrix_block_dot(
+            block,
+            other,
+            output,
+            i_off,
+            j_off);
+        i_off += block.size1();
+        j_off += block.size2();
+    }
+}
+
 void BlockLaplacian::registerPython() {
     using namespace boost::python;
     class_<BlockLaplacian, BlockLaplacian*>("BlockLaplacian", init<>())
+        .def(init<std::string>())
         .add_property("rows", &BlockLaplacian::rows)
         .add_property("cols", &BlockLaplacian::cols)
+        .def("dot", &BlockLaplacian::dotNumpy)
         .def("append", &BlockLaplacian::appendNumpy)
         .def("save", &BlockLaplacian::save)
         .def("load", &BlockLaplacian::load);
@@ -235,10 +341,10 @@ Proto::~Proto() {
     Gnab.clear();
 }
 
-void Proto::parametrize(DMapMatrix &AX, DMapMatrix &BX, BlockLaplacian &DAB) {
-    GLOG() << "Build Proto from AX x BX = " << AX.size() << " x " << BX.size() << std::endl;
-    AXM = &AX;
-    BXM = &BX;
+void Proto::parametrize(DMapMatrix &AX_in, DMapMatrix &BX_in, BlockLaplacian &DAB) {
+    GLOG() << "Build Proto from AX x BX = " << AX_in.rows() << " x " << BX_in.rows() << std::endl;
+    AX = &AX_in;
+    BX = &BX_in;
     // TODO Formulate in terms of basis expansion with dedicated objects
     // such as in Gnab = basis->evaluate(DAB).
     // Example here: Flat radial basis with cutoff
@@ -254,7 +360,8 @@ void Proto::parametrize(DMapMatrix &AX, DMapMatrix &BX, BlockLaplacian &DAB) {
         auto &gab_block = *(new_gab->addBlock(dab_block.size1(), dab_block.size2()));
         for (int i=0; i<dab_block.size1(); ++i) {
             for (int j=0; j<dab_block.size2(); ++j) {
-                gab_block(i,j) = cutoff->calculateWeight(dab_block(i,j));
+                // Apply cutoff and Jacobian (here: 1/r^2)
+                gab_block(i,j) = cutoff->calculateWeight(dab_block(i,j)) / pow(dab_block(i,j),2);
             }
         }
     }
@@ -262,18 +369,59 @@ void Proto::parametrize(DMapMatrix &AX, DMapMatrix &BX, BlockLaplacian &DAB) {
     Gnab.push_back(new_gab);
 }
 
-boost::python::object Proto::projectPython(DMapMatrix &AX, DMapMatrix &BX, double xi, std::string np_dtype) {
+boost::python::object Proto::projectPython(DMapMatrix *ax, DMapMatrix *bx, 
+        double xi, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
-    matrix_t output(AX.size(), BX.size());
-    this->project(AX, BX, xi, output);
+    matrix_t output(ax->rows(), bx->rows());
+    this->project(ax, bx, xi, output);
     return npc.ublas_to_numpy<double>(output);
 }
 
-void Proto::project(DMapMatrix &AX, DMapMatrix &BX, double xi, matrix_t &output) {
-    //K_aA = AX.dot(*AXM);
-    //K_Bb = BXM->dot(BX);
-    //GK_Ab = Gnab[0]->dotRight(KBb);
-    //output = K_aA.dot(GK_Ab);
+void Proto::project(DMapMatrix *ax, DMapMatrix *bx, double xi, matrix_t &output) {
+    // NOTE The key constraint here is to avoid matrices of size NA x NB
+    bool filter = true; // <- = true means that kab = 0 if element a != element b
+    int NA = AX->rows();
+    int NB = BX->rows();
+    int na = ax->rows();
+    int nb = bx->rows();
+    assert(output.size1() == na && output.size2() == nb
+        && "Inconsistent output matrix dimensions");
+    // Project environments
+    GLOG() << "Allocating " << na << "x" << NA << " and " 
+        << NB << "x" << nb << " kernel matrices" << std::endl;
+    DMapMatrix::matrix_t K_aA(na, NA);
+    DMapMatrix::matrix_t K_Bb(NB, nb);
+    GLOG() << "Environment projection KaA=ax.AX" << std::endl;
+    dmm_inner_product(*ax, *AX, xi, filter, K_aA);
+    GLOG() << "Environment projection KBb=BX.bx" << std::endl;
+    dmm_inner_product(*BX, *bx, xi, filter, K_Bb);
+    // Project basis
+    GLOG() << "Basis projection HAb=GAB.KBb" << std::endl;
+    DMapMatrix::matrix_t H_Ab(NA, nb);
+    assert(Gnab.size() == 1);
+    GLOG() << "Basis projection Eab=KaA.HAb" << std::endl;
+    Gnab[0]->dot(K_Bb, H_Ab); // TODO Account for more than one basis fct
+    GLOG() << "Projecting KaA.HAb" << std::endl;
+    soap::linalg::linalg_matrix_dot(K_aA, H_Ab, output);
+    // Normalization
+    GLOG() << "Normalization of Eab" << std::endl;
+    std::vector<double> za(na);
+    std::vector<double> zb(nb);
+    for (int i=0; i<na; ++i) {
+        for (int j=0; j<NA; ++j) {
+            za[i] += K_aA(i,j);
+        }
+    }
+    for (int i=0; i<nb; ++i) {
+        for (int j=0; j<NB; ++j) {
+            zb[i] += K_Bb(j,i);
+        }
+    }
+    for (int i=0; i<na; ++i) {
+        for (int j=0; j<nb; ++j) {
+            output(i,j) = - std::log(output(i,j)/(za[i]*zb[j]));
+        }
+    }
 }
 
 void Proto::registerPython() {

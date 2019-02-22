@@ -8,7 +8,33 @@
 namespace soap { namespace linalg {
     namespace ub = boost::numeric::ublas;
 
-    void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &result);
+    // Standard vector inner (dot) product c = x.y
+    void linalg_dot(
+        ub::vector<double> &x, 
+        ub::vector<double> &y, 
+        double &c);
+
+    void linalg_dot(
+        ub::vector<float> &x, 
+        ub::vector<float> &y, 
+        float &c);
+
+    // Standard (inner) matrix product C = A.B
+    void linalg_matrix_dot(
+        ub::matrix<double> &A, 
+        ub::matrix<double> &B, 
+        ub::matrix<double> &C);
+
+    // Matrix product between a small mxn block A and large NxK matrix B,
+    // where A is excised from a larger block-diagonal MxN matrix AA. The
+    // upper left corner of A starts at (i_off, j_off) within AA.
+    // Output C should have dimension MxN, where M is the number of rows
+    // of the block-diagonal matrix AA and N the number of columns of B.
+    void linalg_matrix_block_dot(
+        ub::matrix<double> &A, 
+        ub::matrix<double> &B, 
+        ub::matrix<double> &C,
+        int i_off, int j_off);
 
     /**
      * \brief inverts A

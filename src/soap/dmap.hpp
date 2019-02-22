@@ -19,6 +19,7 @@ namespace bpy = boost::python;
 
 struct DMap
 {
+    //typedef float dtype_t;
     typedef double dtype_t;
     typedef ub::vector<dtype_t> vec_t;
     //typedef Eigen::VectorXf vec_t;
@@ -30,7 +31,9 @@ struct DMap
     int size() { return dmap.size(); }
     void multiply(double c);
     double dot(DMap *other);
+    double dotFilter(DMap *other);
     void adapt(AtomicSpectrum *spectrum);
+    std::string getFilter() { return filter; }
     dmap_t dmap;
     std::string filter;
     static void registerPython();
@@ -45,23 +48,26 @@ class DMapMatrix
 {
   public:
     typedef double dtype_t;
-    typedef ub::matrix<dtype_t> ub_matrix_t;
     //typedef Eigen::MatrixXf matrix_t;
     typedef ub::matrix<dtype_t> matrix_t;
     typedef std::vector<DMap*> dmm_t;
     typedef std::map<std::string, DMapMatrix*> views_t;
     DMapMatrix();
+    DMapMatrix(std::string archfile);
     ~DMapMatrix();
-    void dot(DMapMatrix *other, ub_matrix_t &output);
+    void dot(DMapMatrix *other, matrix_t &output);
+    void dotFilter(DMapMatrix *other, matrix_t &output);
     bpy::object dotNumpy(DMapMatrix *other, std::string np_dtype);
+    bpy::object dotFilterNumpy(DMapMatrix *other, std::string np_dtype);
     void append(Spectrum *spectrum);
     void save(std::string archfile);
     void load(std::string archfile);
+    DMap *getRow(int idx) { return dmm[idx]; }
     void addView(std::string filter);
     DMapMatrix *getView(std::string filter);
     dmm_t::iterator begin() { return dmm.begin(); }
     dmm_t::iterator end() { return dmm.end(); }
-    int size() { return dmm.size(); }
+    int rows() { return dmm.size(); }
     static void registerPython();
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
@@ -76,14 +82,22 @@ class DMapMatrix
     bool is_view;
 };
 
+void dmm_inner_product(
+    DMapMatrix &AX, 
+    DMapMatrix &BX, 
+    double power, 
+    bool filter,
+    DMapMatrix::matrix_t &output);
+
 struct BlockLaplacian
 {
     typedef double dtype_t;
     typedef ub::matrix<dtype_t> block_t;
     typedef std::vector<block_t*> blocks_t;
     BlockLaplacian();
+    BlockLaplacian(std::string archfile);
     ~BlockLaplacian();
-    block_t *addBlock(int n_rows, int n_cols);
+    block_t *addBlock(int n_rows_block, int n_cols_block);
     void appendNumpy(boost::python::object &np_array, std::string np_dtype);
     void save(std::string archfile);
     void load(std::string archfile);
@@ -91,7 +105,8 @@ struct BlockLaplacian
     int cols() { return n_cols; }
     blocks_t::iterator begin() { return blocks.begin(); }
     blocks_t::iterator end() { return blocks.end(); }
-    void dotRight();
+    bpy::object dotNumpy(bpy::object &np_other, std::string np_dtype);
+    void dot(block_t &other, block_t &output);
     void dotLeft();
     static void registerPython();
     template<class Archive>
@@ -114,15 +129,15 @@ class Proto
     Proto();
     ~Proto();
     void parametrize(DMapMatrix &AX, DMapMatrix &BX, BlockLaplacian &DAB);
-    bpy::object projectPython(DMapMatrix &AX, DMapMatrix &BX, 
+    bpy::object projectPython(DMapMatrix *AX, DMapMatrix *BX, 
         double xi, std::string np_dtype);
-    void project(DMapMatrix &AX, DMapMatrix &BX, double xi, matrix_t &output);
+    void project(DMapMatrix *AX, DMapMatrix *BX, double xi, matrix_t &output);
     static void registerPython(); 
   private:
     Gnab_t Gnab;
     CutoffFunction *cutoff;
-    DMapMatrix *AXM;
-    DMapMatrix *BXM;
+    DMapMatrix *AX;
+    DMapMatrix *BX;
 };
 
 }

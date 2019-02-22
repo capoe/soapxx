@@ -15,6 +15,47 @@ void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &r) {
     r = cblas_ddot(n, mkl_x, incr, mkl_y, incr);
 }
 
+void linalg_dot(ub::vector<float> &x, ub::vector<float> &y, float &r) {
+    MKL_INT n = x.size();
+    MKL_INT incr = 1;
+    float *mkl_x = const_cast<float*>(&x.data()[0]);
+    float *mkl_y = const_cast<float*>(&y.data()[0]);
+    r = cblas_sdot(n, mkl_x, incr, mkl_y, incr);
+}
+
+void linalg_matrix_dot(ub::matrix<double> &A, ub::matrix<double> &B, ub::matrix<double> &C) {
+    // Inputs A: (m x k), B: (k x n) -> C: (m x n)
+    MKL_INT m = A.size1();
+    MKL_INT n = B.size2();
+    MKL_INT k = A.size2();
+    double alpha = 1.0;
+    double beta = 1.0;
+    double *pA = const_cast<double*>(&A.data().begin()[0]);
+    double *pB = const_cast<double*>(&B.data().begin()[0]);
+    double *pC = const_cast<double*>(&C.data().begin()[0]);
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+           m, n, k, alpha, pA, k, pB, n, beta, pC, n); 
+}
+
+void linalg_matrix_block_dot(
+    ub::matrix<double> &A, 
+    ub::matrix<double> &B, 
+    ub::matrix<double> &C,
+    int i_off, int j_off) {
+    MKL_INT m = A.size1();
+    MKL_INT n = B.size2();
+    MKL_INT k = A.size2(); // NOTE Here != B.size1()
+    double alpha = 1.0;
+    double beta = 1.0;
+    double *pA = const_cast<double*>(&A.data().begin()[0]);
+    double *pB = const_cast<double*>(&B.data().begin()[0]);
+    double *pC = const_cast<double*>(&C.data().begin()[0]);
+    pB += j_off*n;
+    pC += i_off*n;
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+           m, n, k, alpha, pA, k, pB, n, beta, pC, n); 
+}
+
 void linalg_cholesky_decompose( ub::matrix<double> &A){
     // Cholesky decomposition using MKL
     // input matrix A will be changed
