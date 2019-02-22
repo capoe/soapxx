@@ -93,7 +93,7 @@ void DMap::adapt(AtomicSpectrum *atomic) {
         dmap.push_back(p);
     }
     std::sort(dmap.begin(), dmap.end(), 
-        [](DMap::channel_t &c1, DMap::channel_t &c2) {
+        [](DMap::channel_t c1, DMap::channel_t c2) {
             return c1.first <= c2.first;
         }
     );
