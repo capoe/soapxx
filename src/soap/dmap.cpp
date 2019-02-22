@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 
@@ -25,21 +26,37 @@ double DMap::dot(DMap *other) {
     if (other->size() < this->size()) return other->dot(this);
     dtype_t res = 0.0;
     dtype_t r12 = 0.0;
-    for (auto it=dmap.begin(); it!=dmap.end(); ++it) {
-        auto jt = other->dmap.find(it->first);
-        if (jt != other->end()) {
-            // Manual version, for speed-up see library version below
-            //auto &c1 = *(it->second);
-            //auto &c2 = *(jt->second);
-            //res += c1.dot(c2);
-            //res += ub::inner_prod(c1, c2);
-            //for (int i=0; i<c1.size(); ++i) {
-            //    res += c1(i)*c2(i);
-            //}
+
+    //for (auto it=dmap.begin(); it!=dmap.end(); ++it) {
+    //    auto jt = other->dmap.find(it->first);
+    //    if (jt != other->end()) {
+    //        // Manual version, for speed-up see library version below
+    //        //auto &c1 = *(it->second);
+    //        //auto &c2 = *(jt->second);
+    //        //res += c1.dot(c2);
+    //        //res += ub::inner_prod(c1, c2);
+    //        //for (int i=0; i<c1.size(); ++i) {
+    //        //    res += c1(i)*c2(i);
+    //        //}
+    //        soap::linalg::linalg_dot(*(it->second), *(jt->second), r12);
+    //        res += r12;
+    //    }
+    //}
+
+    auto it=this->begin();
+    auto jt=other->begin();
+    while (it != this->end()) {
+        while (jt->first < it->first && jt != other->end()) {
+            ++jt;
+        }
+        if (jt == other->end()) break;
+        if (it->first == jt->first) {
             soap::linalg::linalg_dot(*(it->second), *(jt->second), r12);
             res += r12;
         }
+        ++it;
     }
+
     return double(res);
 }
 
@@ -69,8 +86,17 @@ void DMap::adapt(AtomicSpectrum *atomic) {
                 (*v)(c) = coeff(i,j).real();
             }
         }
-        dmap[it->first] = v;
+        //dmap[it->first] = v;
+        unsigned short int e = ELEMENT_ENCODING[it->first.first] 
+            + ELEMENT_ENCODING.size()*ELEMENT_ENCODING[it->first.second];
+        channel_t p(e, v);
+        dmap.push_back(p);
     }
+    std::sort(dmap.begin(), dmap.end(), 
+        [](DMap::channel_t &c1, DMap::channel_t &c2) {
+            return c1.first <= c2.first;
+        }
+    );
     double norm = std::sqrt(this->dot(this));
     this->multiply(1./norm);
     filter = atomic->getCenterType();

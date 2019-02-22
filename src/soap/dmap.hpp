@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/map.hpp>
+#include <boost/serialization/list.hpp>
 
 #include "soap/types.hpp"
 #include "soap/globals.hpp"
@@ -23,7 +24,11 @@ struct DMap
     typedef double dtype_t;
     typedef ub::vector<dtype_t> vec_t;
     //typedef Eigen::VectorXf vec_t;
-    typedef std::map<std::pair<std::string, std::string>, vec_t*> dmap_t;
+
+    //typedef std::map<std::pair<std::string, std::string>, vec_t*> dmap_t;
+    typedef std::pair<unsigned short int, vec_t*> channel_t;
+    typedef std::vector<channel_t> dmap_t;
+
     DMap();
     ~DMap();
     dmap_t::iterator begin() { return dmap.begin(); }
@@ -139,6 +144,20 @@ class Proto
     DMapMatrix *AX;
     DMapMatrix *BX;
 };
+
+static std::map<std::string, unsigned short int> ELEMENT_ENCODING {
+  { "H" ,   0 },
+  { "C" ,   1 },
+  { "N" ,   2 },
+  { "O" ,   3 },
+  { "F" ,   4 },
+  { "P" ,   5 },
+  { "S" ,   6 },
+  { "Cl",   7 },
+  { "Br",   8 },
+  { "I" ,   9 }
+};
+
 
 }
 
