@@ -20,22 +20,22 @@ namespace bpy = boost::python;
 
 struct DMap
 {
-    //typedef float dtype_t;
-    typedef double dtype_t;
+    typedef float dtype_t;
+    //typedef double dtype_t;
     typedef ub::vector<dtype_t> vec_t;
     //typedef Eigen::VectorXf vec_t;
-
     //typedef std::map<std::pair<std::string, std::string>, vec_t*> dmap_t;
     typedef std::pair<unsigned short int, vec_t*> channel_t;
     typedef std::vector<channel_t> dmap_t;
-
     DMap();
     ~DMap();
     dmap_t::iterator begin() { return dmap.begin(); }
     dmap_t::iterator end() { return dmap.end(); }
     int size() { return dmap.size(); }
+    void sort();
     void multiply(double c);
     double dot(DMap *other);
+    void add(DMap *other);
     double dotFilter(DMap *other);
     void adapt(AtomicSpectrum *spectrum);
     std::string getFilter() { return filter; }
@@ -55,11 +55,14 @@ class DMapMatrix
     typedef double dtype_t;
     //typedef Eigen::MatrixXf matrix_t;
     typedef ub::matrix<dtype_t> matrix_t;
+    typedef ub::vector<dtype_t> vec_t;
     typedef std::vector<DMap*> dmm_t;
     typedef std::map<std::string, DMapMatrix*> views_t;
     DMapMatrix();
     DMapMatrix(std::string archfile);
     ~DMapMatrix();
+    void clear();
+    void sum();
     void dot(DMapMatrix *other, matrix_t &output);
     void dotFilter(DMapMatrix *other, matrix_t &output);
     bpy::object dotNumpy(DMapMatrix *other, std::string np_dtype);
@@ -93,6 +96,29 @@ void dmm_inner_product(
     double power, 
     bool filter,
     DMapMatrix::matrix_t &output);
+
+class DMapMatrixSet
+{
+  public:
+    typedef std::vector<DMapMatrix*> dset_t;
+    DMapMatrixSet();
+    DMapMatrixSet(std::string archfile);
+    ~DMapMatrixSet();
+    dset_t::iterator begin() { return dset.begin(); }
+    dset_t::iterator end() { return dset.end(); }
+    int size() { return dset.size(); }
+    DMapMatrix *get(int idx) { return dset[idx]; }
+    void append(DMapMatrix *dmm);
+    void save(std::string archfile);
+    void load(std::string archfile);
+    static void registerPython();
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & dset;
+    }
+  private:
+    dset_t dset;
+};
 
 struct BlockLaplacian
 {

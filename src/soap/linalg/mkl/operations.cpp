@@ -23,6 +23,27 @@ void linalg_dot(ub::vector<float> &x, ub::vector<float> &y, float &r) {
     r = cblas_sdot(n, mkl_x, incr, mkl_y, incr);
 }
 
+void linalg_matrix_vector_dot(
+    ub::matrix<double> &A, 
+    ub::vector<double> &b, 
+    ub::vector<double> &c,
+    bool transpose,
+    double alpha,
+    double beta) {
+    MKL_INT m = A.size1();
+    MKL_INT n = A.size2();
+    MKL_INT incr = 1;
+    //if (transpose) {
+    //    k = A.size1();
+    //    m = A.size2();
+    //}
+    double *pA = const_cast<double*>(&A.data().begin()[0]);
+    double *pb = const_cast<double*>(&b.data()[0]);
+    double *pc = const_cast<double*>(&c.data()[0]);
+    cblas_dgemv(CblasRowMajor, (transpose) ? CblasTrans : CblasNoTrans,
+        m, n, alpha, pA, n, pb, incr, beta, pc, incr);
+}
+
 void linalg_matrix_dot(ub::matrix<double> &A, ub::matrix<double> &B, ub::matrix<double> &C) {
     // Inputs A: (m x k), B: (k x n) -> C: (m x n)
     MKL_INT m = A.size1();

@@ -1,62 +1,112 @@
-#ifndef _SOAP_KERNEL_HPP
-#define _SOAP_KERNEL_HPP
-
-#include <soap/spectrum.hpp>
+#ifndef _SOAP_DMAP_KERNEL_HPP
+#define _SOAP_DMAP_KERNEL_HPP
 
 #include "soap/base/objectfactory.hpp"
+#include "soap/dmap.hpp"
+
 namespace soap {
 
 class BaseKernel
 {
-public:
+  public:
     BaseKernel() {;}
     virtual std::string identify() { return "basekernel"; }
     virtual void configure(Options &options) {;}
     virtual ~BaseKernel() {;}
-    virtual double evaluate(AtomicSpectrum*, AtomicSpectrum*) = 0;
+    virtual double evaluate(DMap*, DMap*) = 0;
 };
 
 class TopKernel
 {
-public:
+  public:
     TopKernel() {;}
     virtual std::string identify() { return "topkernel"; }
     virtual ~TopKernel() {;}
     virtual void configure(Options &options) {;}
-    virtual double evaluate(Spectrum*, Spectrum*, BaseKernel*) = 0;
+    double evaluateNumpy(boost::python::object &np_K, std::string np_dtype);
+    virtual double evaluate(DMapMatrix::matrix_t &K) = 0;
 };
 
 class Kernel
 {
-public:
+  public:
+    typedef Options metadata_t;
     Kernel(Options &options);
     ~Kernel();
-    double evaluate(Spectrum*, Spectrum*);
+    boost::python::object evaluatePython(
+        DMapMatrixSet *dset1,
+        DMapMatrixSet *dset2,
+        double power,
+        bool filter,
+        bool symmetric,
+        std::string np_type);
+    metadata_t *getMetadata() { return metadata; }
+    void evaluate(
+        DMapMatrixSet *dset1,
+        DMapMatrixSet *dset2,
+        double power,
+        bool filter,
+        bool symmetric,
+        DMapMatrix::matrix_t &output);
+    double evaluateTop(
+        boost::python::object &np_K, 
+        std::string np_dtype);
     static void registerPython();
-private:
+  private:
     BaseKernel *basekernel;
     TopKernel *topkernel;
+    metadata_t *metadata;
 };
 
 class BaseKernelDot : public BaseKernel
 {
-public:
+  public:
     BaseKernelDot() {;}
     void configure(Options &options);
-    double evaluate(AtomicSpectrum*, AtomicSpectrum*);
-private:
+    double evaluate(DMap*, DMap*);
+  private:
     double exponent;
     double coefficient;
 };
 
+
 class TopKernelRematch : public TopKernel
 {
-public:
-    TopKernelRematch() {;}
+  public:
+    TopKernelRematch();
     void configure(Options &options);
-    double evaluate(Spectrum*, Spectrum*, BaseKernel*);
-private:
-    double gamma;
+    double evaluate(DMapMatrix::matrix_t &K);
+  private:
+    double gamma; // Rematch inverse temperature
+    double eps;   // Convergence tolerance
+    double omega; // Mixing factor, successive overrelaxation
+};
+
+class TopKernelCanonical : public TopKernel
+{
+  public:
+    TopKernelCanonical();
+    void configure(Options &options);
+    double evaluate(DMapMatrix::matrix_t &K);
+  private:
+    double beta;
+};
+
+class TopKernelAverage : public TopKernel
+{
+  public:
+    TopKernelAverage();
+    void configure(Options &options);
+    double evaluate(DMapMatrix::matrix_t &K);
+  private:
+};
+
+class KernelInterface
+{
+  public:
+    KernelInterface() {;}
+    static void registerPython();
+  private:
 };
 
 //template
@@ -131,9 +181,9 @@ inline BaseKernel *BaseKernelFactory::create(const std::string &key) {
 class TopKernelFactory
     : public soap::base::ObjectFactory<std::string, TopKernel>
 {
-private:
+  private:
     TopKernelFactory() {}
-public:
+  public:
     static void registerAll(void);
     TopKernel *create(const std::string &key);
     friend TopKernelFactory &TopKernelCreator();
@@ -151,10 +201,9 @@ inline TopKernel *TopKernelFactory::create(const std::string &key) {
         return kernel;
     }
     else {
-        throw std::runtime_error("Factory key " + key + " not found.");
+        throw std::runtime_error("Factory key '" + key + "' not found.");
     }
 }
-
 
 }
 

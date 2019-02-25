@@ -46,9 +46,7 @@ double DMap::dot(DMap *other) {
     auto it=this->begin();
     auto jt=other->begin();
     while (it != this->end()) {
-        while (jt->first < it->first && jt != other->end()) {
-            ++jt;
-        }
+        while (jt != other->end() && jt->first < it->first) ++jt;
         if (jt == other->end()) break;
         if (it->first == jt->first) {
             soap::linalg::linalg_dot(*(it->second), *(jt->second), r12);
@@ -58,6 +56,38 @@ double DMap::dot(DMap *other) {
     }
 
     return double(res);
+}
+
+void DMap::add(DMap *other) {
+    dmap_t add_entries; 
+    auto it = this->begin();
+    auto jt = other->begin();
+    while (jt != other->end()) {
+        if (it == this->end() || jt->first < it->first) {
+            vec_t *add_vec = new vec_t(jt->second->size());
+            *add_vec = *(jt->second);
+            add_entries.push_back(channel_t(jt->first, add_vec));
+            ++jt;
+        } else if (jt->first == it->first) {
+            *(it->second) += *(jt->second);
+            ++it;
+            ++jt;
+        } else if (jt->first > it->first) {
+            ++it;
+        }
+    }
+    for (auto it=add_entries.begin(); it!=add_entries.end(); ++it) {
+        dmap.push_back(*it);
+    }
+    this->sort();
+}
+
+void DMap::sort() {
+    std::sort(dmap.begin(), dmap.end(), 
+        [](DMap::channel_t c1, DMap::channel_t c2) {
+            return c1.first <= c2.first;
+        }
+    );
 }
 
 double DMap::dotFilter(DMap *other) {
@@ -92,11 +122,7 @@ void DMap::adapt(AtomicSpectrum *atomic) {
         channel_t p(e, v);
         dmap.push_back(p);
     }
-    std::sort(dmap.begin(), dmap.end(), 
-        [](DMap::channel_t c1, DMap::channel_t c2) {
-            return c1.first <= c2.first;
-        }
-    );
+    this->sort();
     double norm = std::sqrt(this->dot(this));
     this->multiply(1./norm);
     filter = atomic->getCenterType();
@@ -123,6 +149,10 @@ DMapMatrix::DMapMatrix(bool set_as_view) : is_view(set_as_view) {
 }
 
 DMapMatrix::~DMapMatrix() {
+    this->clear();
+}
+
+void DMapMatrix::clear() {
     if (!is_view) {
         for (auto it=dmm.begin(); it!=dmm.end(); ++it) delete (*it);
     }
@@ -161,6 +191,16 @@ void DMapMatrix::append(Spectrum *spectrum) {
             auto dm = jt->second;
         }
     }
+}
+
+void DMapMatrix::sum() {
+    auto *summed = new DMap();
+    summed->filter = "";
+    for (auto it=begin(); it!=end(); ++it) {
+        summed->add(*it);
+    }
+    this->clear();
+    dmm.push_back(summed); 
 }
 
 void DMapMatrix::dot(DMapMatrix *other, matrix_t &output) {
@@ -212,14 +252,14 @@ void dmm_inner_product(DMapMatrix &AX, DMapMatrix &BX, double power,
 
 boost::python::object DMapMatrix::dotNumpy(DMapMatrix *other, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
-    matrix_t output(this->rows(), other->rows());
+    DMapMatrix::matrix_t output(this->rows(), other->rows(), 0.0);
     this->dot(other, output);
     return npc.ublas_to_numpy<double>(output);
 }
 
 boost::python::object DMapMatrix::dotFilterNumpy(DMapMatrix *other, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
-    matrix_t output(this->rows(), other->rows());
+    DMapMatrix::matrix_t output(this->rows(), other->rows(), 0.0);
     this->dotFilter(other, output);
     return npc.ublas_to_numpy<double>(output);
 }
@@ -242,16 +282,60 @@ void DMapMatrix::registerPython() {
     using namespace boost::python;
     class_<DMapMatrix, DMapMatrix*>("DMapMatrix", init<>())
         .def(init<std::string>())
-        .add_property("rows", &BlockLaplacian::rows)
+        .add_property("rows", &DMapMatrix::rows)
         .def("__len__", &DMapMatrix::rows)
         .def("__getitem__", &DMapMatrix::getRow, return_value_policy<reference_existing_object>())
         .def("addView", &DMapMatrix::addView)
         .def("getView", &DMapMatrix::getView, return_value_policy<reference_existing_object>())
         .def("append", &DMapMatrix::append)
+        .def("sum", &DMapMatrix::sum)
         .def("dot", &DMapMatrix::dotNumpy)
         .def("dotFilter", &DMapMatrix::dotFilterNumpy)
         .def("load", &DMapMatrix::load)
         .def("save", &DMapMatrix::save);
+}
+
+DMapMatrixSet::DMapMatrixSet() {
+    ;
+}
+
+DMapMatrixSet::DMapMatrixSet(std::string archfile) {
+    this->load(archfile);
+}
+
+DMapMatrixSet::~DMapMatrixSet() {
+    for (auto it=begin(); it!=end(); ++it) delete *it;
+    dset.clear();
+}
+
+void DMapMatrixSet::append(DMapMatrix *dmap) {
+    dset.push_back(dmap);
+}
+
+void DMapMatrixSet::save(std::string archfile) {
+    std::ofstream ofs(archfile.c_str());
+    boost::archive::binary_oarchive arch(ofs);
+    arch << (*this);
+    return;
+}
+
+void DMapMatrixSet::load(std::string archfile) {
+	std::ifstream ifs(archfile.c_str());
+	boost::archive::binary_iarchive arch(ifs);
+	arch >> (*this);
+	return;
+}
+
+void DMapMatrixSet::registerPython() {
+    using namespace boost::python;
+    class_<DMapMatrixSet, DMapMatrixSet*>("DMapMatrixSet", init<>())
+        .def(init<std::string>())
+        .def("__len__", &DMapMatrixSet::size)
+        .def("__getitem__", &DMapMatrixSet::get, return_value_policy<reference_existing_object>())
+        .add_property("size", &DMapMatrixSet::size)
+        .def("save", &DMapMatrixSet::save)
+        .def("load", &DMapMatrixSet::load)
+        .def("append", &DMapMatrixSet::append);
 }
 
 BlockLaplacian::BlockLaplacian() : n_rows(0), n_cols(0) {
@@ -398,7 +482,7 @@ void Proto::parametrize(DMapMatrix &AX_in, DMapMatrix &BX_in, BlockLaplacian &DA
 boost::python::object Proto::projectPython(DMapMatrix *ax, DMapMatrix *bx, 
         double xi, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
-    matrix_t output(ax->rows(), bx->rows());
+    DMapMatrix::matrix_t output(ax->rows(), bx->rows(), 0);
     this->project(ax, bx, xi, output);
     return npc.ublas_to_numpy<double>(output);
 }

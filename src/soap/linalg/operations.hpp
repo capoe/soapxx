@@ -19,6 +19,15 @@ namespace soap { namespace linalg {
         ub::vector<float> &y, 
         float &c);
 
+    // Standard (inner) matrix-vector product c = alpha*A^(t).b + beta*c
+    void linalg_matrix_vector_dot(
+        ub::matrix<double> &A, 
+        ub::vector<double> &b, 
+        ub::vector<double> &c,
+        bool transpose,
+        double alpha,
+        double beta);
+
     // Standard (inner) matrix product C = A.B
     void linalg_matrix_dot(
         ub::matrix<double> &A, 
