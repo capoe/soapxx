@@ -30,8 +30,7 @@ options_default = {
     "exclude_centers": [],
     "exclude_targets": [],
     "exclude_center_ids": [],
-    "exclude_target_ids": [],
-    "type_list": ["C", "H", "N", "O", "S"]
+    "exclude_target_ids": []
 }
 
 class StructureConverter(object):
@@ -161,14 +160,14 @@ class PowerSpectrum(object):
                 if self.verbose: self.log << "[py] Storing specific descriptor (-> sd)" << self.log.endl
                 adaptor = soap.soapy.kernel.KernelAdaptorFactory['specific-unique'](
                     self.spectrum.options,
-                    types_global=self.options['type_list'])
+                    types_global=soap.encoder.types())
                 IX, IR, types = adaptor.adapt(self.spectrum, return_pos_matrix=True)
                 self.sd = IX
             if PowerSpectrum.settings["store_gsd"]:
                 if self.verbose: self.log << "[py] Storing global specific descriptor (-> gsd)" << self.log.endl
                 adaptor = soap.soapy.kernel.KernelAdaptorFactory['global-specific'](
                     self.spectrum.options,
-                    types_global=self.options['type_list'])
+                    types_global=soap.encoder.types())
                 IX, IR, types = adaptor.adapt(self.spectrum, return_pos_matrix=True)
                 self.gsd = IX
             if PowerSpectrum.settings["store_sdmap"]:
@@ -297,6 +296,10 @@ class PowerSpectrum(object):
             if self.verbose: self.log << "[h5] Loading descriptor matrix" << self.log.endl
             self.sd = g["sd"].value
         return self
+    def exportDMapMatrix(self):
+        dmap_mat = soap.DMapMatrix()
+        dmap_mat.append(self.spectrum)
+        return dmap_mat
 
 def test(log, do_verify):
     def verify(spec):

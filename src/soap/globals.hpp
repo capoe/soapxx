@@ -7,6 +7,7 @@ namespace soap {
 
     extern Logger GLOG;
     void GLOG_SILENCE();
+    void GLOG_TOGGLE_SILENCE();
     void GLOG_VERBOSE(bool verbose);
 
     namespace constants {

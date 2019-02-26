@@ -26,7 +26,7 @@ double DMap::dot(DMap *other) {
     if (other->size() < this->size()) return other->dot(this);
     dtype_t res = 0.0;
     dtype_t r12 = 0.0;
-
+    // NOTE This is clear but inefficient, see improved version below.
     //for (auto it=dmap.begin(); it!=dmap.end(); ++it) {
     //    auto jt = other->dmap.find(it->first);
     //    if (jt != other->end()) {
@@ -42,7 +42,6 @@ double DMap::dot(DMap *other) {
     //        res += r12;
     //    }
     //}
-
     auto it=this->begin();
     auto jt=other->begin();
     while (it != this->end()) {
@@ -54,7 +53,6 @@ double DMap::dot(DMap *other) {
         }
         ++it;
     }
-
     return double(res);
 }
 
@@ -117,8 +115,7 @@ void DMap::adapt(AtomicSpectrum *atomic) {
             }
         }
         //dmap[it->first] = v;
-        unsigned short int e = ELEMENT_ENCODING[it->first.first] 
-            + ELEMENT_ENCODING.size()*ELEMENT_ENCODING[it->first.second];
+        TypeEncoder::code_t e = ENCODER.encode(it->first.first, it->first.second);
         channel_t p(e, v);
         dmap.push_back(p);
     }
@@ -539,6 +536,119 @@ void Proto::registerPython() {
     class_<Proto, Proto*>("Proto", init<>())
         .def("project", &Proto::projectPython)
         .def("parametrize", &Proto::parametrize);
+}
+
+
+TypeEncoder::TypeEncoder() {
+    encoder = encoder_t {
+      { "H" ,   0 },
+      { "C" ,   1 },
+      { "N" ,   2 },
+      { "O" ,   3 },
+      { "F" ,   4 },
+      { "P" ,   5 },
+      { "S" ,   6 },
+      { "Cl",   7 },
+      { "Br",   8 },
+      { "I" ,   9 }
+    };
+}
+
+TypeEncoder::~TypeEncoder() {
+    ;
+}
+
+void TypeEncoder::clear() {
+    encoder.clear();
+}
+
+void TypeEncoder::add(std::string type) {
+    auto it = encoder.find(type);
+    if (it != end()) {
+        throw soap::base::SanityCheckFailed("Type already added: '"+type+"'");
+    }
+    encoder[type] = code_t(size());
+}
+
+TypeEncoder::code_t TypeEncoder::encode(std::string type) {
+    auto it = encoder.find(type);
+    if (it == end()) throw soap::base::OutOfRange("Encoder type '"+type+"'");
+    return it->second;
+}
+
+TypeEncoder::code_t TypeEncoder::encode(std::string type1, std::string type2) {
+    auto it = encoder.find(type1);
+    auto jt = encoder.find(type2);
+    if (it == end() || jt == end()) throw soap::base::OutOfRange(type1+":"+type2);
+    return encoder[type1]*size() + encoder[type2];
+}
+
+void TypeEncoder::list() {
+    for (auto it=begin(); it!=end(); ++it) {
+        GLOG() << it->first << " : " << it->second << std::endl;
+    }
+}
+
+boost::python::list TypeEncoder::getTypes() {
+    boost::python::list type_list;
+    std::vector<std::string> types;
+    for (auto it=begin(); it!=end(); ++it) types.push_back(it->first);
+    std::sort(types.begin(), types.end(), 
+        [&](std::string t1, std::string t2) {
+            return encoder[t1] < encoder[t2];
+        }
+    );
+    for (auto t: types) type_list.append(t);
+    return type_list;
+}
+
+TypeEncoder ENCODER;
+
+void TypeEncoderUI::clear() {
+    ENCODER.clear();
+}
+
+void TypeEncoderUI::list() {
+    ENCODER.list();
+}
+
+void TypeEncoderUI::add(std::string type) {
+    ENCODER.add(type);
+}
+
+boost::python::list TypeEncoderUI::types() {
+    return ENCODER.getTypes();
+}
+
+TypeEncoder::code_t TypeEncoderUI::encode(std::string t1, std::string t2) {
+    return ENCODER.encode(t1, t2);
+}
+
+void TypeEncoder::registerPython() {
+    code_t (TypeEncoder::*encodeSingle)(std::string) 
+        = &TypeEncoder::encode;
+    code_t (TypeEncoder::*encodePair)(std::string, std::string) 
+        = &TypeEncoder::encode;
+
+    using namespace boost::python;
+    class_<TypeEncoder, TypeEncoder*>("TypeEncoder", init<>())
+        .def("clear", &TypeEncoder::clear)
+        .def("add", &TypeEncoder::add)
+        .def("encode", encodeSingle)
+        .def("encode", encodePair);
+
+    // Python use: soap.encoder.clear(); soap.encoder.add("U"); ...
+    class_<TypeEncoderUI>("encoder", init<>())
+        .def("clear", &TypeEncoderUI::clear)
+        .staticmethod("clear")
+        .def("add", &TypeEncoderUI::add)
+        .staticmethod("add")
+        .def("encode", &TypeEncoderUI::encode)
+        .staticmethod("encode")
+        .def("types", &TypeEncoderUI::types)
+        .staticmethod("types")
+        .def("list", &TypeEncoderUI::list)
+        .staticmethod("list");
 }
 
 }

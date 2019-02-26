@@ -18,6 +18,49 @@ namespace soap {
 namespace ub = boost::numeric::ublas;
 namespace bpy = boost::python;
 
+class TypeEncoder
+{
+  public:
+    typedef unsigned short int code_t;
+    typedef std::map<std::string, code_t> encoder_t;
+    TypeEncoder();
+    ~TypeEncoder();
+    void clear();
+    int size() { return encoder.size(); }
+    encoder_t::iterator begin() { return encoder.begin(); }
+    encoder_t::iterator end() { return encoder.end(); }
+    void list();
+    boost::python::list getTypes();
+    code_t encode(std::string type);
+    code_t encode(std::string type1, std::string type2);
+    void add(std::string type);
+    static void registerPython();
+  private:
+    encoder_t encoder {
+      { "H" ,   0 },
+      { "C" ,   1 },
+      { "N" ,   2 },
+      { "O" ,   3 },
+      { "F" ,   4 },
+      { "P" ,   5 },
+      { "S" ,   6 },
+      { "Cl",   7 },
+      { "Br",   8 },
+      { "I" ,   9 }
+   };
+};
+
+struct TypeEncoderUI
+{
+    static void clear();
+    static void add(std::string);
+    static void list();
+    static boost::python::list types();
+    static TypeEncoder::code_t encode(std::string type1, std::string type2);
+};
+
+extern TypeEncoder ENCODER;
+
 struct DMap
 {
     typedef float dtype_t;
@@ -25,7 +68,7 @@ struct DMap
     typedef ub::vector<dtype_t> vec_t;
     //typedef Eigen::VectorXf vec_t;
     //typedef std::map<std::pair<std::string, std::string>, vec_t*> dmap_t;
-    typedef std::pair<unsigned short int, vec_t*> channel_t;
+    typedef std::pair<TypeEncoder::code_t, vec_t*> channel_t;
     typedef std::vector<channel_t> dmap_t;
     DMap();
     ~DMap();
@@ -169,19 +212,6 @@ class Proto
     CutoffFunction *cutoff;
     DMapMatrix *AX;
     DMapMatrix *BX;
-};
-
-static std::map<std::string, unsigned short int> ELEMENT_ENCODING {
-  { "H" ,   0 },
-  { "C" ,   1 },
-  { "N" ,   2 },
-  { "O" ,   3 },
-  { "F" ,   4 },
-  { "P" ,   5 },
-  { "S" ,   6 },
-  { "Cl",   7 },
-  { "Br",   8 },
-  { "I" ,   9 }
 };
 
 

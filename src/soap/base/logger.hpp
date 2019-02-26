@@ -10,9 +10,6 @@ namespace soap {
 
 enum TLogLevel {logERROR, logWARNING, logINFO, logDEBUG};
 
-/*
- * Macros to use the Logger: LOG(level,logger) << message
- */
 #define LOGIF(level, log) \
 if ( &log != NULL && level > (log).getReportLevel() ) ; \
 else (log)(level)
@@ -21,9 +18,6 @@ else (log)(level)
 if (plog == NULL) ; \
 else (*plog)()
 
-/*
- * Custom buffer to store messages
- */
 class LogBuffer : public std::stringbuf {
 
 public:
@@ -33,6 +27,7 @@ public:
                 _writePreface(true) {}
 
     void silence() { _silent = true; }
+    void toggleSilence() { _silent = !_silent; }
 
         // sets the log level (needed for output)
 	void setLogLevel(TLogLevel LogLevel) { _LogLevel = LogLevel; }
@@ -95,7 +90,10 @@ private:
 
 protected:
 	virtual int sync() {
-            if (_silent) return 0;
+            if (_silent) {
+                str("");
+                return 0;
+            }
 
             std::ostringstream _message;
 
@@ -131,24 +129,6 @@ protected:
 
 };
 
-
-/** \class Logger
-*   \brief Logger is used for thread-safe output of messages
-*
-*  Logger writes messages into LogBuffer.
-*  Inheritance from ostream allows to use overloaded << and >> for writing.
-*  Example:
-*
-*  \code
-*  #include <votca/ctp/logger.h>
-*  Logger* log = new Logger(); // create a logger object
-*  log->setReportLevel(logDEBUG); // output only log messages starting from a DEBUG level
-*  LOG(logERROR,*log) << "Error detected" << flush; // write to the logger at an ERROR level
-*  cout << log; // output logger content to standard output
-*  \endcode
-*
-*  Logger has four predefined log levels: logERROR, logWARNING, logINFO, logDEBUG.
-*/
 class Logger : public std::ostream {
 
        friend std::ostream& operator<<( std::ostream& out, Logger&  logger ) {
@@ -185,6 +165,10 @@ public:
         void silence() {
             _silent = true;
             dynamic_cast<LogBuffer*>(rdbuf())->silence();
+        }
+        void toggleSilence() {
+            _silent = !_silent;
+            dynamic_cast<LogBuffer*>(rdbuf())->toggleSilence();
         }
         void setVerbose(bool verbose) {
             _verbose = verbose;
