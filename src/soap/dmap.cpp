@@ -302,7 +302,11 @@ void DMapMatrix::registerPython() {
         .def("save", &DMapMatrix::save);
 }
 
-DMapMatrixSet::DMapMatrixSet() {
+DMapMatrixSet::DMapMatrixSet() : is_view(false) {
+    ;
+}
+
+DMapMatrixSet::DMapMatrixSet(bool set_as_view) : is_view(set_as_view) {
     ;
 }
 
@@ -311,8 +315,23 @@ DMapMatrixSet::DMapMatrixSet(std::string archfile) {
 }
 
 DMapMatrixSet::~DMapMatrixSet() {
-    for (auto it=begin(); it!=end(); ++it) delete *it;
+    if (!is_view) {
+        for (auto it=begin(); it!=end(); ++it) delete *it;
+    }
     dset.clear();
+    for (auto it=views.begin(); it!=views.end(); ++it) delete *it;
+    views.clear();
+}
+
+DMapMatrixSet *DMapMatrixSet::getView(boost::python::list idcs) {
+    DMapMatrixSet *view = new DMapMatrixSet(false);
+    for (int i=0; i<boost::python::len(idcs); ++i) {
+        int idx = boost::python::extract<int>(idcs[i]);
+        if (idx-1 > size()) throw soap::base::OutOfRange(
+            "Index " + lexical_cast<std::string>(idx, ""));
+        view->append(dset[idx]); 
+    }
+    return view;
 }
 
 void DMapMatrixSet::append(DMapMatrix *dmap) {
@@ -339,6 +358,7 @@ void DMapMatrixSet::registerPython() {
         .def(init<std::string>())
         .def("__len__", &DMapMatrixSet::size)
         .def("__getitem__", &DMapMatrixSet::get, return_value_policy<reference_existing_object>())
+        .def("__getitem__", &DMapMatrixSet::getView, return_value_policy<reference_existing_object>())
         .add_property("size", &DMapMatrixSet::size)
         .def("save", &DMapMatrixSet::save)
         .def("load", &DMapMatrixSet::load)

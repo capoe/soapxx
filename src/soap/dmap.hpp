@@ -148,13 +148,16 @@ class DMapMatrixSet
 {
   public:
     typedef std::vector<DMapMatrix*> dset_t;
+    typedef std::vector<dset_t*> views_t;
     DMapMatrixSet();
+    DMapMatrixSet(bool set_as_view);
     DMapMatrixSet(std::string archfile);
     ~DMapMatrixSet();
     dset_t::iterator begin() { return dset.begin(); }
     dset_t::iterator end() { return dset.end(); }
     int size() { return dset.size(); }
     DMapMatrix *get(int idx) { return dset[idx]; }
+    DMapMatrixSet *getView(boost::python::list idcs);
     void append(DMapMatrix *dmm);
     void save(std::string archfile);
     void load(std::string archfile);
@@ -162,9 +165,13 @@ class DMapMatrixSet
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & dset;
+        arch & views;
+        arch & is_view;
     }
   private:
     dset_t dset;
+    views_t views;
+    bool is_view;
 };
 
 struct BlockLaplacian
