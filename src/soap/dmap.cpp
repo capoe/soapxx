@@ -88,6 +88,15 @@ void DMap::sort() {
     );
 }
 
+boost::python::list DMap::listChannels() {
+    boost::python::list channel_keys;
+    for (auto it=begin(); it!=end(); ++it) {
+        std::string c12 = ENCODER.decode(it->first);
+        channel_keys.append(c12);
+    }
+    return channel_keys;
+}
+
 double DMap::dotFilter(DMap *other) {
     if (other->filter != this->filter) return 0.0;
     else return this->dot(other);
@@ -129,6 +138,7 @@ void DMap::registerPython() {
     using namespace boost::python;
     class_<DMap, DMap*>("DMap", init<>())
         .add_property("filter", &DMap::getFilter)
+        .def("listChannels", &DMap::listChannels)
         .def("dot", &DMap::dot)
         .def("dotFilter", &DMap::dotFilter);
 }
@@ -538,7 +548,6 @@ void Proto::registerPython() {
         .def("parametrize", &Proto::parametrize);
 }
 
-
 TypeEncoder::TypeEncoder() {
     encoder = encoder_t {
       { "H" ,   0 },
@@ -560,6 +569,7 @@ TypeEncoder::~TypeEncoder() {
 
 void TypeEncoder::clear() {
     encoder.clear();
+    order.clear();
 }
 
 void TypeEncoder::add(std::string type) {
@@ -568,6 +578,7 @@ void TypeEncoder::add(std::string type) {
         throw soap::base::SanityCheckFailed("Type already added: '"+type+"'");
     }
     encoder[type] = code_t(size());
+    order.push_back(type);
 }
 
 TypeEncoder::code_t TypeEncoder::encode(std::string type) {
@@ -583,22 +594,21 @@ TypeEncoder::code_t TypeEncoder::encode(std::string type1, std::string type2) {
     return encoder[type1]*size() + encoder[type2];
 }
 
+std::string TypeEncoder::decode(TypeEncoder::code_t code) {
+    code_t c2 = code % size();
+    code_t c1 = (code-c2)/size();
+    return order[c1]+":"+order[c2];
+}
+
 void TypeEncoder::list() {
-    for (auto it=begin(); it!=end(); ++it) {
-        GLOG() << it->first << " : " << it->second << std::endl;
+    for (auto it=order.begin(); it!=order.end(); ++it) {
+        GLOG() << *it << " : " << encoder[*it] << std::endl;
     }
 }
 
 boost::python::list TypeEncoder::getTypes() {
     boost::python::list type_list;
-    std::vector<std::string> types;
-    for (auto it=begin(); it!=end(); ++it) types.push_back(it->first);
-    std::sort(types.begin(), types.end(), 
-        [&](std::string t1, std::string t2) {
-            return encoder[t1] < encoder[t2];
-        }
-    );
-    for (auto t: types) type_list.append(t);
+    for (auto t: order) type_list.append(t);
     return type_list;
 }
 

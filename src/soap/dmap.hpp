@@ -23,6 +23,7 @@ class TypeEncoder
   public:
     typedef unsigned short int code_t;
     typedef std::map<std::string, code_t> encoder_t;
+    typedef std::vector<std::string> order_t;
     TypeEncoder();
     ~TypeEncoder();
     void clear();
@@ -31,6 +32,7 @@ class TypeEncoder
     encoder_t::iterator end() { return encoder.end(); }
     void list();
     boost::python::list getTypes();
+    std::string decode(code_t code);
     code_t encode(std::string type);
     code_t encode(std::string type1, std::string type2);
     void add(std::string type);
@@ -48,6 +50,7 @@ class TypeEncoder
       { "Br",   8 },
       { "I" ,   9 }
    };
+   order_t order { "H", "C", "N", "O", "F", "P", "S", "Cl", "Br", "I" };
 };
 
 struct TypeEncoderUI
@@ -77,6 +80,7 @@ struct DMap
     int size() { return dmap.size(); }
     void sort();
     void multiply(double c);
+    boost::python::list listChannels();
     double dot(DMap *other);
     void add(DMap *other);
     double dotFilter(DMap *other);
