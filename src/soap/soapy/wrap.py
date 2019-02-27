@@ -11,27 +11,57 @@ import psutil
 import momo
 log = momo.osio
 
-options_default = {
-    "spectrum.gradients": False,
-    "spectrum.global": False,
-    "spectrum.2l1_norm": False, # NOTE "False" emphasizes coordination, "True" distances
-    "radialbasis.type" : "gaussian",
-    "radialbasis.mode" : "equispaced", # NOTE Alternatives: 'equispaced' or 'adaptive'
-    "radialbasis.N" : 9,
-    "radialbasis.sigma": 0.5,
-    "radialbasis.integration_steps": 15,
-    "radialcutoff.Rc": 3.5, # NOTE Only used for 'equispaced' basis set
-    "radialcutoff.Rc_width": 0.5,
-    "radialcutoff.type": "shifted-cosine",
-    "radialcutoff.center_weight": 1.0,
-    "angularbasis.type": "spherical-harmonic",
-    "angularbasis.L": 6, 
-    "kernel.adaptor": "specific-unique-dmap",
-    "exclude_centers": [],
-    "exclude_targets": [],
-    "exclude_center_ids": [],
-    "exclude_target_ids": []
-}
+def configure_default(typemap={}, types=[]):
+    # Logging
+    soap.silence()
+    soap.soapy.wrap.PowerSpectrum.verbose = True
+    # Descriptor options
+    options_soap = {
+        "spectrum.gradients": False,
+        "spectrum.global": False,
+        "spectrum.2l1_norm": False, # NOTE "False" emphasizes coordination, "True" distances
+        "radialbasis.type" : "gaussian",
+        "radialbasis.mode" : "equispaced", # NOTE Alternatives: 'equispaced' or 'adaptive'
+        "radialbasis.N" : 9,
+        "radialbasis.sigma": 0.5,
+        "radialbasis.integration_steps": 15,
+        "radialcutoff.Rc": 3.5, # NOTE Only used for 'equispaced' basis set
+        "radialcutoff.Rc_width": 0.5,
+        "radialcutoff.type": "shifted-cosine",
+        "radialcutoff.center_weight": 1.0,
+        "angularbasis.type": "spherical-harmonic",
+        "angularbasis.L": 6, 
+        "kernel.adaptor": "specific-unique-dmap",
+        "exclude_centers": ["H"],
+        "exclude_targets": [],
+        "exclude_center_ids": [],
+        "exclude_target_ids": []
+    }
+    # Storage
+    soap.soapy.wrap.PowerSpectrum.settings = {
+        'cxx_compute_power' : True,
+        'store_cxx_serial' : False,
+        'store_cmap' : False,
+        'store_gcmap' : False,
+        'store_sd' : False,
+        'store_gsd' : False,
+        'store_sdmap' : False,
+        'store_gsdmap' : False,
+        'dtype': 'float64' # NOTE Not (yet) used
+    }
+    # Use (alchemical) type embedding
+    if len(types) and len(typemap):
+        raise ValueError("Both types and typemap non-zero, can only specify one.")
+    elif len(types):
+        soap.encoder.clear()
+        for c in types: soap.encoder.add(c)
+    elif len(typemap):
+        log << "Using %d-dimensional type embedding" % len(typemap["channels"]) << log.endl
+        soap.encoder.clear()
+        for c in typemap["channels"]: soap.encoder.add(c)
+        PowerSpectrum.struct_converter = soap.soapy.wrap.StructureConverter(typemap=typemap)
+    log << "Using type encoder with %d types:" % (len(soap.encoder.types())) << ",".join(soap.encoder.types()) << log.endl
+    return options_soap
 
 class StructureConverter(object):
     def __init__(self, sigma=0.5, typemap=None):
@@ -93,6 +123,7 @@ class PowerSpectrum(object):
         self.gsdmap = None
         self.sdmap = None
         if type(config) != type(None):
+            if options is None: raise ValueError("No options provided")
             if converter is None:
                 converter = PowerSpectrum.struct_converter
             self.compute(config=config, options=options, converter=converter)
@@ -300,49 +331,4 @@ class PowerSpectrum(object):
         dmap_mat = soap.DMapMatrix()
         dmap_mat.append(self.spectrum)
         return dmap_mat
-
-def test(log, do_verify):
-    def verify(spec):
-        if do_verify:
-            k_glob = spec.gsdmap.dot(spec.gsdmap)
-            K_mat = spec.sdmap.dot(spec.sdmap)
-            print("kernel global")
-            print(k_glob)
-            print("kernel pairwise")
-            print(K_mat)
-        return
-    # Configure storage settings
-    PowerSpectrum.verbose = True
-    PowerSpectrum.settings = {
-        'cxx_compute_power' : True, # 'False' intended for users that compute their own fingerprint from the c_nlm-coeffs.
-        'store_cxx_serial' : False, # binary serialisation string of C++ spectrum object
-        'store_cmap' : True, # map of density expansion coeffs
-        'store_gcmap' : True, # global cmap
-        'store_sd' : False, # descriptor as a vector [ e.g. 0-500 C:C, 501-1000 C:H, ... ], length = S*N*(L+1) + S*N*(N-1)*(L+1)/2 + S*(S-1)*N*N*(L+1)/2
-        'store_gsd' : False, # global descriptor
-        'store_sdmap' : True, # descriptor map [ { "C:C": vec_cc, "C:H": vec_ch, ... }, { second environ. }, ... ]
-        'store_gsdmap' : True, # global map [ { } ]
-        'dtype': 'float32' # TODO implement
-    }
-    # Load structures
-    options = options_default
-    configs = soap.tools.io.read('data/structures.xyz', ':')
-    # PowerSpectrum: compute and save
-    for idx, config in enumerate(configs):
-        spec = PowerSpectrum(config, options, "cfg-%07d" % idx)
-        # How to access global descriptor map:
-        print "C:C shape =", spec.gsdmap[0]["C:C"].shape
-        # How to compute dot products:
-        print "kernel =", spec.gsdmap.dot(spec.gsdmap)
-        spec.save(h5py.File("out/out-cfg-%07d.hdf5" % idx, "w"))
-    # PowerSpectrum: load and verify
-    for idx, config in enumerate(configs):
-        spec = PowerSpectrum().load(h5py.File("out/out-cfg-%07d.hdf5" % idx, "r"))
-        verify(spec)
-
-if __name__ == "__main__":
-    np.set_printoptions(precision=2)
-    soap.silence()
-    test(log=log, do_verify=False)
-    log.okquit('All done')
 
