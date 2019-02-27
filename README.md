@@ -14,7 +14,7 @@ source soap/SOAPRC
 
 ### Dependencies
 - Boost components: python, filesystem, serialization
-- MKL or GSL (MKL + intel compilers are recommended)
+- MKL or GSL (MKL + Intel compilers are recommended)
 - Python packages: numpy, scipy, h5py, sklearn
 
 ### Notes
