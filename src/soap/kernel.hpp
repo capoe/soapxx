@@ -13,7 +13,7 @@ class BaseKernel
     virtual std::string identify() { return "basekernel"; }
     virtual void configure(Options &options) {;}
     virtual ~BaseKernel() {;}
-    virtual double evaluate(DMap*, DMap*) = 0;
+    virtual double evaluate(DMapMatrix*, DMapMatrix*, DMapMatrix::matrix_t &K_out) = 0;
 };
 
 class TopKernel
@@ -31,44 +31,50 @@ class Kernel
 {
   public:
     typedef Options metadata_t;
+    typedef ub::matrix<double> output_t;
     Kernel(Options &options);
     ~Kernel();
     boost::python::object evaluatePython(
         DMapMatrixSet *dset1,
         DMapMatrixSet *dset2,
-        double power,
-        bool filter,
         bool symmetric,
         std::string np_type);
     metadata_t *getMetadata() { return metadata; }
+    boost::python::object getOutput(int slot, std::string np_type);
+    void clearOutput();
+    void clearThenAllocateOutput(int n_rows, int n_cols);
+    int outputSlots() { return kernelmats_out.size(); }
     void evaluate(
         DMapMatrixSet *dset1,
         DMapMatrixSet *dset2,
-        double power,
-        bool filter,
         bool symmetric,
         DMapMatrix::matrix_t &output);
-    double evaluateTop(
+    void evaluateAll(
+        DMapMatrixSet *dset1,
+        DMapMatrixSet *dset2,
+        bool symmetric);
+    double evaluateTopkernel(
         boost::python::object &np_K, 
         std::string np_dtype);
+    void addTopkernel(Options &options);
     static void registerPython();
   private:
     BaseKernel *basekernel;
-    TopKernel *topkernel;
     metadata_t *metadata;
+    std::vector<TopKernel*> topkernels;
+    std::vector<output_t*> kernelmats_out;
 };
 
 class BaseKernelDot : public BaseKernel
 {
   public:
-    BaseKernelDot() {;}
+    BaseKernelDot();
     void configure(Options &options);
-    double evaluate(DMap*, DMap*);
+    double evaluate(DMapMatrix*, DMapMatrix*, DMapMatrix::matrix_t &K_out);
   private:
     double exponent;
-    double coefficient;
+    bool filter;
 };
-
 
 class TopKernelRematch : public TopKernel
 {

@@ -1,6 +1,7 @@
 #include "soap/kernel.hpp"
 #include "soap/linalg/numpy.hpp"
 #include "soap/linalg/operations.hpp"
+#include "soap/base/tokenizer.hpp"
 
 namespace soap {
 
@@ -13,13 +14,14 @@ double TopKernel::evaluateNumpy(boost::python::object &np_K, std::string np_dtyp
     return this->evaluate(K);
 }
 
-TopKernelRematch::TopKernelRematch() : gamma(0.01), eps(1e-6), omega(1.2) {;}
+TopKernelRematch::TopKernelRematch() : gamma(0.05), eps(1e-6), omega(1.0) {;}
 
 void TopKernelRematch::configure(Options &options) {
-    GLOG() << "Configuring top kernel (rematch)" << std::endl;
     gamma = options.get<double>("rematch_gamma");
     eps = options.get<double>("rematch_eps");
     omega = options.get<double>("rematch_omega");
+    GLOG() << "Configuring top kernel (rematch)";
+    GLOG() << " gamma=" << gamma << " eps=" << eps << " omega=" << omega << std::endl;
 }
 
 double TopKernelRematch::evaluate(DMapMatrix::matrix_t &K) {
@@ -66,12 +68,14 @@ double TopKernelRematch::evaluate(DMapMatrix::matrix_t &K) {
     return k;
 }
 
-TopKernelCanonical::TopKernelCanonical() {
-    ;
+TopKernelCanonical::TopKernelCanonical() : beta(0.5) {
+    ;    
 }
 
 void TopKernelCanonical::configure(Options &options) {
     beta = options.get<double>("canonical_beta");
+    GLOG() << "Configuring top kernel (canonical)";
+    GLOG() << " beta=" << beta << std::endl;
 }
 
 double TopKernelCanonical::evaluate(DMapMatrix::matrix_t &K) {
@@ -100,7 +104,7 @@ double TopKernelCanonical::evaluate(DMapMatrix::matrix_t &K) {
 TopKernelAverage::TopKernelAverage() {;}
 
 void TopKernelAverage::configure(Options &options) {
-    ;
+    GLOG() << "Configuring top kernel (average):" << std::endl;
 }
 
 double TopKernelAverage::evaluate(DMapMatrix::matrix_t &K) {
@@ -111,40 +115,59 @@ double TopKernelAverage::evaluate(DMapMatrix::matrix_t &K) {
     return k;
 }
 
-void BaseKernelDot::configure(Options &options) {
-    assert(false); // TODO Not yet used, dmm_inner_product is default
+BaseKernelDot::BaseKernelDot() : exponent(2.), filter(false) {
+    ;
 }
 
-double BaseKernelDot::evaluate(DMap *a1, DMap *a2) {
-    assert(false);
-    return 0.0;
+void BaseKernelDot::configure(Options &options) {
+    exponent = options.get<double>("base_exponent");
+    filter = options.get<bool>("base_filter");
+    GLOG() << "Configuring base kernel (dot):";
+    GLOG() << " exponent=" << exponent << " filter=" << filter << std::endl;
+}
+
+double BaseKernelDot::evaluate(DMapMatrix *m1, DMapMatrix *m2, DMapMatrix::matrix_t &K_out) {
+    dmm_inner_product(*m1, *m2, exponent, filter, K_out);
 }
 
 Kernel::~Kernel() {
     delete basekernel;
-    delete topkernel;
     delete metadata;
+    for (auto it=topkernels.begin(); it!=topkernels.end(); ++it) delete *it;
+    topkernels.clear();
+    this->clearOutput();
 }
 
 Kernel::Kernel(Options &options) {
-    if (options.hasKey("basekernel_type")) { // TODO Not yet used, dmm_inner_product is default
-        basekernel = BaseKernelCreator().create(options.get<std::string>("basekernel_type"));
-        basekernel->configure(options);
+    basekernel = BaseKernelCreator().create(options.get<std::string>("basekernel_type"));
+    basekernel->configure(options);
+    if (options.get<std::string>("topkernel_type") != "") {
+        this->addTopkernel(options);
     }
-    topkernel = TopKernelCreator().create(options.get<std::string>("topkernel_type"));
-    topkernel->configure(options);
+}
+
+void Kernel::addTopkernel(Options &options) {
+    auto topkernel_keys = soap::base::Tokenizer(
+        options.get<std::string>("topkernel_type"), ";").ToVector();
+    for (auto key : topkernel_keys) {
+        TopKernel *topkernel = TopKernelCreator().create(key);
+        topkernel->configure(options);
+        topkernels.push_back(topkernel);
+    }
 }
 
 boost::python::object Kernel::evaluatePython(DMapMatrixSet *dset1, DMapMatrixSet *dset2, 
-        double power, bool filter, bool symmetric, std::string np_dtype) {
+        bool symmetric, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
     DMapMatrix::matrix_t output(dset1->size(), dset2->size(), 0.0);
-    this->evaluate(dset1, dset2, power, filter, symmetric, output);
-    return npc.ublas_to_numpy<double>(output);
+    this->evaluate(dset1, dset2, symmetric, output);
+    return npc.ublas_to_numpy<DMapMatrix::dtype_t>(output);
 }
 
 void Kernel::evaluate(DMapMatrixSet *dset1, DMapMatrixSet *dset2, 
-        double power, bool filter, bool symmetric, DMapMatrix::matrix_t &output) {
+        bool symmetric, DMapMatrix::matrix_t &output) {
+    if (basekernel == NULL || topkernels.size() == 0)
+        throw soap::base::SanityCheckFailed("Kernel object not initialized");
     if (symmetric) dset2 = dset1;
     int n_rows = dset1->size();
     int n_cols = dset2->size();
@@ -156,24 +179,72 @@ void Kernel::evaluate(DMapMatrixSet *dset1, DMapMatrixSet *dset2,
         int j_col = (symmetric) ? i_row : 0;
         for (auto jt=(symmetric) ? it : dset2->begin(); jt!=dset2->end(); ++jt, ++j_col) {
             DMapMatrix::matrix_t Kij((*it)->rows(), (*jt)->rows());
-            // TODO Add base kernel here
-            dmm_inner_product(*(*it), *(*jt), power, filter, Kij);
-            output(i_row, j_col) = topkernel->evaluate(Kij);
+            //dmm_inner_product(*(*it), *(*jt), power, filter, Kij);
+            basekernel->evaluate(*it, *jt, Kij);
+            output(i_row, j_col) = topkernels[0]->evaluate(Kij);
         }
     }
     GLOG() << std::endl;
 }
 
-double Kernel::evaluateTop(boost::python::object &np_K, std::string np_dtype) {
-    return topkernel->evaluateNumpy(np_K, np_dtype);
+boost::python::object Kernel::getOutput(int slot, std::string np_dtype) {
+    if (slot > kernelmats_out.size()) 
+        throw soap::base::OutOfRange("Output slot "+lexical_cast<std::string>(slot, ""));
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    return npc.ublas_to_numpy<DMapMatrix::dtype_t>(*kernelmats_out[slot]);
+}
+
+void Kernel::clearOutput() {
+    for (auto it=kernelmats_out.begin(); it!=kernelmats_out.end(); ++it) delete *it;
+    kernelmats_out.clear();
+}
+
+void Kernel::clearThenAllocateOutput(int n_rows, int n_cols) {
+    this->clearOutput();
+    for (auto it=topkernels.begin(); it!=topkernels.end(); ++it) {
+        DMapMatrix::matrix_t *out_i = new DMapMatrix::matrix_t(n_rows, n_cols, 0.0);
+        kernelmats_out.push_back(out_i);
+    }
+}
+
+void Kernel::evaluateAll(DMapMatrixSet *dset1, DMapMatrixSet *dset2, 
+        bool symmetric) {
+    if (basekernel == NULL || topkernels.size() == 0)
+        throw soap::base::SanityCheckFailed("Kernel object not initialized");
+    if (symmetric) dset2 = dset1;
+    int n_rows = dset1->size();
+    int n_cols = dset2->size();
+    this->clearThenAllocateOutput(n_rows, n_cols);
+    int i_row = 0;
+    for (auto it=dset1->begin(); it!=dset1->end(); ++it, ++i_row) {
+        GLOG() << "\r" << "Row " << i_row+1 << "/" << n_rows << std::flush;
+        int j_col = (symmetric) ? i_row : 0;
+        for (auto jt=(symmetric) ? it : dset2->begin(); jt!=dset2->end(); ++jt, ++j_col) {
+            DMapMatrix::matrix_t Kij((*it)->rows(), (*jt)->rows());
+            //dmm_inner_product(*(*it), *(*jt), power, filter, Kij);
+            basekernel->evaluate(*it, *jt, Kij);
+            for (int k=0; k<topkernels.size(); ++k) {
+                (*kernelmats_out[k])(i_row, j_col) = topkernels[k]->evaluate(Kij);
+            }
+        }
+    }
+    GLOG() << std::endl;
+}
+
+double Kernel::evaluateTopkernel(boost::python::object &np_K, std::string np_dtype) {
+    return topkernels[0]->evaluateNumpy(np_K, np_dtype);
 }
 
 void Kernel::registerPython() {
     using namespace boost::python;
     class_<Kernel, Kernel*>("Kernel", init<Options&>())
-        .def("evaluateTop", &Kernel::evaluateTop)
+        .def("addTopkernel", &Kernel::addTopkernel)
+        .def("evaluateTop", &Kernel::evaluateTopkernel)
         .def("getMetadata", &Kernel::getMetadata, return_value_policy<reference_existing_object>())
-        .def("evaluate", &Kernel::evaluatePython);
+        .add_property("n_output", &Kernel::outputSlots)
+        .def("getOutput", &Kernel::getOutput)
+        .def("evaluate", &Kernel::evaluatePython)
+        .def("evaluateAll", &Kernel::evaluateAll);
 }
 
 void BaseKernelFactory::registerAll(void) {
