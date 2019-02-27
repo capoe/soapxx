@@ -7,7 +7,6 @@ import h5py
 import time
 import datetime
 import os
-import psutil
 import momo
 log = momo.osio
 

@@ -7,7 +7,6 @@ import h5py
 import time
 import datetime
 import os
-import psutil
 
 # ============
 # GRAPH OBJECT
@@ -341,10 +340,6 @@ TopKernelFactory = {
 # ==================
 # MP COMPUTE KERNELS
 # ==================
-
-def mp_get_memory_usage():
-    process = psutil.Process(os.getpid())
-    return process.memory_info().rss
 
 def mp_compute_graph(
         config,
