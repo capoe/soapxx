@@ -34,6 +34,44 @@ namespace soap { namespace linalg {
         ub::matrix<double> &B, 
         ub::matrix<double> &C);
 
+    void linalg_matrix_dot(
+        ub::matrix<double> &A, 
+        ub::matrix<double> &B, 
+        ub::matrix<double> &C,
+        double alpha,
+        double beta,
+        bool transpose_A,
+        bool transpose_B);
+
+    // Component-wise multiplication
+    void linalg_mul(
+        ub::matrix<double> &A, 
+        ub::matrix<double> &B,
+        ub::matrix<double> &C,
+        int n,
+        int off_A,
+        int off_B,
+        int off_C);
+
+    void linalg_mul(
+        ub::matrix<double> &A, 
+        ub::vector<double> &b,
+        ub::matrix<double> &C,
+        int n,
+        int off_A,
+        int off_b,
+        int off_C);
+
+    // Component-wise subtraction
+    void linalg_sub(
+        ub::matrix<double> &A, 
+        ub::vector<double> &b,
+        ub::matrix<double> &C,
+        int n,
+        int off_A,
+        int off_b,
+        int off_C);
+
     // Matrix product between a small mxn block A and large NxK matrix B,
     // where A is excised from a larger block-diagonal MxN matrix AA. The
     // upper left corner of A starts at (i_off, j_off) within AA.

@@ -33,10 +33,6 @@ void linalg_matrix_vector_dot(
     MKL_INT m = A.size1();
     MKL_INT n = A.size2();
     MKL_INT incr = 1;
-    //if (transpose) {
-    //    k = A.size1();
-    //    m = A.size2();
-    //}
     double *pA = const_cast<double*>(&A.data().begin()[0]);
     double *pb = const_cast<double*>(&b.data()[0]);
     double *pc = const_cast<double*>(&c.data()[0]);
@@ -50,12 +46,98 @@ void linalg_matrix_dot(ub::matrix<double> &A, ub::matrix<double> &B, ub::matrix<
     MKL_INT n = B.size2();
     MKL_INT k = A.size2();
     double alpha = 1.0;
-    double beta = 1.0;
+    double beta = 0.0;
     double *pA = const_cast<double*>(&A.data().begin()[0]);
     double *pB = const_cast<double*>(&B.data().begin()[0]);
     double *pC = const_cast<double*>(&C.data().begin()[0]);
     cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
            m, n, k, alpha, pA, k, pB, n, beta, pC, n); 
+}
+
+void linalg_matrix_dot(
+        ub::matrix<double> &A, 
+        ub::matrix<double> &B, 
+        ub::matrix<double> &C,
+        double alpha,
+        double beta,
+        bool transpose_A,
+        bool transpose_B) {
+    // Inputs A: (m x k), B: (k x n) -> C: (m x n)
+    MKL_INT m = A.size1();
+    MKL_INT n = B.size2();
+    MKL_INT k = A.size2();
+    if (transpose_A) {
+        m = A.size2();
+        k = A.size1();
+    }
+    if (transpose_B) {
+        n = B.size1();
+    }
+    double *pA = const_cast<double*>(&A.data().begin()[0]);
+    double *pB = const_cast<double*>(&B.data().begin()[0]);
+    double *pC = const_cast<double*>(&C.data().begin()[0]);
+    cblas_dgemm(CblasRowMajor, 
+        (transpose_A) ? CblasTrans : CblasNoTrans, 
+        (transpose_B) ? CblasTrans : CblasNoTrans,
+         m, n, k, alpha, pA, 
+        (transpose_A) ? m : k, 
+        pB, 
+        (transpose_B) ? k : n, 
+        beta, pC, n); 
+}
+
+void linalg_mul(
+    ub::matrix<double> &A, 
+    ub::matrix<double> &B,
+    ub::matrix<double> &C,
+    int n,
+    int off_A,
+    int off_B,
+    int off_C) {
+    MKL_INT mkl_n = n;
+    double *pA = const_cast<double*>(&A.data().begin()[0]);
+    double *pB = const_cast<double*>(&B.data().begin()[0]);
+    double *pC = const_cast<double*>(&C.data().begin()[0]);
+    pA += off_A;
+    pB += off_B;
+    pC += off_C;
+    vdMul(mkl_n, pA, pB, pC);
+}
+
+void linalg_mul(
+    ub::matrix<double> &A, 
+    ub::vector<double> &b,
+    ub::matrix<double> &C,
+    int n,
+    int off_A,
+    int off_b,
+    int off_C) {
+    MKL_INT mkl_n = n;
+    double *pA = const_cast<double*>(&A.data().begin()[0]);
+    double *pb = const_cast<double*>(&b.data()[0]);
+    double *pC = const_cast<double*>(&C.data().begin()[0]);
+    pA += off_A;
+    pb += off_b;
+    pC += off_C;
+    vdMul(mkl_n, pA, pb, pC);
+}
+
+void linalg_sub(
+    ub::matrix<double> &A, 
+    ub::vector<double> &b,
+    ub::matrix<double> &C,
+    int n,
+    int off_A,
+    int off_b,
+    int off_C) {
+    MKL_INT mkl_n = n;
+    double *pA = const_cast<double*>(&A.data().begin()[0]);
+    double *pb = const_cast<double*>(&b.data()[0]);
+    double *pC = const_cast<double*>(&C.data().begin()[0]);
+    pA += off_A;
+    pb += off_b;
+    pC += off_C;
+    vdSub(mkl_n, pA, pb, pC);
 }
 
 void linalg_matrix_block_dot(

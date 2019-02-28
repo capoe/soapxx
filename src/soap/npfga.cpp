@@ -11,6 +11,7 @@
 #include "soap/npfga.hpp"
 #include "soap/globals.hpp"
 #include "soap/linalg/numpy.hpp"
+#include "soap/linalg/operations.hpp"
 #include "boost/format.hpp"
 
 namespace soap { namespace npfga {
@@ -903,21 +904,38 @@ void FGraph::registerPython() {
 }
 
 void zscoreMatrixByColumn(matrix_t &X) {
-    for (int j=0; j<X.size2(); ++j) {
-        double x_avg = 0.0;
-        double x2_avg = 0.0;
-        for (int i=0; i<X.size1(); ++i) {
-            x_avg += X(i,j);
-            x2_avg += X(i,j)*X(i,j);
-        }
-        x_avg /= X.size1();
-        x2_avg /= X.size1();
-        double x_std = std::sqrt(x2_avg - x_avg*x_avg);
-        if (x_std != x_std) x_std = 0.0; // if arg of sqrt < 0 TODO Fix numerical issues here
-        for (int i=0; i<X.size1(); ++i) {
-            X(i,j) -= x_avg;
-            X(i,j) /= (x_std + 1e-20); // TODO Make epsilon=1e-20 an option
-        }
+    // NOTE Slow manual routine. See below for fast version.
+    //for (int j=0; j<X.size2(); ++j) {
+    //    double x_avg = 0.0;
+    //    double x2_avg = 0.0;
+    //    for (int i=0; i<X.size1(); ++i) {
+    //        x_avg += X(i,j);
+    //        x2_avg += X(i,j)*X(i,j);
+    //    }
+    //    x_avg /= X.size1();
+    //    x2_avg /= X.size1();
+    //    double x_std = std::sqrt(x2_avg - x_avg*x_avg);
+    //    if (x_std != x_std) x_std = 0.0; // if arg of sqrt < 0 TODO Fix numerical issues here
+    //    for (int i=0; i<X.size1(); ++i) {
+    //        X(i,j) -= x_avg;
+    //        X(i,j) /= (x_std + 1e-20); // TODO Make epsilon=1e-20 an option
+    //    }
+    //}
+    int n_rows = X.size1();
+    int n_cols = X.size2();
+    ub::vector<double> avg(n_cols, 0.0);
+    ub::vector<double> stddev(n_cols, 0.0);
+    ub::vector<double> prj(n_rows, 1.0);
+    soap::linalg::linalg_matrix_vector_dot(X, prj, avg, true, 1./n_rows, 0.0);
+    matrix_t X2 = X; // TODO It would be better if this copy operation could be avoided
+    soap::linalg::linalg_mul(X, X, X2, n_rows*n_cols, 0, 0, 0);
+    soap::linalg::linalg_matrix_vector_dot(X2, prj, stddev, true, 1./n_rows, 0.0);
+    for (int j=0; j<n_cols; ++j) {
+        stddev(j) = 1./(std::sqrt(stddev(j) - std::pow(avg(j),2))+1e-20);
+    }
+    for (int i=0; i<n_rows; ++i) {
+        soap::linalg::linalg_sub(X, avg,    X, n_cols, i*n_cols, 0, i*n_cols);
+        soap::linalg::linalg_mul(X, stddev, X, n_cols, i*n_cols, 0, i*n_cols);
     }
 }
 
@@ -929,7 +947,9 @@ void correlateMatrixColumnsPearson(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov
         throw soap::base::SanityCheckFailed("Inconsistent matrix dimensions");
     zscoreMatrixByColumn(X_in);
     zscoreMatrixByColumn(Y_in);
-    cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_in), Y_in);
+    // NOTE Slow ublas routine. See faster versino below.
+    //cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_in), Y_in);
+    soap::linalg::linalg_matrix_dot(X_in, Y_in, cov_out, 1./X_in.size1(), 0.0, true, false);
 }
 
 void correlateMatrixColumnsSpearman(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out) {
@@ -943,7 +963,9 @@ void correlateMatrixColumnsSpearman(matrix_t &X_in, matrix_t &Y_in, matrix_t &co
     mapMatrixColumnsOntoRanks(Y_in, Y_ranks);
     zscoreMatrixByColumn(X_ranks);
     zscoreMatrixByColumn(Y_ranks);
-    cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_ranks), Y_ranks);
+    // NOTE Slow ublas routine. See faster versino below.
+    //cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_ranks), Y_ranks);
+    soap::linalg::linalg_matrix_dot(X_ranks, Y_ranks, cov_out, 1./X_in.size1(), 0.0, true, false);
 }
 
 void correlateMatrixColumnsAUROC(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov_out) {

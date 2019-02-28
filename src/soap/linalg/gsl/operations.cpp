@@ -8,14 +8,78 @@ namespace soap { namespace linalg {
 
 using namespace std;
 
-void linalg_dot(ub::vector<double> &x, ub::vector<double> &y, double &r) {
+void linalg_dot(
+        ub::vector<double> &x, 
+        ub::vector<double> &y, 
+        double &r) {
     gsl_vector_view gsl_x = gsl_vector_view_array(&x(0), x.size());
     gsl_vector_view gsl_y = gsl_vector_view_array(&y(0), y.size());
     gsl_blas_ddot(&gsl_x.vector, &gsl_y.vector, &r);
 }
 
-void linalg_matrix_dot(ub::matrix<double> &A, ub::matrix<double> &B, ub::matrix<double> &C) {
+void linalg_dot(ub::vector<float> &x, ub::vector<float> &y, float &r) {
+    throw std::runtime_error("gsl::linalg_dot not implemented (only mkl)");
+}
+
+void linalg_matrix_vector_dot(
+        ub::matrix<double> &A, 
+        ub::vector<double> &b, 
+        ub::vector<double> &c,
+        bool transpose,
+        double alpha,
+        double beta) {
+    throw std::runtime_error("gsl::linalg_matrix_vector_dot not implemented (only mkl)");
+}
+
+void linalg_matrix_dot(
+        ub::matrix<double> &A, 
+        ub::matrix<double> &B, 
+        ub::matrix<double> &C) {
     throw std::runtime_error("gsl::linalg_matrix_dot not implemented (only mkl)");
+}
+
+void linalg_matrix_dot(
+        ub::matrix<double> &A, 
+        ub::matrix<double> &B, 
+        ub::matrix<double> &C,
+        double alpha,
+        double beta,
+        bool transpose_A,
+        bool transpose_B) {
+    throw std::runtime_error("gsl::linalg_matrix_dot not implemented (only mkl)");
+}
+
+void linalg_mul(
+    ub::matrix<double> &A, 
+    ub::matrix<double> &B,
+    ub::matrix<double> &C,
+    int n,
+    int off_A,
+    int off_B,
+    int off_C) {
+    throw std::runtime_error("gsl::linalg_mul not implemented (only mkl)");
+}
+
+void linalg_mul(
+    ub::matrix<double> &A, 
+    ub::vector<double> &b,
+    ub::matrix<double> &C,
+    int n,
+    int off_A,
+    int off_b,
+    int off_C) {
+    throw std::runtime_error("gsl::linalg_mul not implemented (only mkl)");
+}
+
+void linalg_sub(
+    ub::matrix<double> &A, 
+    ub::vector<double> &b,
+    ub::matrix<double> &C,
+    int n,
+    int off_A,
+    int off_b,
+    int off_C) {
+    throw std::runtime_error("gsl::linalg_sub not implemented (only mkl)");
 }
 
 void linalg_matrix_block_dot(
