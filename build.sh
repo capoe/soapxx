@@ -5,7 +5,7 @@ if [ "${with_system_boost}" = false ]; then
   echo "Installing boost ..."
   sleep 1.
   cd external
-  #./build_boost.sh
+  ./build_boost.sh
   cd ..
 fi
 
