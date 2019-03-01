@@ -5,10 +5,12 @@ from pca import *
 from util import *
 from math import *
 from elements import *
+
 import learn
 import lamatch
 import graph
 import npfga
 import defaults
-import wrap
+
+from wrap import configure_default, StructureConverter, PowerSpectrum
 
