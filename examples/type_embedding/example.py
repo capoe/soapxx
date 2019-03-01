@@ -4,7 +4,6 @@ import soap
 import os
 import json
 import glob
-import utils
 import h5py
 import copy
 log = soap.log
