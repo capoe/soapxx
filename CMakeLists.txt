@@ -23,24 +23,30 @@ else(${CMAKE_VERSION} VERSION_GREATER 3.1)
 endif(${CMAKE_VERSION} VERSION_GREATER 3.1)
 
 # LOCAL PACKAGES
-# ...
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # FIND PACKAGES
 find_package(PythonLibs 2.7)
 include_directories(${PYTHON_INCLUDE_DIRS})
 
-if(DEFINED ENV{BOOST_ROOT})
-    set(BOOST_ROOT "$ENV{BOOST_ROOT}")
-    message("-- BOOST_ROOT is set: ${BOOST_ROOT}")
-else(DEFINED ENV{BOOST_ROOT})
-    message("-- Note: BOOST_ROOT not set. Let's see whether we can find BOOST anyway.")
-endif(DEFINED ENV{BOOST_ROOT})
-find_package(Boost COMPONENTS python filesystem serialization)
-include_directories(${Boost_INCLUDE_DIRS})
-
-# find_package(MPI REQUIRED)
-# include_directories(${MPI_INCLUDE_PATH})
+if (${WITH_SYSTEM_BOOST} STREQUAL true)
+    if(DEFINED ENV{BOOST_ROOT})
+        set(BOOST_ROOT "$ENV{BOOST_ROOT}")
+        message("-- BOOST_ROOT is set: ${BOOST_ROOT}")
+    else(DEFINED ENV{BOOST_ROOT})
+        message("-- Note: BOOST_ROOT not set. Let's see whether we can find BOOST anyway.")
+    endif(DEFINED ENV{BOOST_ROOT})
+    find_package(Boost COMPONENTS python serialization)
+    include_directories(${Boost_INCLUDE_DIRS})
+else()
+    set(Boost_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/soap/include")
+    set(Boost_LIBRARIES 
+     "${CMAKE_CURRENT_SOURCE_DIR}/soap/lib/libboost_python.so"
+     "${CMAKE_CURRENT_SOURCE_DIR}/soap/lib/libboost_serialization.so"
+    )
+    include_directories(${Boost_INCLUDE_DIRS})
+endif()
+set(ignoreMe $WITH_SYSTEM_BOOST) # Needed to suppress cmake warning
 
 set(SOAPXX_LINK_LIBRARIES ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${GSL_LIBRARIES})
 

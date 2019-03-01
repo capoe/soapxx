@@ -1,11 +1,9 @@
 #ifndef _SOAP_FIELDTENSOR_HPP
 #define _SOAP_FIELDTENSOR_HPP
-
 #include "soap/structure.hpp"
 #include "soap/options.hpp"
 #include "soap/cutoff.hpp"
 #include "soap/functions.hpp"
-#include "boost/multi_array.hpp"
 
 namespace soap {
 
