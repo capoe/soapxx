@@ -12,5 +12,5 @@ import graph
 import npfga
 import defaults
 
-from wrap import configure_default, StructureConverter, PowerSpectrum
+from wrap import configure_default, configure_default_2d, StructureConverter, PowerSpectrum
 

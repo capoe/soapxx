@@ -165,6 +165,8 @@ public:
 	typedef std::vector<Particle*>::iterator particle_it_t;
 	typedef std::vector<Segment*> segment_array_t;
 	typedef std::vector<Segment*>::iterator segment_it_t;
+    typedef double dtype_t;
+    typedef boost::numeric::ublas::matrix<dtype_t> laplace_t;
 
     explicit Structure(std::string label);
     Structure(const Structure &structure);
@@ -194,6 +196,12 @@ public:
     Segment &addSegment();
     Particle &addParticle(Segment &seg);
 
+    // LAPLACIAN
+    void setLaplacian(boost::python::object &np_laplacian, std::string np_dtype);
+    boost::python::object getLaplacianNumpy(std::string np_dtype);
+    bool hasLaplacian();
+    laplace_t &getLaplacian();
+
     // BOUNDARY CREATION & INTERFACE
     Boundary *getBoundary() { return _box; }
     void setBoundary(const matrix &box);
@@ -212,6 +220,7 @@ public:
     	arch & _label;
     	arch & _segments;
     	arch & _particles;
+        arch & _laplacian;
     	arch & _box;
     	return;
     }
@@ -225,6 +234,7 @@ private:
     Particle* _center;
     bool _has_center;
 
+    laplace_t *_laplacian; 
     Boundary *_box;
 };
 

@@ -23,7 +23,7 @@ namespace ub = boost::numeric::ublas;
 
 class RadialBasis
 {
-public:
+  public:
 	typedef ub::matrix<double> radcoeff_t;
 	typedef ub::zero_matrix<double> radcoeff_zero_t;
 
@@ -51,7 +51,7 @@ public:
     	arch & _mode;
     }
 
-protected:
+  protected:
    std::string _type;
    int _N;
    double _Rc;
@@ -62,10 +62,32 @@ protected:
    static constexpr double RADZERO = 1e-10;
 };
 
+class RadialBasisDiscrete : public RadialBasis
+{
+  public:
+    RadialBasisDiscrete();
+    ~RadialBasisDiscrete() {};
+    void configure(Options &options);
+
+    void computeCoefficients(
+        vec d,
+        double r,
+        double particle_sigma,
+        radcoeff_t &Gnl,
+        radcoeff_t *dGnl_dx,
+        radcoeff_t *dGnl_dy,
+        radcoeff_t *dGnl_dz);
+
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & boost::serialization::base_object<RadialBasis>(*this);
+    }
+  protected:
+};
 
 class RadialBasisGaussian : public RadialBasis
 {
-public:
+  public:
 	typedef RadialGaussian basis_fct_t;
 	typedef std::vector<RadialGaussian*> basis_t;
 	typedef basis_t::iterator basis_it_t;
@@ -94,7 +116,7 @@ public:
     	arch & _Tij;
     }
 
-protected:
+  protected:
     double _sigma;
     basis_t _basis;
 
@@ -129,7 +151,7 @@ class RadialBasisFactory
 {
 private:
     RadialBasisFactory() {}
-public:
+  public:
     static void registerAll(void);
     RadialBasis *create(const std::string &key);
     friend RadialBasisFactory &RadialBasisOutlet();
@@ -154,6 +176,7 @@ inline RadialBasis *RadialBasisFactory::create(const std::string &key) {
 } /* CLOSE NAMESPACE */
 
 BOOST_CLASS_EXPORT_KEY(soap::RadialBasis);
+BOOST_CLASS_EXPORT_KEY(soap::RadialBasisDiscrete);
 BOOST_CLASS_EXPORT_KEY(soap::RadialBasisGaussian);
 
 #endif

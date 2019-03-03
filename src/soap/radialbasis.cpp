@@ -41,6 +41,38 @@ void RadialBasis::computeCoefficients(
 }
 
 // ======================
+// RadialBasisDiscrete
+// ======================
+
+RadialBasisDiscrete::RadialBasisDiscrete() {
+    _type = "discrete";
+}
+
+void RadialBasisDiscrete::configure(Options &options) {
+    RadialBasis::configure(options);
+}
+
+void RadialBasisDiscrete::computeCoefficients(
+        vec d,
+        double r,
+        double particle_sigma,
+        radcoeff_t &Gnl,
+        radcoeff_t *dGnl_dx,
+        radcoeff_t *dGnl_dy,
+        radcoeff_t *dGnl_dz) {
+    // NOTE r is in this case not the Euclidean, but 'Laplacian' distance of the molecular graph
+    assert(dGnl_dx == NULL && "Gradients not implemented for 'discrete' radial basis");
+    for (int k=0; k<_N; ++k) {
+        double rk = 1.*k; // Measured in bond numbers (hence: 'discrete')
+        double jac = (k == 0) ? 1. : (rk*rk);
+        double gk = (std::abs(rk - r) < 0.5) ? 1./jac  : 0.0;
+        for (int l=0; l<Gnl.size2(); ++l) 
+            Gnl(k,l) = gk;
+    }
+    return;
+}
+
+// ======================
 // RadialBasisGaussian
 // ======================
 
@@ -401,9 +433,12 @@ void RadialBasisGaussian::computeCoefficients(
 void RadialBasisFactory::registerAll(void) {
 	RadialBasisOutlet().Register<RadialBasisGaussian>("gaussian");
 	RadialBasisOutlet().Register<RadialBasisLegendre>("legendre");
+	RadialBasisOutlet().Register<RadialBasisDiscrete>("discrete");
 }
 
 }
 
 BOOST_CLASS_EXPORT_IMPLEMENT(soap::RadialBasisGaussian);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::RadialBasisDiscrete);
+
 

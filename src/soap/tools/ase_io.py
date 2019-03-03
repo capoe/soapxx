@@ -2,6 +2,7 @@
 import json
 import numpy as np
 import os
+from . import partition
 from .. import _soapxx as soap
 
 # ==============
@@ -115,7 +116,7 @@ class AtomASE(object):
 class IO(object):
     def __init__(self):
         return
-    def convert(self, config, tag="?", sigma=0.5, weight=None, typemap=None):
+    def convert(self, config, tag="?", sigma=0.5, weight=None, typemap=None, laplace_cutoff=0):
         R = config.get_positions()
         T = config.get_chemical_symbols()
         N = R.shape[0]
@@ -143,6 +144,20 @@ class IO(object):
                 colour = typemap[T[i]]
                 for channel_idx, c in enumerate(colour):
                     particle.addType(typemap["channels"][channel_idx], c)
+        if laplace_cutoff > 0:
+            D = partition.calculate_distance_mat(R, R)
+            L = 1*partition.calculate_connectivity_mat(D, T)
+            np.fill_diagonal(L, 0)
+            L_out = np.copy(L)
+            L_visited = np.copy(L)
+            for lcut in range(2, laplace_cutoff+1):
+                dL_visited = np.heaviside(np.heaviside(L_visited.dot(L),0) - L_visited, 0)
+                np.fill_diagonal(dL_visited, 0)
+                L_out = L_out + lcut*dL_visited
+                L_visited = L_visited + dL_visited
+            L_out = L_out + 2*laplace_cutoff*(1-L_visited)
+            np.fill_diagonal(L_out, 0)
+            struct.setLaplacian(L_out, str(L_out.dtype))
         return struct
     def read(
             self,

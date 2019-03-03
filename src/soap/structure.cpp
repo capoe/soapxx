@@ -1,5 +1,5 @@
 #include "soap/structure.hpp"
-
+#include "soap/linalg/numpy.hpp"
 
 namespace soap {
 
@@ -93,6 +93,12 @@ void Structure::model(Structure &structure) {
     _id = structure._id;
     _label = structure._label;
     this->setBoundary(structure._box->getBox());
+    if (structure.hasLaplacian()) {
+        if (_laplacian) delete _laplacian;
+        laplace_t &lref = structure.getLaplacian();
+        _laplacian = new laplace_t(lref.size1(), lref.size2());
+        (*_laplacian) = lref;
+    }
     // Segments, particles
     for (segment_it_t sit = structure.beginSegments(); sit != structure.endSegments(); ++sit) {
         Segment &new_seg = this->addSegment();
@@ -109,6 +115,7 @@ void Structure::null() {
 	_box = NULL;
 	_center = NULL;
 	_has_center = false;
+    _laplacian = NULL;
 	matrix box;
 	box.ZeroMatrix();
 	this->setBoundary(box);
@@ -127,6 +134,8 @@ Structure::~Structure() {
 		delete *pit;
 	}
 	_particles.clear();
+    if (_laplacian) delete _laplacian;
+    _laplacian = NULL;
 }
 
 Segment &Structure::addSegment() {
@@ -152,6 +161,28 @@ boost::python::numeric::array Structure::connectNumeric(
 	vec dr = this->connect(r1, r2);
 	return boost::python::numeric::array(boost::python::make_tuple(
 		dr.x(), dr.y(), dr.z()));
+}
+
+void Structure::setLaplacian(boost::python::object &np_laplacian, std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    if (_laplacian != NULL) delete _laplacian;
+    _laplacian = new laplace_t();
+    npc.numpy_to_ublas<dtype_t>(np_laplacian, *_laplacian);
+    assert(_laplacian->size1() == _laplacian->size2() && _laplacian->size1() == _particles.size());
+}
+
+boost::python::object Structure::getLaplacianNumpy(std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    assert(this->hasLaplacian());
+    return npc.ublas_to_numpy<dtype_t>(*_laplacian);
+}
+
+bool Structure::hasLaplacian() {
+    return (_laplacian!=NULL);
+}
+
+Structure::laplace_t &Structure::getLaplacian() {
+    return *_laplacian;
 }
 
 void Structure::setBoundary(const matrix &box) {
@@ -195,6 +226,9 @@ void Structure::registerPython() {
 	   .def("getSegment", &Structure::getSegment, return_value_policy<reference_existing_object>())
 	   .def("addParticle", &Structure::addParticle, return_value_policy<reference_existing_object>())
 	   .def("getParticle", &Structure::getParticle, return_value_policy<reference_existing_object>())
+       .def("setLaplacian", &Structure::setLaplacian)
+       .def("getLaplacian", &Structure::getLaplacianNumpy)
+       .def("hasLaplacian", &Structure::hasLaplacian)
 	   .def("__iter__", range<return_value_policy<reference_existing_object> >(&Structure::beginParticles, &Structure::endParticles))
 	   .add_property("particles", range<return_value_policy<reference_existing_object> >(&Structure::beginParticles, &Structure::endParticles))
 	   .add_property("segments", range<return_value_policy<reference_existing_object> >(&Structure::beginSegments, &Structure::endSegments))

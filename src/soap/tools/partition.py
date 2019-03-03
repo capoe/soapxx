@@ -38,6 +38,12 @@ ligand_size_lower   = 4
 def covalent_cutoff(rad1, rad2):
     return 1.15*(rad1+rad2)
 
+def calculate_distance_mat(R, P):
+    return np.sqrt(np.subtract.outer(
+        R[:,0], P[:,0])**2 + np.subtract.outer(
+        R[:,1], P[:,1])**2 + np.subtract.outer(
+        R[:,2], P[:,2])**2)
+
 def calculate_connectivity_mat(distance_mat, type_vec, cutoff=None):
     dim = distance_mat.shape[0]
     if cutoff != None:

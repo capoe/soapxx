@@ -52,11 +52,14 @@ class Spectrum
     int length() { return _atomspec_array.size(); }
 
 	void compute();
+	void compute2D();
     void compute(Segment *centers);
 	void compute(Segment *centers, Segment *targets);
 	void compute(Structure::particle_array_t &sources, Structure::particle_array_t &targets);
+	void compute2D(Structure::particle_array_t &sources, Structure::particle_array_t &targets, Structure::laplace_t &L);
 	AtomicSpectrum *computeAtomic(Particle *center);
 	AtomicSpectrum *computeAtomic(Particle *center, Structure::particle_array_t &targets);
+	AtomicSpectrum *computeAtomic2D(Particle *center, Structure::particle_array_t &targets, Structure::laplace_t &L);
     AtomicSpectrum *computeGlobal();
 	void deleteGlobal() { if (_global_atomic) { delete _global_atomic; _global_atomic = NULL; } }
 	void addAtomic(AtomicSpectrum *atomspec);

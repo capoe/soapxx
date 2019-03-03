@@ -10,12 +10,68 @@ import os
 import momo
 log = momo.osio
 
+def configure_default_2d(laplace_cutoff=3, typemap={}, types=[]):
+    # Logging
+    soap.silence()
+    soap.soapy.wrap.PowerSpectrum.verbose = True
+    # Descriptor options
+    options_soap = {
+        "spectrum.2d": True,
+        "spectrum.gradients": False,
+        "spectrum.global": False,
+        "spectrum.2l1_norm": False, # NOTE "False" emphasizes coordination, "True" distances
+        "radialbasis.type" : "discrete",
+        "radialbasis.N" : laplace_cutoff+1,
+        "radialcutoff.Rc": laplace_cutoff+0.5, # NOTE Only used for 'equispaced' basis set
+        "radialcutoff.Rc_width": 0.5,
+        "radialcutoff.type": "shifted-cosine",
+        "radialcutoff.center_weight": 1.0,
+        "angularbasis.type": "spherical-harmonic",
+        "angularbasis.L": 6, 
+        "kernel.adaptor": "specific-unique-dmap",
+        "exclude_centers": ["H"],
+        "exclude_targets": [],
+        "exclude_center_ids": [],
+        "exclude_target_ids": []
+    }
+    # Storage
+    soap.soapy.wrap.PowerSpectrum.settings = {
+        'cxx_compute_power' : True,
+        'store_cxx_serial' : False,
+        'store_cmap' : False,
+        'store_gcmap' : False,
+        'store_sd' : False,
+        'store_gsd' : False,
+        'store_sdmap' : False,
+        'store_gsdmap' : False,
+        'dtype': 'float64' # NOTE Not (yet) used
+    }
+    # Structure converter needs to additionally calculate Laplacian
+    PowerSpectrum.struct_converter = soap.soapy.wrap.StructureConverter(
+        laplace_cutoff=laplace_cutoff)
+    # Use (alchemical) type embedding
+    if len(types) and len(typemap):
+        raise ValueError("Both types and typemap non-zero, can only specify one.")
+    elif len(types):
+        soap.encoder.clear()
+        for c in types: soap.encoder.add(c)
+    elif len(typemap):
+        log << "Using %d-dimensional type embedding" % len(typemap["channels"]) << log.endl
+        soap.encoder.clear()
+        for c in typemap["channels"]: soap.encoder.add(c)
+        PowerSpectrum.struct_converter = soap.soapy.wrap.StructureConverter(
+            typemap=typemap,
+            laplace_cutoff=laplace_cutoff)
+    log << "Using type encoder with %d types:" % (len(soap.encoder.types())) << ",".join(soap.encoder.types()) << log.endl
+    return options_soap
+
 def configure_default(typemap={}, types=[]):
     # Logging
     soap.silence()
     soap.soapy.wrap.PowerSpectrum.verbose = True
     # Descriptor options
     options_soap = {
+        "spectrum.2d": False,
         "spectrum.gradients": False,
         "spectrum.global": False,
         "spectrum.2l1_norm": False, # NOTE "False" emphasizes coordination, "True" distances
@@ -63,16 +119,18 @@ def configure_default(typemap={}, types=[]):
     return options_soap
 
 class StructureConverter(object):
-    def __init__(self, sigma=0.5, typemap=None):
+    def __init__(self, sigma=0.5, typemap=None, laplace_cutoff=False):
         self.typemap = typemap
         self.sigma = sigma
+        self.laplace_cutoff = laplace_cutoff
         return
     def convert(self, config):
         return soap.tools.io.convert(
             config=config,
             tag="?",
             sigma=self.sigma,
-            typemap=self.typemap)
+            typemap=self.typemap,
+            laplace_cutoff=self.laplace_cutoff)
 
 class PowerSpectrum(object):
     # TODO Need option for normalisation of gsdmap, sdmap

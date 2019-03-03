@@ -49,7 +49,10 @@ Spectrum::~Spectrum() {
 }
 
 void Spectrum::compute() {
-    this->compute(_structure->particles(), _structure->particles());
+    if (_options->get<bool>("spectrum.2d"))
+        this->compute2D();
+    else
+        this->compute(_structure->particles(), _structure->particles());
 }
 
 void Spectrum::compute(Segment *center) {
@@ -96,6 +99,7 @@ void Spectrum::computePowerGradients() {
 AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
     return this->computeAtomic(center, _structure->particles());
 }
+
 
 AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_array_t &targets) {
     GLOG() << "Compute atomic spectrum for particle " << center->getId()
@@ -157,6 +161,86 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_ar
         atomic_spectrum->addQnlmNeighbour(*pit, nb_expansion); // TODO Consider images
 
     }}} // Close loop over images
+    } // Close loop over particles
+
+    return atomic_spectrum;
+}
+
+void Spectrum::compute2D() {
+    assert(_structure->hasLaplacian());
+    Structure::laplace_t &laplacian = _structure->getLaplacian();
+    this->compute2D(
+        _structure->particles(), 
+        _structure->particles(),
+        laplacian);
+}
+
+void Spectrum::compute2D(
+        Structure::particle_array_t &centers, 
+        Structure::particle_array_t &targets,
+        Structure::laplace_t &laplacian) {
+    GLOG() << "Compute 2D spectrum "
+        << "(centers " << centers.size() << ", targets " << targets.size() << ") ..." << std::endl;
+    GLOG() << _options->summarizeOptions() << std::endl;
+    GLOG() << "Using radial basis of type '" << _basis->getRadBasis()->identify() << "'" << std::endl;
+    GLOG() << "Using angular basis of type '" << _basis->getAngBasis()->identify() << "'" << std::endl;
+    GLOG() << "Using cutoff function of type '" << _basis->getCutoff()->identify() << "'" << std::endl;
+
+    Structure::particle_it_t pit;
+    for (pit = centers.begin(); pit != centers.end(); ++pit) {
+        // Continue if exclusion defined ...
+        if (_options->doExcludeCenter((*pit)->getType()) ||
+            _options->doExcludeCenterId((*pit)->getId())) continue;
+        // Compute ...
+        AtomicSpectrum *atomic_spectrum = this->computeAtomic2D(*pit, targets, laplacian);
+        this->addAtomic(atomic_spectrum);
+    }
+}
+
+AtomicSpectrum *Spectrum::computeAtomic2D(
+        Particle *center, 
+        Structure::particle_array_t &targets, 
+        Structure::laplace_t &laplacian) {
+    GLOG() << "Compute atomic 2D spectrum for particle " << center->getId()
+        << " (type " << center->getType() << ", targets " << targets.size() << ") ..." << std::endl;
+
+    // NOTE 2D => Minimum-image convention in line with specified Laplacian
+    double rc = _basis->getCutoff()->getCutoff();
+
+    // CREATE BLANK
+    AtomicSpectrum *atomic_spectrum = new AtomicSpectrum(center, this->_basis);
+    Structure::particle_it_t pit;
+    for (pit = targets.begin(); pit != targets.end(); ++pit) { // TODO Consider images
+
+        // CHECK FOR EXCLUSIONS
+        if (_options->doExcludeTarget((*pit)->getType()) ||
+            _options->doExcludeTargetId((*pit)->getId())) continue;
+
+        // FIND DISTANCE & DIRECTION, CHECK CUTOFF
+        vec dr = _structure->connect(center->getPos(), (*pit)->getPos());
+        double r_euclidean = soap::linalg::abs(dr);
+        double r_laplace = laplacian(center->getId()-1, (*pit)->getId()-1);
+        if (! this->_basis->getCutoff()->isWithinCutoff(r_laplace)) continue;
+        vec d = (r_euclidean > 0.) ? dr/r_euclidean : vec(0.,0.,1.);
+
+        // APPLY CUTOFF (= WEIGHT REDUCTION)
+        bool is_image = false;
+        bool is_center = (*pit == center); // TODO Consider images
+        double weight0 = (*pit)->getWeight();
+        double weight_scale = _basis->getCutoff()->calculateWeight(r_laplace);
+        if (is_center) {
+            weight0 *= _basis->getCutoff()->getCenterWeight();
+        }
+
+        GLOG() << (*pit)->getType() << " X " << dr.getX() << " Y " << dr.getY() << " Z " << dr.getZ() 
+            << " W " << (*pit)->getWeight() << " S " << (*pit)->getSigma() << " rl " << r_laplace << std::endl;
+
+        // COMPUTE EXPANSION & ADD TO SPECTRUM
+        bool gradients = (is_image) ? false : _options->get<bool>("spectrum.gradients");
+        BasisExpansion *nb_expansion = new BasisExpansion(this->_basis); // <- kept by AtomicSpectrum
+        nb_expansion->computeCoefficients(r_laplace, d, weight0, weight_scale, (*pit)->getSigma(), gradients);
+        atomic_spectrum->addQnlmNeighbour(*pit, nb_expansion); // TODO Consider images
+
     } // Close loop over particles
 
     return atomic_spectrum;
