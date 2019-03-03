@@ -1,7 +1,16 @@
 #! /bin/bash
 with_system_boost=false
+install_boost=false
 
-if [ "${with_system_boost}" = false ]; then
+options=':i'
+while getopts $options option
+do
+    case $option in
+        i|--install_boost ) install_boost=true;;
+    esac
+done
+
+if [[ "${install_boost}" = true && "${with_system_boost}" = false ]]; then
   echo "Installing boost ..."
   sleep 1.
   cd external

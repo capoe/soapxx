@@ -8,7 +8,7 @@
 ```bash
 git clone https://github.com/capoe/soapxx.git
 cd soapxx
-./build.sh
+./build.sh --install_boost
 source soap/SOAPRC
 ```
 
@@ -17,8 +17,5 @@ source soap/SOAPRC
 - Python packages: numpy, scipy, h5py, sklearn
 
 ### Notes
-- The build process includes an installation of Boost 1.54.0 (components: python, serialization). If you would like to use a pre-installed version of Boost instead, simply set the corresponding build variable in build.sh accordingly:
-  ```bash
-  with_system_boost=false
-  ```
+If build.sh is executed with the --install_boost option, the build process includes a partial (local) installation of Boost 1.54.0 (components: python, serialization). You can omit this option if you already have Boost (version < 1.67) installed on your system. Subsequent builds (after the first installation) should also be run without this option, unless reinstalling Boost is explicitly desired (e.g., due to a compiler change).
 
