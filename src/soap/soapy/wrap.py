@@ -10,7 +10,7 @@ import os
 import momo
 log = momo.osio
 
-def configure_default_2d(laplace_cutoff=3, typemap={}, types=[]):
+def configure_default_2d(laplace_cutoff=6, typemap={}, types=[]):
     # Logging
     soap.silence()
     soap.soapy.wrap.PowerSpectrum.verbose = True
@@ -19,15 +19,15 @@ def configure_default_2d(laplace_cutoff=3, typemap={}, types=[]):
         "spectrum.2d": True,
         "spectrum.gradients": False,
         "spectrum.global": False,
-        "spectrum.2l1_norm": False, # NOTE "False" emphasizes coordination, "True" distances
+        "spectrum.2l1_norm": True,
         "radialbasis.type" : "discrete",
         "radialbasis.N" : laplace_cutoff+1,
-        "radialcutoff.Rc": laplace_cutoff+0.5, # NOTE Only used for 'equispaced' basis set
+        "radialcutoff.Rc": laplace_cutoff+0.5,
         "radialcutoff.Rc_width": 0.5,
         "radialcutoff.type": "shifted-cosine",
         "radialcutoff.center_weight": 1.0,
         "angularbasis.type": "spherical-harmonic",
-        "angularbasis.L": 6, 
+        "angularbasis.L": 2, 
         "kernel.adaptor": "specific-unique-dmap",
         "exclude_centers": ["H"],
         "exclude_targets": [],
@@ -76,13 +76,13 @@ def configure_default(typemap={}, types=[]):
         "spectrum.global": False,
         "spectrum.2l1_norm": False, # NOTE "False" emphasizes coordination, "True" distances
         "radialbasis.type" : "gaussian",
-        "radialbasis.mode" : "equispaced", # NOTE Alternatives: 'equispaced' or 'adaptive'
+        "radialbasis.mode" : "adaptive", # NOTE Alternatives: 'equispaced' or 'adaptive'
         "radialbasis.N" : 9,
         "radialbasis.sigma": 0.5,
         "radialbasis.integration_steps": 15,
         "radialcutoff.Rc": 3.5, # NOTE Only used for 'equispaced' basis set
         "radialcutoff.Rc_width": 0.5,
-        "radialcutoff.type": "shifted-cosine",
+        "radialcutoff.type": "heaviside",
         "radialcutoff.center_weight": 1.0,
         "angularbasis.type": "spherical-harmonic",
         "angularbasis.L": 6, 
