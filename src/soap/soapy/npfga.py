@@ -1,7 +1,8 @@
 import numpy as np
 import soap
-from soap.soapy.math import zscore
+from .math import zscore
 import scipy.stats
+import json
 
 class PyFGraph(object):
     def __init__(self, fgraph):
@@ -183,13 +184,16 @@ def fgraph_apply_batch(
         IX_list,
         Y,
         log):
-    npfga_dtype = IX_list[0].dtype
-    covs = np.zeros((len(IX_list), len(fgraph)), dtype=npfga_dtype)
-    Y = Y.reshape((-1,1))
-    for i, IX in enumerate(IX_list):
-        log << log.back << "Randomized control, instance" << i << log.flush
-        covs[i,:] = fgraph.applyAndCorrelate(IX, Y, str(npfga_dtype))[:,0]
-    log << log.endl
+    if len(IX_list) > 0:
+        npfga_dtype = IX_list[0].dtype
+        covs = np.zeros((len(IX_list), len(fgraph)), dtype=npfga_dtype)
+        Y = Y.reshape((-1,1))
+        for i, IX in enumerate(IX_list):
+            log << log.back << "Randomized control, instance" << i << log.flush
+            covs[i,:] = fgraph.applyAndCorrelate(IX, Y, str(npfga_dtype))[:,0]
+        log << log.endl
+    else:
+        covs = []
     return covs
 
 def calculate_null_distribution(
@@ -916,6 +920,26 @@ class CVMC(object):
     def isDone(self):
         return self.step >= self.n_reps
 
+class CVCustom(object):
+    def __init__(self, state, options):
+        self.tag = "cv_custom"
+        self.n_samples = len(state)
+        self.splits = json.load(open(options.splits_json))
+        self.n_reps = len(self.splits)
+        self.step = 0
+    def next(self):
+        assert not self.isDone()
+        info = "%s_i%03d" % (self.tag, self.step)
+        idcs_test = self.splits[self.step]["idcs_test"]
+        mask = np.ones((self.n_samples,), dtype='i8')
+        mask[idcs_test] = 0
+        idcs_train = np.where(mask > 0)[0]
+        idcs_test = np.where(mask == 0)[0]
+        self.step += 1
+        return info, idcs_train, idcs_test
+    def isDone(self):
+        return self.step >= self.n_reps
+
 class CVUser(object):
     def __init__(self, state, options):
         self.tag = "cv_user"
@@ -954,7 +978,8 @@ cv_iterator = {
   "loo": CVLOO,
   "mc": CVMC,
   "user": CVUser,
-  "none": CVNone
+  "none": CVNone,
+  "custom": CVCustom
 }
 
 class LSE(object):
