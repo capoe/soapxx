@@ -84,6 +84,7 @@ struct DMap
     double dot(DMap *other);
     void add(DMap *other);
     double dotFilter(DMap *other);
+    void normalize();
     void adapt(AtomicSpectrum *spectrum);
     std::string getFilter() { return filter; }
     dmap_t dmap;
@@ -110,6 +111,7 @@ class DMapMatrix
     ~DMapMatrix();
     void clear();
     void sum();
+    void normalize();
     void dot(DMapMatrix *other, matrix_t &output);
     void dotFilter(DMapMatrix *other, matrix_t &output);
     bpy::object dotNumpy(DMapMatrix *other, std::string np_dtype);
@@ -159,6 +161,7 @@ class DMapMatrixSet
     DMapMatrix *get(int idx) { return dset[idx]; }
     DMapMatrixSet *getView(boost::python::list idcs);
     void append(DMapMatrix *dmm);
+    void extend(DMapMatrixSet *other);
     void save(std::string archfile);
     void load(std::string archfile);
     static void registerPython();

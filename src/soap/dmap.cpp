@@ -109,6 +109,11 @@ void DMap::multiply(double c) {
     }
 }
 
+void DMap::normalize() {
+    double norm = std::sqrt(this->dot(this));
+    this->multiply(1./norm);
+}
+
 void DMap::adapt(AtomicSpectrum *atomic) {
     auto spec = atomic->getXnklMap();
     for (auto it=spec.begin(); it!=spec.end(); ++it) {
@@ -139,6 +144,7 @@ void DMap::registerPython() {
     class_<DMap, DMap*>("DMap", init<>())
         .add_property("filter", &DMap::getFilter)
         .def("listChannels", &DMap::listChannels)
+        .def("normalize", &DMap::normalize)
         .def("dot", &DMap::dot)
         .def("dotFilter", &DMap::dotFilter);
 }
@@ -208,6 +214,12 @@ void DMapMatrix::sum() {
     }
     this->clear();
     dmm.push_back(summed); 
+}
+
+void DMapMatrix::normalize() {
+    for (auto it=begin(); it!=end(); ++it) {
+        (*it)->normalize();
+    }
 }
 
 void DMapMatrix::dot(DMapMatrix *other, matrix_t &output) {
@@ -296,6 +308,7 @@ void DMapMatrix::registerPython() {
         .def("getView", &DMapMatrix::getView, return_value_policy<reference_existing_object>())
         .def("append", &DMapMatrix::append)
         .def("sum", &DMapMatrix::sum)
+        .def("normalize", &DMapMatrix::normalize)
         .def("dot", &DMapMatrix::dotNumpy)
         .def("dotFilter", &DMapMatrix::dotFilterNumpy)
         .def("load", &DMapMatrix::load)
@@ -338,6 +351,15 @@ void DMapMatrixSet::append(DMapMatrix *dmap) {
     dset.push_back(dmap);
 }
 
+void DMapMatrixSet::extend(DMapMatrixSet *other) {
+    if (this->is_view) throw soap::base::SanityCheckFailed(
+        "Extending matrix view not permitted.");
+    for (auto it=other->begin(); it!=other->end(); ++it) {
+        dset.push_back(*it);
+    }
+    other->is_view = true;
+}
+
 void DMapMatrixSet::save(std::string archfile) {
     std::ofstream ofs(archfile.c_str());
     boost::archive::binary_oarchive arch(ofs);
@@ -362,7 +384,8 @@ void DMapMatrixSet::registerPython() {
         .add_property("size", &DMapMatrixSet::size)
         .def("save", &DMapMatrixSet::save)
         .def("load", &DMapMatrixSet::load)
-        .def("append", &DMapMatrixSet::append);
+        .def("append", &DMapMatrixSet::append)
+        .def("extend", &DMapMatrixSet::extend);
 }
 
 BlockLaplacian::BlockLaplacian() : n_rows(0), n_cols(0) {
@@ -387,7 +410,6 @@ BlockLaplacian::block_t *BlockLaplacian::addBlock(int n_rows_block, int n_cols_b
     blocks.push_back(new_block);
     return new_block;
 }
-
 
 void BlockLaplacian::appendNumpy(boost::python::object &np_array, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
