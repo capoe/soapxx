@@ -29,12 +29,14 @@ class PyFGraph(object):
         self.fnode_map = { f.expr: f for f in self.fnodes }
         for f in self.fnodes: f.resolveParents(self.fnode_map)
         return
-    def rank(self, cumulative=False, key=lambda f: np.abs(f.cov*f.confidence)):
+    def rank(self, cumulative=False, ordinal=False, key=lambda f: np.abs(f.cov*f.confidence)):
         scores = [ key(f) for f in self.fnodes ]
         scores_cum = np.cumsum(sorted(scores))
         ranked = sorted(self.fnodes, key=key)
         for idx, r in enumerate(ranked):
-            if cumulative == True:
+            if ordinal:
+                r.rank = float(idx)/(len(ranked)-1.)
+            elif cumulative == True:
                 r.rank = scores_cum[idx]/scores_cum[-1]*key(r)
             else:
                 r.rank = key(r)
@@ -764,6 +766,152 @@ def run_factor_analysis(mode, fgraph, fnode, IX, Y, rand_IX_list, rand_Y, ftag_t
         log << "%-50s c=%+1.4f q%-20s = %+1.4f  [random min=%1.2f max=%1.2f]" % (
             fnode.expr, cov, "(%s)" % factor, r["q_value"], r["min_cov"], r["max_cov"]) << log.endl
     return factor_map
+
+def represent_graph_2d_linear(
+        fgraph, 
+        root_weights, 
+        alpha, 
+        weight_fct=lambda f: np.abs(f.cov*f.confidence)):
+    # POSITION NODES
+    scale = 10
+    dy_root = scale*5./len(fgraph.map_generations[0])
+    y_max = scale*5.
+    x_offset = 0.0
+    x_root = scale*0.5
+    qc_scale = scale*0.0
+
+    unary_offset = [ None, 0.55*x_root ]
+    unary_offset_y = [ None, 0. ]
+    unary_op_offset = { 
+        "e": [ 0.0, 1.0 ],
+        "l": [ -1.0, 0.5 ],
+        "|": [ +1.0, 0.5 ],
+        "s": [ -1.0, -0.5 ],
+        "r": [ +1.0, -0.5 ],
+        "2": [ 0.0, -1.0 ]
+    }
+    binary_offset = [ None, 1.55*x_root, 3*x_root ]
+    binary_offset_y = [ None, 0., 0. ]
+    root_off = 0.0
+    w_avg = np.average([ w for r,w in root_weights.iteritems() ])
+
+    dy_map = {}
+    for gen in fgraph.generations:
+        nodes = fgraph.map_generations[gen]
+        print "Positioning generation", gen
+        for idx, node in enumerate(nodes):
+            if gen == 0:
+                w = root_weights[node.expr]
+                node.x = x_offset
+                dy = w/w_avg*dy_root
+                dy_map[node.expr] = dy
+                node.y = root_off + 0.5*dy
+                y_max = node.y
+                root_off += dy
+                print "x=%1.2f y=%1.2f %s" % (node.x, node.y, node.expr)
+            elif len(node.parents) == 1:
+                # Unary case
+                par = node.parents[0]
+                #node.x = unary_offset[gen] + qc_scale*weight_fct(node) + x_offset
+                node.x = unary_offset[gen] + qc_scale*weight_fct(node) + x_offset + 0.1*unary_offset[gen]*unary_op_offset[node.fnode_.op_tag][0]
+                #node.y = unary_offset_y[gen] + 0.0*dy_root + par.y + 1.0*weight_fct(node)**2
+                node.y = unary_offset_y[gen] + 0.0*dy_root + par.y + 0.2*dy_map[par.expr]*unary_op_offset[node.fnode_.op_tag][1]
+            elif len(node.parents) == 2:
+                # Binary case
+                p1 = node.parents[0]
+                p2 = node.parents[1]
+                y_parents = sorted([ p.y for p in node.parents ])
+                dy = y_parents[1]-y_parents[0]
+                node.x = 0.05*(p2.y-p1.y) + binary_offset[gen] + qc_scale*(
+                    weight_fct(node)) + x_offset
+                #node.y = 0.5*(p1.y+p2.y) + qc_scale*(
+                #    np.abs(node.cov*node.confidence)**2)
+
+                #w1 = np.exp(-0.002*p1.y**1) + np.exp(-0.001*(y_max-p1.y)**2)
+                #w2 = np.exp(-0.002*p2.y**1) + np.exp(-0.001*(y_max-p2.y)**2)
+                #z12 = w1+w2
+                #w1 = w1/z12
+                #w2 = w2/z12
+                w1 = w2 = 0.5
+                #print w1, w2, p1.y, p2.y, w1*p1.y+w2*p2.y
+                node.y = binary_offset_y[gen] + w1*p1.y+w2*p2.y + qc_scale*(
+                    weight_fct(node)**2)
+    # LINKS BETWEEN NODES
+    def connect_straight(f1, f2):
+        x1 = f1.x
+        y1 = f1.y
+        x2 = f2.x
+        y2 = f2.y
+        #w = np.abs(f2.cov*f2.confidence)
+        #w = f2.rank
+        w = weight_fct(f2)
+        return [ [x1,y1,w], [x2,y2,w] ]
+    def connect_tanh(f0, f1, f2, samples=30, alpha=alpha):
+        x1 = f1.x
+        y1 = f1.y
+        x2 = f2.x
+        y2 = f2.y
+        #w = f2.rank
+        w = weight_fct(f2)
+        coords = []
+        for i in range(samples):
+            xi = x1 + float(i)/(samples-1)*(x2-x1)
+            yi = y1 + (y2-y1)*0.5*(1 + np.tanh(alpha*(xi - 0.5*(x1+x2))))
+            coords.append([xi, yi, w])
+        return coords
+    def connect_arc(f0, f1, f2, samples=30):
+        x0 = f0.x
+        y0 = f0.y
+        x1 = f1.x
+        y1 = f1.y
+        x2 = f2.x
+        y2 = f2.y
+        #w = np.abs(f2.cov*f2.confidence)
+        #w = f2.rank
+        w = weight_fct(f2)
+        r1 = ((x1-x0)**2+(y1-y0)**2)**0.5
+        r2 = ((x2-x0)**2+(y2-y0)**2)**0.5
+        phi1 = np.arctan2(y1-y0, x1-x0)
+        phi2 = np.arctan2(y2-y0, x2-x0)
+        if phi1 < 0.: phi1 = 2*np.pi + phi1
+        if phi2 < 0.: phi2 = 2*np.pi + phi2
+        phi_start = phi1
+        dphi = phi2-phi1
+        if dphi >= np.pi:
+            dphi = 2*np.pi - dphi
+            phi_end = phi_start-dphi
+        elif dphi <= -np.pi:
+            dphi = 2*np.pi + dphi
+            phi_end = phi_start+dphi
+        else:
+            phi_end = phi_start + dphi
+        coords = []
+        for i in range(samples):
+            phi_i = phi_start + float(i)/(samples-1)*(phi_end-phi_start)
+            rad_i = r1 + float(i)/(samples-1)*(r2-r1)
+            x_i = x0 + rad_i*np.cos(phi_i)
+            y_i = y0 + rad_i*np.sin(phi_i)
+            coords.append([x_i, y_i, w])
+        return coords
+    curves = []
+    curve_info = []
+    for fnode in fgraph.fnodes:
+        if len(fnode.parents) == 1:
+            curve_info.append({ "target": fnode.expr, "source": fnode.parents[0].expr })
+            #curves.append(connect_straight(fnode.parents[0], fnode))
+            curves.append(connect_tanh(None, fnode.parents[0], fnode, alpha=3*alpha))
+        elif len(fnode.parents) == 2:
+            curve_info.append({ "target": fnode.expr, "source": fnode.parents[0].expr })
+            curves.append(connect_tanh(fnode.parents[0], fnode.parents[1], fnode))
+            curve_info.append({ "target": fnode.expr, "source": fnode.parents[1].expr })
+            curves.append(connect_tanh(fnode.parents[1], fnode.parents[0], fnode))
+        else: pass
+    # Sort curves so important ones are in the foreground
+    order = np.argsort([ c[0][-1] for c in curves ])
+    #curves = sorted(curves, key=lambda c: c[0][-1])
+    curves = [ curves[_] for _ in order ]
+    curve_info = [ curve_info[_] for _ in order]
+    return fgraph, curves, curve_info
 
 def represent_graph_2d(fgraph):
     # POSITION NODES

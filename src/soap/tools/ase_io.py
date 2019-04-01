@@ -115,6 +115,7 @@ class AtomASE(object):
 
 class IO(object):
     def __init__(self):
+        self.ConfigASE = ConfigASE
         return
     def convert(self, config, tag="?", sigma=0.5, weight=None, typemap=None, laplace_cutoff=0):
         R = config.get_positions()

@@ -5,6 +5,7 @@ from pca import *
 from util import *
 from math import *
 from elements import *
+from momo import ExtendableNamespace
 
 import learn
 import lamatch
@@ -13,4 +14,5 @@ import npfga
 import defaults
 
 from wrap import configure_default, configure_default_2d, StructureConverter, PowerSpectrum
+XSpace = ExtendableNamespace
 
