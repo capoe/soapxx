@@ -70,7 +70,7 @@ double TopKernelRematch::evaluate(DMapMatrix::matrix_t &K) {
 
 void TopKernelRematch::attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off) {
-
+    throw soap::base::NotImplemented("rematch::attributeLeft");
 }
 
 TopKernelCanonical::TopKernelCanonical() : beta(0.5) {
@@ -108,7 +108,7 @@ double TopKernelCanonical::evaluate(DMapMatrix::matrix_t &K) {
 
 void TopKernelCanonical::attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off) {
-
+    throw soap::base::NotImplemented("canonical::attributeLeft");
 }
 
 TopKernelAverage::TopKernelAverage() {;}
