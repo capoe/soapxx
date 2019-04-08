@@ -68,6 +68,11 @@ double TopKernelRematch::evaluate(DMapMatrix::matrix_t &K) {
     return k;
 }
 
+void TopKernelRematch::attributeLeft(DMapMatrix::matrix_t &K, 
+        DMapMatrix::matrix_t &K_out, int i_off, int j_off) {
+
+}
+
 TopKernelCanonical::TopKernelCanonical() : beta(0.5) {
     ;    
 }
@@ -101,6 +106,11 @@ double TopKernelCanonical::evaluate(DMapMatrix::matrix_t &K) {
     return k;
 }
 
+void TopKernelCanonical::attributeLeft(DMapMatrix::matrix_t &K, 
+        DMapMatrix::matrix_t &K_out, int i_off, int j_off) {
+
+}
+
 TopKernelAverage::TopKernelAverage() {;}
 
 void TopKernelAverage::configure(Options &options) {
@@ -113,6 +123,17 @@ double TopKernelAverage::evaluate(DMapMatrix::matrix_t &K) {
         for (int j=0; j<K.size2(); ++j)
             k += K(i,j);
     return k;
+}
+
+void TopKernelAverage::attributeLeft(DMapMatrix::matrix_t &K, 
+        DMapMatrix::matrix_t &K_out, int i_off, int j_off) {
+    for (int i=0; i<K.size1(); ++i) {
+        double ki = 0.0;
+        for (int j=0; j<K.size2(); ++j) {
+            ki += K(i,j);
+        }
+        K_out(i_off+i, j_off) = ki;
+    }
 }
 
 BaseKernelDot::BaseKernelDot() : exponent(2.), filter(false) {
@@ -235,6 +256,32 @@ double Kernel::evaluateTopkernel(boost::python::object &np_K, std::string np_dty
     return topkernels[0]->evaluateNumpy(np_K, np_dtype);
 }
 
+boost::python::object Kernel::attributeLeftPython(DMapMatrix *dmap1, DMapMatrixSet *dset2, 
+        std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    DMapMatrix::matrix_t output(dmap1->rows(), dset2->size(), 0.0);
+    this->attributeLeft(dmap1, dset2, output);
+    return npc.ublas_to_numpy<DMapMatrix::dtype_t>(output);
+}
+
+void Kernel::attributeLeft(DMapMatrix *dmap1, DMapMatrixSet *dset2, 
+        DMapMatrix::matrix_t &output) {
+    int n_rows = dmap1->rows();
+    int n_cols = dset2->size();
+    assert(output.size1() == n_rows && output.size2() == n_cols 
+        && "Inconsistent output matrix dimensions");
+    int j_col = 0;
+    for (auto jt=dset2->begin(); jt!=dset2->end(); ++jt, ++j_col) {
+        GLOG() << "\r" << "Col " << j_col+1 << "/" << n_cols << std::flush;
+        DMapMatrix::matrix_t Kij(dmap1->rows(), (*jt)->rows());
+        basekernel->evaluate(dmap1, *jt, Kij);
+        int i_off = 0;
+        int j_off = j_col;
+        topkernels[0]->attributeLeft(Kij, output, i_off, j_off);
+    }
+    GLOG() << std::endl;
+}
+
 void Kernel::registerPython() {
     using namespace boost::python;
     class_<Kernel, Kernel*>("Kernel", init<Options&>())
@@ -243,6 +290,7 @@ void Kernel::registerPython() {
         .def("getMetadata", &Kernel::getMetadata, return_value_policy<reference_existing_object>())
         .add_property("n_output", &Kernel::outputSlots)
         .def("getOutput", &Kernel::getOutput)
+        .def("attributeLeft", &Kernel::attributeLeftPython)
         .def("evaluate", &Kernel::evaluatePython)
         .def("evaluateAll", &Kernel::evaluateAll);
 }

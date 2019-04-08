@@ -2,17 +2,99 @@
 import numpy as np
 import sklearn.manifold
 import sklearn.decomposition
+from . import math
 
 def compute_dist_matrix_2d(X, Y):
     dX = np.subtract.outer(X, X)
     dY = np.subtract.outer(Y, Y)
     return dX, dY, (dX*dX + dY*dY)**0.5
 
+def compute_dist_matrix_2d_AB(X0, Y0, X1, Y1):
+    dX = np.subtract.outer(X0, X1)
+    dY = np.subtract.outer(Y0, Y1)
+    return dX, dY, np.sqrt(dX**2 + dY**2)
+
 def compute_dist_matrix_3d(X, Y, Z):
     dX = np.subtract.outer(X, X)
     dY = np.subtract.outer(Y, Y)
     dZ = np.subtract.outer(Z, Z)
     return dX, dY, (dX*dX + dY*dY + dZ*dZ)**0.5
+
+def project_harm_net(K, D, checkfile=None, load_check=False, init='kernelpca', log=None):
+    N = D.shape[0]
+    # Harmonic
+    with_gaussian = False
+    e_check = None
+    alpha = 10.
+    beta = 1.
+    kt = 0.85
+    #H = 0.5*beta*(1.+np.tanh(alpha*(K-kt)))
+    H = 0.5
+    R0AB = D
+    if with_gaussian:
+        # Gaussian 0.5*G*exp(-S*(R-R0)**2)
+        G = 0.1*beta*(1.-np.tanh(2*alpha*(K-0.0)))
+        S = 1./(2.*0.01*np.average(D)**2)
+    def energy(XY):
+        X = XY[0:N]
+        Y = XY[N:]
+        dX, dY, dR = compute_dist_matrix_2d_AB(X, Y, X, Y)
+        # Harmonic
+        R2 = (dR - R0AB)**2
+        e = 0.5*np.sum(0.5*H*R2)
+        # Gaussian
+        if with_gaussian:
+            e += 0.5*np.sum(0.5*G*np.exp(-S*R2))
+        if log: log << "EnerEnerEner" << e << log.endl
+        return e
+    def gradient(XY):
+        X = XY[0:N]
+        Y = XY[N:]
+        dX, dY, dR = compute_dist_matrix_2d_AB(X, Y, X, Y)
+        # Harmonic
+        C = math.div0(dR-R0AB, dR)
+        Fx = np.sum(H*C*dX, axis=1)
+        Fy = np.sum(H*C*dY, axis=1)
+        # Gaussian
+        if with_gaussian:
+            R2 = (dR - R0AB)**2
+            Fx = Fx + np.sum(-G*S*C*dX*np.exp(-S*R2), axis=1)
+            Fy = Fy + np.sum(-G*S*C*dY*np.exp(-S*R2), axis=1)
+        grad = np.concatenate([Fx, Fy])
+        #print "GradGradGrad", grad[0:5], "..."
+        return grad
+    # INITIALIZE
+    if checkfile is not None and load_check:
+        XY0 = np.loadtxt(checkfile)
+    else:
+        if init == 'kernelpca':
+            R0 = dimred_matrix('kernelpca', kmat=K, distmat=D, outfile="")
+        elif init == 'uniform':
+            R0 = np.max(D)*(np.random.uniform(size=(D.shape[0],3))-0.5)
+        else: raise ValueError(init)
+        XY0 = np.concatenate([R0[:,0],R0[:,1]])
+    # Check gradients
+    # >>> h = 1e-6
+    # >>> for idx in range(10):
+    # >>>     XY1 = np.copy(XY0)
+    # >>>     XY1[idx] = XY1[idx]+h
+    # >>>     e0 = energy(XY0)
+    # >>>     e1 = energy(XY1)
+    # >>>     f = (e1-e0)/h
+    # >>>     g = gradient(XY0)
+    # >>>     print "Idx=", idx
+    # >>>     print f
+    # >>>     print g[idx]
+    # >>>     raw_input('...')
+    import scipy.optimize
+    opt_out = scipy.optimize.minimize(
+        fun=energy, 
+        x0=XY0, 
+        method='CG', 
+        jac=gradient, 
+        options={'gtol': 0.1})
+    XY_out = opt_out.x
+    return np.array([ XY_out[0:N], XY_out[N:] ]).T
 
 class BondNetwork(object):
     def __init__(self, tags, K, M):

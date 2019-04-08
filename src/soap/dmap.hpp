@@ -158,6 +158,7 @@ class DMapMatrixSet
     dset_t::iterator begin() { return dset.begin(); }
     dset_t::iterator end() { return dset.end(); }
     int size() { return dset.size(); }
+    void clear();
     DMapMatrix *get(int idx) { return dset[idx]; }
     DMapMatrixSet *getView(boost::python::list idcs);
     void append(DMapMatrix *dmm);

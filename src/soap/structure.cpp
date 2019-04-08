@@ -45,6 +45,8 @@ void Particle::registerPython() {
 		.add_property("mass", make_function(&Particle::getMass, copy_non_const()), &Particle::setMass)
 		.add_property("weight", make_function(&Particle::getWeight, copy_non_const()), &Particle::setWeight)
 		.add_property("sigma", make_function(&Particle::getSigma, copy_non_const()), &Particle::setSigma)
+        .def("clearType", &Particle::clearType)
+        .def("getTypeWeight", &Particle::getTypeWeight)
         .def("addType", &Particle::addType);
 }
 

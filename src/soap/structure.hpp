@@ -23,7 +23,7 @@ struct Multitype
     typedef std::map<std::string, double>::iterator typemap_it_t;
     Multitype() {};
    ~Multitype() {};
-    void clear() { _typemap.clear(); }
+    void clear() { _typemap.clear(); _typestr = ""; }
     // Single-type interface
     void set(std::string type) { this->clear(); _typemap[type] = 1.0; _typestr = type; }
     std::string &getString() { return _typestr; }
@@ -66,9 +66,11 @@ public:
     void setTypeId(int id) { _type_id = id; }
     int &getTypeId() { return _type_id; }
     // Type
+    void clearType() { _mtype.clear(); }
     void setType(std::string type) { _mtype.set(type); }
-    std::string &getType() { return _mtype.getString(); }
     void addType(std::string t, double w) { _mtype.add(t, w); }
+    std::string &getType() { return _mtype.getString(); }
+    double getTypeWeight(std::string t) { return _mtype.getWeight(t); }
     Multitype &getMultitype() { return _mtype; }
     // Mass
     void setMass(double mass) { _mass = mass; }

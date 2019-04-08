@@ -25,6 +25,8 @@ class TopKernel
     virtual void configure(Options &options) {;}
     double evaluateNumpy(boost::python::object &np_K, std::string np_dtype);
     virtual double evaluate(DMapMatrix::matrix_t &K) = 0;
+    virtual void attributeLeft(DMapMatrix::matrix_t &K, 
+        DMapMatrix::matrix_t &K_out, int i_off, int j_off) = 0;
 };
 
 class Kernel
@@ -34,16 +36,16 @@ class Kernel
     typedef ub::matrix<double> output_t;
     Kernel(Options &options);
     ~Kernel();
-    boost::python::object evaluatePython(
-        DMapMatrixSet *dset1,
-        DMapMatrixSet *dset2,
-        bool symmetric,
-        std::string np_type);
     metadata_t *getMetadata() { return metadata; }
     boost::python::object getOutput(int slot, std::string np_type);
     void clearOutput();
     void clearThenAllocateOutput(int n_rows, int n_cols);
     int outputSlots() { return kernelmats_out.size(); }
+    boost::python::object evaluatePython(
+        DMapMatrixSet *dset1,
+        DMapMatrixSet *dset2,
+        bool symmetric,
+        std::string np_type);
     void evaluate(
         DMapMatrixSet *dset1,
         DMapMatrixSet *dset2,
@@ -56,6 +58,14 @@ class Kernel
     double evaluateTopkernel(
         boost::python::object &np_K, 
         std::string np_dtype);
+    boost::python::object attributeLeftPython(
+        DMapMatrix *dmap1,
+        DMapMatrixSet *dset2,
+        std::string np_type);
+    void attributeLeft(
+        DMapMatrix *dmap1,
+        DMapMatrixSet *dset2,
+        DMapMatrix::matrix_t &output);
     void addTopkernel(Options &options);
     static void registerPython();
   private:
@@ -82,8 +92,10 @@ class TopKernelRematch : public TopKernel
     TopKernelRematch();
     void configure(Options &options);
     double evaluate(DMapMatrix::matrix_t &K);
+    void attributeLeft(DMapMatrix::matrix_t &K, 
+        DMapMatrix::matrix_t &K_out, int i_off, int j_off);
   private:
-    double gamma; // Rematch inverse temperature
+    double gamma; // Rematch temperature
     double eps;   // Convergence tolerance
     double omega; // Mixing factor, successive overrelaxation
 };
@@ -94,6 +106,8 @@ class TopKernelCanonical : public TopKernel
     TopKernelCanonical();
     void configure(Options &options);
     double evaluate(DMapMatrix::matrix_t &K);
+    void attributeLeft(DMapMatrix::matrix_t &K, 
+        DMapMatrix::matrix_t &K_out, int i_off, int j_off);
   private:
     double beta;
 };
@@ -104,6 +118,8 @@ class TopKernelAverage : public TopKernel
     TopKernelAverage();
     void configure(Options &options);
     double evaluate(DMapMatrix::matrix_t &K);
+    void attributeLeft(DMapMatrix::matrix_t &K, 
+        DMapMatrix::matrix_t &K_out, int i_off, int j_off);
   private:
 };
 

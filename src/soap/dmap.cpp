@@ -17,7 +17,7 @@ DMap::DMap() {
 
 DMap::~DMap() {
     for (auto it=dmap.begin(); it!=dmap.end(); ++it) {
-        delete it->second;
+        delete (*it).second;
     }
     dmap.clear();
 }
@@ -323,11 +323,20 @@ DMapMatrixSet::DMapMatrixSet(bool set_as_view) : is_view(set_as_view) {
     ;
 }
 
-DMapMatrixSet::DMapMatrixSet(std::string archfile) {
+DMapMatrixSet::DMapMatrixSet(std::string archfile) : is_view(false) {
     this->load(archfile);
 }
 
 DMapMatrixSet::~DMapMatrixSet() {
+    if (!is_view) {
+        for (auto it=begin(); it!=end(); ++it) delete *it;
+    }
+    dset.clear();
+    for (auto it=views.begin(); it!=views.end(); ++it) delete *it;
+    views.clear();
+}
+
+void DMapMatrixSet::clear() {
     if (!is_view) {
         for (auto it=begin(); it!=end(); ++it) delete *it;
     }
@@ -384,6 +393,7 @@ void DMapMatrixSet::registerPython() {
         .add_property("size", &DMapMatrixSet::size)
         .def("save", &DMapMatrixSet::save)
         .def("load", &DMapMatrixSet::load)
+        .def("clear", &DMapMatrixSet::clear)
         .def("append", &DMapMatrixSet::append)
         .def("extend", &DMapMatrixSet::extend);
 }
