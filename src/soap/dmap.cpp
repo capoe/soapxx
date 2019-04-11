@@ -117,8 +117,11 @@ void DMap::normalize() {
 void DMap::adapt(AtomicSpectrum *atomic) {
     auto spec = atomic->getXnklMap();
     for (auto it=spec.begin(); it!=spec.end(); ++it) {
+        TypeEncoder::code_t e1 = ENCODER.encode(it->first.first);
+        TypeEncoder::code_t e2 = ENCODER.encode(it->first.second);
         // Exclude symmetric redundancies (e.g., project C:H, but not H:C
-        if (it->first.first > it->first.second) continue; 
+        if (e1 > e2) continue; 
+        //if (it->first.first > it->first.second) continue; // NOTE Changed to convention to e1>e2
         auto coeff = it->second->getCoefficients();
         int length = coeff.size1()*coeff.size2();
         auto v = new vec_t(length);
@@ -139,6 +142,78 @@ void DMap::adapt(AtomicSpectrum *atomic) {
     filter = atomic->getCenterType();
 }
 
+void DMap::convolve(int N, int L) {
+    dmap_t out;
+    for (auto it=begin(); it!=end(); ++it) {
+        for (auto jt=it; jt!=end(); ++jt) {
+            vec_t &vi = *(it->second);
+            vec_t &vj = *(jt->second);
+            vec_t *vv = new vec_t(N*N*(L+1), 0.0);
+            assert(vi.size() == N*(L+1)*(L+1) && "Vector dimension inconsistent with input.");
+            for (int n=0; n<N; ++n) {
+                for (int k=0; k<N; ++k) {
+                    for (int l=0; l<L+1; ++l) {
+                        int nkl = n*N*(L+1) + k*(L+1) + l;
+                        dtype_t vvnkl = 0.0;
+                        for (int m=-l; m<=l; ++m) {
+                            int nlm = n*(L+1)*(L+1) + l*l+l+m;
+                            int klm = k*(L+1)*(L+1) + l*l+l+m;
+                            vvnkl += vi(nlm)*vj(klm); 
+                        }
+                        (*vv)(nkl) = vvnkl;
+                    }
+                }
+            }
+            TypeEncoder::code_t e = ENCODER.encode(it->first, jt->first);
+            //GLOG() << e << "=" << ENCODER.decode(e) << std::endl;
+            channel_t p(e,vv);
+            out.push_back(p);
+        }
+    }
+    for (auto it=dmap.begin(); it!=dmap.end(); ++it) {
+        delete (*it).second;
+    }
+    dmap.clear();
+    dmap = out;
+    this->sort();
+    double norm = std::sqrt(this->dot(this));
+    this->multiply(1./norm);
+}
+
+void DMap::adaptCoherent(AtomicSpectrum *atomic) {
+    auto spec = atomic->getQnlmMap();
+    for (auto it=spec.begin(); it!=spec.end(); ++it) {
+        auto coeff = it->second->getCoefficients();
+        int N = coeff.size1();
+        int L = int(std::sqrt(coeff.size2())-0.5);
+        int length = N*(L+1)*(L+1);
+        auto v = new vec_t(length);
+        double reco = 1./std::sqrt(2.);
+        std::complex<double> imco = std::complex<double>(0.,1.)/std::sqrt(2.);
+        for (int n=0; n<N; ++n) {
+            int n0 = n*(L+1)*(L+1);
+            for (int l=0; l<L+1; ++l) {
+                int lm0 = l*l+l;
+                dtype_t rnl0 = std::real(coeff(n, lm0));
+                (*v)(n0+lm0) = rnl0;
+                for (int m=1; m<=l; ++m) {
+                    auto qnlm  = coeff(n, lm0+m);
+                    auto qnl_m = coeff(n, lm0-m);
+                    dtype_t rnl_m = std::real(imco*(qnl_m - std::pow(-1, m)*qnlm));
+                    dtype_t rnlm  = std::real(reco*(qnl_m + std::pow(-1, m)*qnlm));
+                    (*v)(n0+lm0-m) = rnl_m;
+                    (*v)(n0+lm0+m) = rnlm;
+                }
+            }
+        }
+        TypeEncoder::code_t e = ENCODER.encode(it->first);
+        channel_t p(e, v);
+        dmap.push_back(p);
+    }
+    this->sort();
+    filter = atomic->getCenterType();
+}
+
 void DMap::registerPython() {
     using namespace boost::python;
     class_<DMap, DMap*>("DMap", init<>())
@@ -146,8 +221,19 @@ void DMap::registerPython() {
         .def("listChannels", &DMap::listChannels)
         .def("normalize", &DMap::normalize)
         .def("dot", &DMap::dot)
+        .def("add", &DMap::add)
+        .def("convolve", &DMap::convolve)
         .def("dotFilter", &DMap::dotFilter);
 }
+
+//void ConvolveNLM::convolve(DMap *m1, DMap *m2, DMap *m12) {
+//    for (auto it=m1->begin(); it!=m1->end(); ++it) {
+//        for (auto jt=m2->begin(); jt!=m2->end(); ++jt) {
+//            
+//
+//        }
+//    }
+//}
 
 DMapMatrix::DMapMatrix() : is_view(false) {
     ;
@@ -199,10 +285,13 @@ void DMapMatrix::append(Spectrum *spectrum) {
         new_dmap->adapt(*it);
         dmm.push_back(new_dmap);
     }
-    for (auto it=dmm.begin(); it!=dmm.end(); ++it) {
-        for (auto jt=(*it)->begin(); jt!=(*it)->end(); ++jt) {
-            auto dm = jt->second;
-        }
+}
+
+void DMapMatrix::appendCoherent(Spectrum *spectrum) {
+    for (auto it=spectrum->beginAtomic(); it!=spectrum->endAtomic(); ++it) {
+        DMap *new_dmap = new DMap();
+        new_dmap->adaptCoherent(*it);
+        dmm.push_back(new_dmap);
     }
 }
 
@@ -219,6 +308,12 @@ void DMapMatrix::sum() {
 void DMapMatrix::normalize() {
     for (auto it=begin(); it!=end(); ++it) {
         (*it)->normalize();
+    }
+}
+
+void DMapMatrix::convolve(int N, int L) {
+    for (auto it=begin(); it!=end(); ++it) {
+        (*it)->convolve(N, L);
     }
 }
 
@@ -307,8 +402,10 @@ void DMapMatrix::registerPython() {
         .def("addView", &DMapMatrix::addView)
         .def("getView", &DMapMatrix::getView, return_value_policy<reference_existing_object>())
         .def("append", &DMapMatrix::append)
+        .def("appendCoherent", &DMapMatrix::appendCoherent)
         .def("sum", &DMapMatrix::sum)
         .def("normalize", &DMapMatrix::normalize)
+        .def("convolve", &DMapMatrix::convolve)
         .def("dot", &DMapMatrix::dotNumpy)
         .def("dotFilter", &DMapMatrix::dotFilterNumpy)
         .def("load", &DMapMatrix::load)
@@ -421,6 +518,11 @@ BlockLaplacian::block_t *BlockLaplacian::addBlock(int n_rows_block, int n_cols_b
     return new_block;
 }
 
+boost::python::object BlockLaplacian::getBlockNumpy(int idx, std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    return npc.ublas_to_numpy<dtype_t>(*blocks[idx]);
+}
+
 void BlockLaplacian::appendNumpy(boost::python::object &np_array, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
     block_t *new_block = new block_t();
@@ -488,8 +590,10 @@ void BlockLaplacian::registerPython() {
         .def(init<std::string>())
         .add_property("rows", &BlockLaplacian::rows)
         .add_property("cols", &BlockLaplacian::cols)
+        .def("__getitem__", &BlockLaplacian::getItemNumpy)
         .def("dot", &BlockLaplacian::dotNumpy)
         .def("append", &BlockLaplacian::appendNumpy)
+        .def("getBlock", &BlockLaplacian::getBlockNumpy)
         .def("save", &BlockLaplacian::save)
         .def("load", &BlockLaplacian::load);
 }
@@ -644,6 +748,10 @@ TypeEncoder::code_t TypeEncoder::encode(std::string type1, std::string type2) {
     auto jt = encoder.find(type2);
     if (it == end() || jt == end()) throw soap::base::OutOfRange(type1+":"+type2);
     return encoder[type1]*size() + encoder[type2];
+}
+
+TypeEncoder::code_t TypeEncoder::encode(code_t code1, code_t code2) {
+    return code1*size() + code2;
 }
 
 std::string TypeEncoder::decode(TypeEncoder::code_t code) {

@@ -384,8 +384,11 @@ class PowerSpectrum(object):
             if self.verbose: self.log << "[h5] Loading descriptor matrix" << self.log.endl
             self.sd = g["sd"].value
         return self
-    def exportDMapMatrix(self):
+    def exportDMapMatrix(self, coherent=False):
         dmap_mat = soap.DMapMatrix()
-        dmap_mat.append(self.spectrum)
+        if coherent: dmap_mat.appendCoherent(self.spectrum)
+        else: dmap_mat.append(self.spectrum)
         return dmap_mat
+    def exportDistanceMatrix(self, dtype="float64"):
+        return self.spectrum.getDistanceMatrix(dtype)
 

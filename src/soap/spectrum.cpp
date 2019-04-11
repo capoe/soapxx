@@ -4,6 +4,7 @@
 #include <boost/archive/binary_iarchive.hpp>
 
 #include "soap/spectrum.hpp"
+#include "soap/linalg/numpy.hpp"
 
 namespace soap {
 
@@ -100,6 +101,27 @@ AtomicSpectrum *Spectrum::computeAtomic(Particle *center) {
     return this->computeAtomic(center, _structure->particles());
 }
 
+boost::python::object Spectrum::getDistanceMatrixNumpy(std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    Structure::laplace_t out(_atomspec_array.size(), _atomspec_array.size(), 0.0);
+    this->getDistanceMatrix(out);
+    return npc.ublas_to_numpy<Structure::dtype_t>(out);
+}
+
+void Spectrum::getDistanceMatrix(Structure::laplace_t &out) {
+    assert(out.size1() == _atomspec_array.size() && out.size2() == _atomspec_array.size() && 
+        "Output dimensions inconsistent with spectrum");
+    int i = 0;
+    for (auto it = _atomspec_array.begin(); it != _atomspec_array.end(); ++it, ++i) {
+        int j = i;
+        for (auto jt = it; jt != _atomspec_array.end(); ++jt, ++j) {
+            vec dr = _structure->connect((*it)->getCenterPos(), (*jt)->getCenterPos());
+            double r = soap::linalg::abs(dr);
+            out(i,j) = r;
+            out(j,i) = r;
+        }
+    }
+}
 
 AtomicSpectrum *Spectrum::computeAtomic(Particle *center, Structure::particle_array_t &targets) {
     GLOG() << "Compute atomic spectrum for particle " << center->getId()
@@ -428,6 +450,7 @@ void Spectrum::registerPython() {
 		.def("addAtomic", &Spectrum::addAtomic)
 		.def("getAtomic", &Spectrum::getAtomic, return_value_policy<reference_existing_object>())
 		.def("getGlobal", &Spectrum::getGlobal, return_value_policy<reference_existing_object>())
+        .def("getDistanceMatrix", &Spectrum::getDistanceMatrixNumpy)
 	    .def("saveAndClean", &Spectrum::saveAndClean)
 		.def("save", &Spectrum::save)
 		.def("load", &Spectrum::load)

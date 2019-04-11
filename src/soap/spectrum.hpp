@@ -61,10 +61,14 @@ class Spectrum
 	AtomicSpectrum *computeAtomic(Particle *center, Structure::particle_array_t &targets);
 	AtomicSpectrum *computeAtomic2D(Particle *center, Structure::particle_array_t &targets, Structure::laplace_t &L);
     AtomicSpectrum *computeGlobal();
+
 	void deleteGlobal() { if (_global_atomic) { delete _global_atomic; _global_atomic = NULL; } }
 	void addAtomic(AtomicSpectrum *atomspec);
 	AtomicSpectrum *getAtomic(int slot_idx, std::string center_type);
 	AtomicSpectrum *getGlobal() { assert(_global_atomic && "Compute first"); return _global_atomic; }
+    boost::python::object getDistanceMatrixNumpy(std::string np_dtype);
+    void getDistanceMatrix(Structure::laplace_t &out);
+
 	void writeDensityOnGrid(int slot_idx, std::string center_type, std::string density_type);
     void writeDensityCubeFile(int atom_idx, std::string density_type, std::string filename, bool from_expansion);
 	void writeDensityOnGridInverse(int slot_idx, std::string center_type, std::string type1, std::string type2);

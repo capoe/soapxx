@@ -4,6 +4,7 @@ import numpy as np
 import json
 import os
 import momo
+import copy
 from sklearn.kernel_ridge import KernelRidge
 log = momo.osio
 
@@ -24,7 +25,7 @@ def configure_embedding(path):
     return
 
 def initialize_embedding(rerun):
-    for section_name, section in SETTINGS["sections"].iteritems():
+    for section_name, section in SETTINGS["channels"].iteritems():
         if section["embedding_options"]["type"] == "environment-specific":
             parametrize_environment_specific(
                 settings=section, 
@@ -147,12 +148,12 @@ def kernel_attribute(dset1, dset2, kernel_options, kweights, xi):
 # APPLY
 # =====
 
-def apply(configs, types, options):
+def apply(configs, channels, options):
     check_is_configured()
     for c in configs:
         config_reset_weights(c)
-    for t in types:
-        type_settings = SETTINGS["sections"][t]
+    for t in channels:
+        type_settings = SETTINGS["channels"][t]
         type_options = options[t]
         if type_settings["embedding_options"]["type"] == "environment-specific":
             configs = apply_environment_specific(configs, type_settings, type_options)
@@ -164,19 +165,19 @@ def apply(configs, types, options):
     return configs
 
 def apply_environment_specific(configs, settings, options):
-    log << log.mg << "Apply" << settings["embedding_options"]["typename"] << "to %d configs" % (
+    log << log.mg << "Apply" << settings["embedding_options"]["channel_name"] << "to %d configs" % (
         len(configs)) << log.endl
     # LOAD MODEL
     log << "Loading model ..." << log.endl
-    paths = settings["paths"]
     soap_version = settings["soap_options_ref"]
-    soap_options = SETTINGS["soap_options"][settings["soap_options_ref"]]
+    soap_options = SETTINGS["soap_options"][soap_version]
     soap_excls = set(soap_options["exclude_centers"])
     kernel_options = settings["kernel_options"]
     target_key = settings["regression_options"]["target_key"]
     regr_options = settings["regression_options"]
+    paths = settings["paths"]
     dset2 = soap.DMapMatrixSet(os.path.join(PATH, paths["soap_file"]))
-    targets = np.array([float(c.info[target_key]) for c in configs])
+    targets = np.load(os.path.join(PATH, paths["targets_file"]))
     kweights = np.load(os.path.join(PATH, paths["weights_file"]))
     y_predict = np.load(os.path.join(PATH, paths["pred_file"]))
     yrange = json.load(open(os.path.join(PATH, paths["range_file"])))
@@ -190,12 +191,12 @@ def apply_environment_specific(configs, settings, options):
     w_std = np.std(yrange)
     z = options["weight"]
     log << "Channel normalization is" << z << log.endl
-    typename = settings["embedding_options"]["typename"]
+    channel_name = settings["embedding_options"]["channel_name"]
     basis = [ GaussianBasisFct(w_avg+centre*w_std, sigma*w_std) for centre, sigma in zip(
         options["centres"], options["sigmas"]) ]
     log << "- Using %d basis functions:" % (len(basis)) << log.endl
     for b in basis: log << "    Centre, width = %1.4f, %1.4f" % (b.centre, b.sigma) << log.endl
-    type_names = [ "%s%d" % (typename, i) for i in range(len(basis)) ]
+    channel_names = [ "%s%d" % (channel_name, i) for i in range(len(basis)) ]
     for cidx, config in enumerate(configs):
         log << log.back << "- Config %d" % cidx << log.flush
         types = config.symbols
@@ -212,7 +213,7 @@ def apply_environment_specific(configs, settings, options):
                 wb = np.array([ fct(w) for fct in basis ])
                 if z is not None:
                     wb = norm_weights(wb, z)
-                type_coords.append({ type_names[i]: wb[i] for i in range(len(basis)) })
+                type_coords.append({ channel_names[i]: wb[i] for i in range(len(basis)) })
                 attr_idx += 1
         # TO CHECK:
         # >>> log << sum_w << "==" << y_predict[cidx] << log.endl
@@ -221,9 +222,9 @@ def apply_environment_specific(configs, settings, options):
     return configs
     
 def apply_element_specific(configs, settings, options):
-    log << log.mg << "Apply" << settings["embedding_options"]["typename"] << "to %d configs" % (
+    log << log.mg << "Apply" << settings["embedding_options"]["channel_name"] << "to %d configs" % (
         len(configs)) << log.endl
-    typename = settings["embedding_options"]["typename"]
+    channel_name = settings["embedding_options"]["channel_name"]
     weights_file = os.path.join(PATH, settings["paths"]["weights_file"])
     log << "Reading weights from '%s'" % weights_file << log.endl
     element_weights = soap.soapy.json_load_utf8(open(weights_file))
@@ -237,7 +238,7 @@ def apply_element_specific(configs, settings, options):
         options["centres"], options["sigmas"]) ]
     log << "- Using %d basis functions:" % (len(basis)) << log.endl
     for b in basis: log << "    Centre, width = %1.4f, %1.4f" % (b.centre, b.sigma) << log.endl
-    type_names = [ "%s%d" % (typename, i) for i in range(len(basis)) ]
+    channel_names = [ "%s%d" % (channel_name, i) for i in range(len(basis)) ]
     for cidx, config in enumerate(configs):
         log << log.back << "- Config %d" % cidx << log.flush
         types = config.symbols
@@ -250,13 +251,13 @@ def apply_element_specific(configs, settings, options):
                 wb = np.array([ fct(w) for fct in basis ])
                 if z is not None:
                     wb = norm_weights(wb, z)
-                type_coords.append({ type_names[i]: wb[i] for i in range(len(basis)) })
+                type_coords.append({ channel_names[i]: wb[i] for i in range(len(basis)) })
         config_add_weights(config, type_coords)
     log << log.endl
     return configs
 
 def apply_onehot(configs, settings, options):
-    log << log.mg << "Apply" << settings["embedding_options"]["typename"] << "to %d configs" % (
+    log << log.mg << "Apply" << settings["embedding_options"]["channel_name"] << "to %d configs" % (
         len(configs)) << log.endl
     z = options["weight"]
     log << "Channel normalization is" << z << log.endl
@@ -317,8 +318,8 @@ def configs_load_weights(configs):
         config.info["weights"] = soap.soapy.json_loads_utf8(
             config.info["weights"].replace("_",'"'))
         
-def embed(configs, types, options):
-    configs = apply(configs, types, options)
+def embed(configs, channels, options):
+    configs = apply(configs, channels, options)
     configs_norm_weights(configs, options["norm"])
     configs_stringify_weights(configs)
     return configs
@@ -333,17 +334,17 @@ def precalculate_soap(config_file, rerun):
     configs = soap.tools.io.read(config_file)
     soap_types = SETTINGS["soap_types"]
     for version, soap_options in SETTINGS["soap_options"].iteritems():
-        tmp_file = os.path.join(TEMPDIR, "%s_%s.soap" % (config_file.replace('.xyz',''), version))
+        tmp_file = os.path.join(TEMPDIR, "%s_%s.soap" % (os.path.basename(config_file).replace('.xyz',''), version))
         PRECALC_SOAPS[version] = tmp_file
-        log << "Path to precalculated SOAP %s = %s" % (version, tmp_file) << log.endl
+        log << "Path to precalculated SOAP '%s' = %s" % (version, tmp_file) << log.endl
         if rerun or not os.path.isfile(tmp_file):
             soap_configure_default(types=soap_types)
             dset = soap_evaluate(configs, soap_options, tmp_file)
     return
 
 def parametrize_environment_specific(settings, rerun):
-    typename = settings["embedding_options"]["typename"]
-    log << log.mg << "Parametrizing" << typename << "model" << log.endl
+    channel_name = settings["embedding_options"]["channel_name"]
+    log << log.mg << "Parametrizing" << channel_name << "model" << log.endl
     soap_types = SETTINGS["soap_types"]
     log << "Particle SOAP types are" << ", ".join(soap_types) << log.endl
     # PATHS - for example:
@@ -353,7 +354,7 @@ def parametrize_environment_specific(settings, rerun):
     #   "targets_file": "data_esol/targets.npy",
     #   "range_file": "data_esol/range.json",
     #   "weights_file": "data_esol/weights.npy" }
-    paths = settings["paths"]
+    paths = copy.deepcopy(settings["paths"])
     for p,v in paths.iteritems():
         paths[p] = os.path.join(PATH, v)
         log << "Path to %s = %s" % (p, paths[p]) << log.endl

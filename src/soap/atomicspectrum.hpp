@@ -64,6 +64,7 @@ public:
     void computePower();
     void computePowerGradients();
     xnkl_t *getPower(std::string type1, std::string type2);
+    xnkl_t *getPowerGrad(int pid, std::string type1, std::string type2);
     xnkl_t *getPowerGradGeneric(int pid) { return _map_pid_xnkl_gc[pid]; }
     xnkl_t *getXnkl(type_pair_t &types);
     map_xnkl_t &getXnklMap() { return _map_xnkl; }

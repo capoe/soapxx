@@ -374,6 +374,11 @@ AtomicSpectrum::xnkl_t *AtomicSpectrum::getPower(std::string type1, std::string 
     return this->getXnkl(types);
 }
 
+AtomicSpectrum::xnkl_t *AtomicSpectrum::getPowerGrad(int pid, std::string type1, std::string type2) {
+    type_pair_t types(type1, type2);
+    return this->_map_pid_xnkl[pid][types];
+}
+
 boost::python::list AtomicSpectrum::getTypes() {
     boost::python::list types;
     map_qnlm_t::iterator it;
@@ -407,6 +412,7 @@ void AtomicSpectrum::registerPython() {
         .def("getTypes", &AtomicSpectrum::getTypes)
         .def("getNeighbourPids", &AtomicSpectrum::getNeighbourPids)
         .def("getPower", &AtomicSpectrum::getPower, return_value_policy<reference_existing_object>())
+        .def("getPowerGrad", &AtomicSpectrum::getPowerGrad, return_value_policy<reference_existing_object>())
         .def("getPowerGradGeneric", &AtomicSpectrum::getPowerGradGeneric, return_value_policy<reference_existing_object>())
         .def("getCenter", &AtomicSpectrum::getCenter, return_value_policy<reference_existing_object>())
         .def("getCenterId", &AtomicSpectrum::getCenterId)

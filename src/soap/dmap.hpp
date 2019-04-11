@@ -35,6 +35,7 @@ class TypeEncoder
     std::string decode(code_t code);
     code_t encode(std::string type);
     code_t encode(std::string type1, std::string type2);
+    code_t encode(code_t code1, code_t code2);
     void add(std::string type);
     static void registerPython();
   private:
@@ -66,7 +67,7 @@ extern TypeEncoder ENCODER;
 
 struct DMap
 {
-    typedef float dtype_t;
+    typedef double dtype_t;
     //typedef double dtype_t;
     typedef ub::vector<dtype_t> vec_t;
     //typedef Eigen::VectorXf vec_t;
@@ -85,7 +86,9 @@ struct DMap
     void add(DMap *other);
     double dotFilter(DMap *other);
     void normalize();
+    void convolve(int N, int L);
     void adapt(AtomicSpectrum *spectrum);
+    void adaptCoherent(AtomicSpectrum *spetrum);
     std::string getFilter() { return filter; }
     dmap_t dmap;
     std::string filter;
@@ -96,6 +99,14 @@ struct DMap
         arch & filter;
     }
 };
+
+//struct ConvolveNLM
+//{
+//    ConvolveNLM(int Nmax, int Lmax) : N(Nmax), L(Lmax) {;}
+//    ~ConvolveNLM() {;}
+//    void convolve(DMap *m1, DMap *m2, DMap *m12);
+//    static void registerPython();
+//};
 
 class DMapMatrix
 {
@@ -112,11 +123,13 @@ class DMapMatrix
     void clear();
     void sum();
     void normalize();
+    void convolve(int N, int L);
     void dot(DMapMatrix *other, matrix_t &output);
     void dotFilter(DMapMatrix *other, matrix_t &output);
     bpy::object dotNumpy(DMapMatrix *other, std::string np_dtype);
     bpy::object dotFilterNumpy(DMapMatrix *other, std::string np_dtype);
     void append(Spectrum *spectrum);
+    void appendCoherent(Spectrum *spectrum);
     void save(std::string archfile);
     void load(std::string archfile);
     DMap *getRow(int idx) { return dmm[idx]; }
@@ -187,6 +200,8 @@ struct BlockLaplacian
     BlockLaplacian(std::string archfile);
     ~BlockLaplacian();
     block_t *addBlock(int n_rows_block, int n_cols_block);
+    boost::python::object getItemNumpy(int idx) { return getBlockNumpy(idx, "float64"); }
+    boost::python::object getBlockNumpy(int idx, std::string np_dtype="float64");
     void appendNumpy(boost::python::object &np_array, std::string np_dtype);
     void save(std::string archfile);
     void load(std::string archfile);
