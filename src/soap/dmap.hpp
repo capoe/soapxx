@@ -65,48 +65,75 @@ struct TypeEncoderUI
 
 extern TypeEncoder ENCODER;
 
+struct GradMap;
 struct DMap
 {
     typedef double dtype_t;
-    //typedef double dtype_t;
+    //typedef float dtype_t;
     typedef ub::vector<dtype_t> vec_t;
     //typedef Eigen::VectorXf vec_t;
-    //typedef std::map<std::pair<std::string, std::string>, vec_t*> dmap_t;
     typedef std::pair<TypeEncoder::code_t, vec_t*> channel_t;
     typedef std::vector<channel_t> dmap_t;
+    typedef std::vector<GradMap*> pid_gradmap_t;
     DMap();
+    DMap(std::string filter_type);
     ~DMap();
     dmap_t::iterator begin() { return dmap.begin(); }
     dmap_t::iterator end() { return dmap.end(); }
+    pid_gradmap_t::iterator beginGradients() { return pid_gradmap.begin(); }
+    pid_gradmap_t::iterator endGradients() { return pid_gradmap.end(); }
     int size() { return dmap.size(); }
     void sort();
     void multiply(double c);
     boost::python::list listChannels();
     double dot(DMap *other);
     void add(DMap *other);
+    void add(DMap *other, double c);
     double dotFilter(DMap *other);
     void normalize();
     void convolve(int N, int L);
     void adapt(AtomicSpectrum *spectrum);
-    void adaptCoherent(AtomicSpectrum *spetrum);
+    void adapt(AtomicSpectrum::map_xnkl_t &map_xnkl);
+    void adaptPidGradients(AtomicSpectrum::map_pid_xnkl_t &map_pid_xnkl);
+    void adaptCoherent(AtomicSpectrum *spectrum);
     std::string getFilter() { return filter; }
     dmap_t dmap;
+    pid_gradmap_t pid_gradmap;
     std::string filter;
     static void registerPython();
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & dmap;
+        arch & pid_gradmap;
         arch & filter;
     }
 };
 
-//struct ConvolveNLM
-//{
-//    ConvolveNLM(int Nmax, int Lmax) : N(Nmax), L(Lmax) {;}
-//    ~ConvolveNLM() {;}
-//    void convolve(DMap *m1, DMap *m2, DMap *m12);
-//    static void registerPython();
-//};
+struct GradMap
+{
+    typedef std::vector<DMap*> gradmap_t;
+    GradMap();
+    GradMap(int particle_id, std::string filter);
+    ~GradMap();
+    void clear();
+    void normalize();
+    void multiply(double c);
+    int getPid() { return pid; }
+    void adapt(AtomicSpectrum::map_xnkl_t &map_xnkl);
+    DMap *get(int idx) { assert(idx <= 2); return gradmap[idx]; }
+    DMap *x() { return gradmap[0]; }
+    DMap *y() { return gradmap[1]; }
+    DMap *z() { return gradmap[2]; }
+    gradmap_t gradmap;
+    int pid;
+    std::string filter;
+    static void registerPython();
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+        arch & gradmap;
+        arch & filter;
+    }
+};
 
 class DMapMatrix
 {

@@ -44,6 +44,7 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::KernelInterface::registerPython();
 
     soap::DMap::registerPython();
+    soap::GradMap::registerPython();
     soap::DMapMatrix::registerPython();
     soap::DMapMatrixSet::registerPython();
     soap::TypeEncoder::registerPython();
