@@ -59,6 +59,82 @@ def configure_default(typemap={}, types=[]):
     log << "Using type encoder with %d types:" % (len(soap.encoder.types())) << ",".join(soap.encoder.types()) << log.endl
     return options_soap
 
+def test_dmap_dot_gradients(config, config_prime, soap_options, h):
+    R_back = np.copy(config.positions)
+    # Passive projector
+    spec_prime = soap.soapy.PowerSpectrum(config_prime, soap_options)
+    X_prime = spec_prime.exportDMapMatrix(coherent=False)
+    X_prime.sum()
+    x_prime = X_prime[0]
+    x_prime.normalize()
+    # Analytical gradients from spectrum in original configuration
+    spec = soap.soapy.PowerSpectrum(config, soap_options)
+    X = spec.exportDMapMatrix(coherent=False)
+    X.sum()
+    x = X[0]
+    x.normalize()
+    k = soap.DMap()
+    x.dotGradLeft(x_prime, 1., 2., k)
+    grads = { g.pid: g for g in k.gradients }
+    for pid in sorted(grads):
+        for dim in [0,1,2]:
+            g = grads[pid][dim]
+            # Numerical gradients via step translation
+            config.positions = np.copy(R_back)
+            config.positions[pid-1][dim] += h
+            spech = soap.soapy.PowerSpectrum(config, soap_options)
+            Xh = spech.exportDMapMatrix(coherent=False)
+            Xh.sum()
+            xh = Xh[0]
+            xh.normalize()
+            kh = soap.DMap()
+            xh.dotGradLeft(x_prime, 1., 2., kh)
+            # Compare
+            kh.add(k, -1.)
+            kh.multiply(1./h)
+            shh = kh.dot(kh)
+            sgg = g.dot(g)
+            sgh = g.dot(kh)
+            kh.add(g, -1.)
+            dgh = kh.dot(kh)
+            assert_equal(shh-sgg, 0., 1e-5)
+            assert_equal(shh-sgh, 0., 1e-5)
+            assert_equal(dgh, 0., 1e-7)
+            log << "(overlaps= %+1.7e %+1.7e %+1.7e %+1.7e)" % (shh, sgg, sgh, dgh) << log.endl
+    return
+
+def test_dmap_sum_gradients(config, soap_options, dim, gidx, h):
+    # Analytical gradients from spectrum in original configuration
+    spec = soap.soapy.PowerSpectrum(config, soap_options)
+    X = spec.exportDMapMatrix(coherent=False)
+    X.sum()
+    X.normalize()
+    x = X[0]
+    grads = [ g for g in x.gradients ]
+    pids = [ g.pid for g in grads ]
+    pid = grads[gidx].pid
+    g = grads[gidx][dim]
+    # Numerical gradients via step translation
+    config.positions[pid-1][dim] += h
+    spech = soap.soapy.PowerSpectrum(config, soap_options)
+    Xh = spech.exportDMapMatrix(coherent=False)
+    Xh.sum()
+    Xh.normalize()
+    xh = Xh[0]
+    # Compare
+    xh.add(x, -1.)
+    xh.multiply(1./h)
+    shh = xh.dot(xh)
+    sgg = g.dot(g)
+    sgh = g.dot(xh)
+    xh.add(g, -1.)
+    dgh = xh.dot(xh)
+    assert_equal(shh-sgg, 0., 1e-5)
+    assert_equal(shh-sgh, 0., 1e-5)
+    assert_equal(dgh, 0., 1e-7)
+    log << "(overlaps= %+1.7e %+1.7e %+1.7e %+1.7e)" % (shh, sgg, sgh, dgh) << log.endl
+    return
+
 def test_dmap_gradients_single(config, soap_options, centre_idx, dim, gidx, h):
     # Analytical gradients from spectrum in original configuration
     spec = soap.soapy.PowerSpectrum(config, soap_options)
@@ -88,14 +164,17 @@ def test_dmap_gradients_single(config, soap_options, centre_idx, dim, gidx, h):
     return
 
 def test_dmap_gradients():
-    log << log.mg << "<test_dmap_gradients>" << log.endl
     configs = soap.tools.io.read('structures.xyz')
     soap_options = configure_default()
+    log << log.mg << "<test_dmap_dot_gradients>" << log.endl
+    test_dmap_dot_gradients(configs[0], configs[1], soap_options, h=0.0000001)
+    log << log.mg << "<test_dmap(_sum)_gradients(_single)>" << log.endl
     for centre_idx, dim, gidx in zip(
         [ 0, 0, 0, 2, 2 ],
         [ 0, 1, 2, 0, 2 ],
         [ 0, 0, 2, 0, 1 ]):
         test_dmap_gradients_single(configs[0], soap_options, centre_idx, dim, gidx, h=0.00001)
+        test_dmap_sum_gradients(configs[0], soap_options, dim, gidx, h=0.00001)
     log << log.mg << "All passed" << log.endl
     
 test_dmap_gradients()

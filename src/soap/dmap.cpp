@@ -69,6 +69,11 @@ void DMap::add(DMap *other) {
 }
 
 void DMap::add(DMap *other, double scale) {
+    this->addIgnoreGradients(other, scale);
+    this->addGradients(other, scale);
+}
+
+void DMap::addIgnoreGradients(DMap *other, double scale) {
     dmap_t add_entries; 
     auto it = this->begin();
     auto jt = other->begin();
@@ -92,10 +97,42 @@ void DMap::add(DMap *other, double scale) {
     this->sort();
 }
 
+void DMap::addGradients(DMap *other, double scale) {
+    pid_gradmap_t add_entries;
+    auto it = this->beginGradients();
+    auto jt = other->beginGradients();
+    while (jt != other->endGradients()) {
+        if (it == this->endGradients() || (*jt)->pid < (*it)->pid) {
+            GradMap *add_g = new GradMap((*jt)->pid, "g");
+            add_g->add(*jt, scale);
+            add_entries.push_back(add_g);
+            ++jt;
+        } else if ((*jt)->pid == (*it)->pid) {
+            (*it)->add(*jt, scale);
+            ++it;
+            ++jt;
+        } else if ((*jt)->pid > (*it)->pid) {
+            ++it;
+        }
+    }
+    for (auto it=add_entries.begin(); it!=add_entries.end(); ++it) {
+        pid_gradmap.push_back(*it);
+    }
+    this->sortGradients();
+}
+
 void DMap::sort() {
     std::sort(dmap.begin(), dmap.end(), 
         [](DMap::channel_t c1, DMap::channel_t c2) {
             return c1.first <= c2.first;
+        }
+    );
+}
+
+void DMap::sortGradients() {
+    std::sort(pid_gradmap.begin(), pid_gradmap.end(),
+        [](GradMap *g1, GradMap *g2) {
+            return g1->getPid() <= g2->getPid();
         }
     );
 }
@@ -119,6 +156,9 @@ void DMap::multiply(double c) {
         auto &v = *(it->second);
         v *= c;
     }
+    for (auto it=pid_gradmap.begin(); it!=pid_gradmap.end(); ++it) {
+        (*it)->multiply(c);
+    }
 }
 
 void DMap::normalize() {
@@ -127,18 +167,17 @@ void DMap::normalize() {
     // Gradients: G -> G_norm = G' - X_norm * (G'.X_norm)
     // where G' = G/(X.X)**0.5
     double norm = std::sqrt(this->dot(this));
-    this->multiply(1./norm);
+    this->multiply(1./norm); // NOTE This also transforms Gx, Gy, Gz -> Gx', Gy', Gz'
     for (auto it=pid_gradmap.begin(); it!=pid_gradmap.end(); ++it) {
-        (*it)->multiply(1./norm); // Gx, Gy, Gz -> Gx', Gy', Gz'
         DMap *gx = (*it)->x();
         DMap *gy = (*it)->y();
         DMap *gz = (*it)->z();
         double sx = this->dot(gx); // = (Gx'.X_norm)
         double sy = this->dot(gy); // = (Gy'.X_norm)
         double sz = this->dot(gz); // = (Gz'.X_norm)
-        gx->add(this, -sx); // Gx' - X_norm*(Gx'.X_norm)
-        gy->add(this, -sy); // Gy' - X_norm*(Gy'.X_norm)
-        gz->add(this, -sz); // Gz' - X_norm*(Gz'.X_norm)
+        gx->addIgnoreGradients(this, -sx); // Gx' - X_norm*(Gx'.X_norm)
+        gy->addIgnoreGradients(this, -sy); // Gy' - X_norm*(Gy'.X_norm)
+        gz->addIgnoreGradients(this, -sz); // Gz' - X_norm*(Gz'.X_norm)
     }
 }
 
@@ -147,7 +186,11 @@ void DMap::adapt(AtomicSpectrum *atomic) {
     this->adapt(spec);
     filter = atomic->getCenterType();
     AtomicSpectrum::map_pid_xnkl_t &map_pid_xnkl = atomic->getPowerGradMap();
-    if (map_pid_xnkl.size() > 0) this->adaptPidGradients(map_pid_xnkl);
+    if (map_pid_xnkl.size() > 0) {
+        bool comoving_center = true; // TODO Expose
+        this->adaptPidGradients(
+            atomic->getCenterId(), map_pid_xnkl, comoving_center);
+    }
     this->normalize();
 }
 
@@ -173,18 +216,31 @@ void DMap::adapt(AtomicSpectrum::map_xnkl_t &map_xnkl) {
     this->sort();
 }
 
-void DMap::adaptPidGradients(AtomicSpectrum::map_pid_xnkl_t &map_pid_xnkl) {
+void DMap::adaptPidGradients(
+        int center_pid, 
+        AtomicSpectrum::map_pid_xnkl_t &map_pid_xnkl,
+        bool comoving_center) {
     for (auto it=pid_gradmap.begin(); it!=pid_gradmap.end(); ++it) {
         delete *it;
     }
     pid_gradmap.clear();
+    bool has_center_grads = false;
     for (auto it=map_pid_xnkl.begin(); it!=map_pid_xnkl.end(); ++it) {
         int pid = it->first;
+        if (pid == center_pid) has_center_grads = true;
         AtomicSpectrum::map_xnkl_t &map_xnkl = it->second;
-        GradMap *new_gradmap = new GradMap(pid, filter);
+        GradMap *new_gradmap = new GradMap(pid, "g");
         pid_gradmap.push_back(new_gradmap);
         new_gradmap->adapt(map_xnkl);
     }
+    if (!has_center_grads && comoving_center) {
+        GradMap *cgrad = new GradMap(center_pid, "g");
+        for (auto it=beginGradients(); it!=endGradients(); ++it) {
+            cgrad->add(*it, -1.);
+        }
+        pid_gradmap.push_back(cgrad);
+    }
+    this->sortGradients();
 }
 
 void DMap::convolve(int N, int L) {
@@ -258,6 +314,30 @@ void DMap::adaptCoherent(AtomicSpectrum *atomic) {
     filter = atomic->getCenterType();
 }
 
+DMap *DMap::dotGradLeft(DMap *other, double coeff, double power, DMap *res) {
+    DMap tmp = DMap();
+    // Scalar dot product
+    vec_t *kv = new vec_t(1);
+    dtype_t k = this->dot(other);
+    (*kv)(0) = coeff*std::pow(this->dot(other), power);
+    TypeEncoder::code_t e = 0;
+    tmp.dmap.push_back(channel_t(e, kv));
+    // Gradients
+    for (auto it=beginGradients(); it!=endGradients(); ++it) {
+        DMap *gx = (*it)->x();
+        DMap *gy = (*it)->y();
+        DMap *gz = (*it)->z();
+        dtype_t kx = coeff*power*std::pow(k, power-1)*gx->dot(other);
+        dtype_t ky = coeff*power*std::pow(k, power-1)*gy->dot(other);
+        dtype_t kz = coeff*power*std::pow(k, power-1)*gz->dot(other);
+        GradMap *g = new GradMap((*it)->pid, "g", kx, ky, kz);
+        tmp.pid_gradmap.push_back(g);
+    }
+    // Add to outgoing
+    res->add(&tmp);
+    return res;
+}
+
 void DMap::registerPython() {
     using namespace boost::python;
 
@@ -273,8 +353,10 @@ void DMap::registerPython() {
         .def("listChannels", &DMap::listChannels)
         .def("normalize", &DMap::normalize)
         .def("dot", &DMap::dot)
+        .def("dotGradLeft", &DMap::dotGradLeft, return_value_policy<reference_existing_object>())
         .def("add", onlyAdd)
         .def("add", scaleAdd)
+        .def("val", &DMap::val)
         .def("multiply", &DMap::multiply)
         .def("convolve", &DMap::convolve)
         .def("dotFilter", &DMap::dotFilter);
@@ -290,7 +372,7 @@ GradMap::GradMap()
 
 GradMap::GradMap(int particle_id, std::string filter_type) 
         : pid(particle_id), filter(filter_type) {
-    ;
+    this->zero();
 }
 
 GradMap::~GradMap() {
@@ -304,13 +386,7 @@ void GradMap::clear() {
     gradmap.clear();
 }
 
-void GradMap::multiply(double c) {
-    for (auto it=gradmap.begin(); it!=gradmap.end(); ++it) {
-        (*it)->multiply(c);
-    }
-}
-
-void GradMap::adapt(AtomicSpectrum::map_xnkl_t &map_xnkl) {
+void GradMap::zero() {
     this->clear();
     DMap *dx = new DMap(filter);
     DMap *dy = new DMap(filter);
@@ -318,6 +394,47 @@ void GradMap::adapt(AtomicSpectrum::map_xnkl_t &map_xnkl) {
     gradmap.push_back(dx);
     gradmap.push_back(dy);
     gradmap.push_back(dz);
+}
+
+void GradMap::multiply(double c) {
+    for (auto it=gradmap.begin(); it!=gradmap.end(); ++it) {
+        (*it)->multiply(c);
+    }
+}
+
+void GradMap::add(GradMap *other, double c) {
+    //assert(other->pid == pid);
+    assert(other->gradmap.size() == gradmap.size());
+    for (int i=0; i<gradmap.size(); ++i) {
+        this->get(i)->addIgnoreGradients(other->get(i), c);
+    }
+}
+
+GradMap::GradMap(int particle_id, std::string filter_type, double gx, double gy, double gz)
+        : pid(particle_id), filter(filter_type) {
+    this->zero();
+    DMap *dx = this->get(0);
+    DMap *dy = this->get(1);
+    DMap *dz = this->get(2);
+    DMap::vec_t *vgx = new DMap::vec_t(1);
+    DMap::vec_t *vgy = new DMap::vec_t(1);
+    DMap::vec_t *vgz = new DMap::vec_t(1);
+    (*vgx)(0) = gx;
+    (*vgy)(0) = gy;
+    (*vgz)(0) = gz;
+    DMap::channel_t px(0, vgx);
+    DMap::channel_t py(0, vgy);
+    DMap::channel_t pz(0, vgz);
+    dx->dmap.push_back(px);
+    dy->dmap.push_back(py);
+    dz->dmap.push_back(pz);
+}
+
+void GradMap::adapt(AtomicSpectrum::map_xnkl_t &map_xnkl) {
+    this->zero();
+    DMap *dx = this->get(0);
+    DMap *dy = this->get(1);
+    DMap *dz = this->get(2);
     for (auto it=map_xnkl.begin(); it!=map_xnkl.end(); ++it) {
         TypeEncoder::code_t e1 = ENCODER.encode(it->first.first);
         TypeEncoder::code_t e2 = ENCODER.encode(it->first.second);
@@ -354,10 +471,13 @@ void GradMap::registerPython() {
     using namespace boost::python;
     class_<GradMap, GradMap*>("GradMap", init<int, std::string>())
         .add_property("pid", &GradMap::getPid)
+        .add_property("x", &GradMap::xval)
+        .add_property("y", &GradMap::yval)
+        .add_property("z", &GradMap::zval)
         .def("__getitem__", &GradMap::get, return_value_policy<reference_existing_object>())
-        .def("x", &GradMap::x, return_value_policy<reference_existing_object>())
-        .def("y", &GradMap::y, return_value_policy<reference_existing_object>())
-        .def("z", &GradMap::z, return_value_policy<reference_existing_object>());
+        .def("getX", &GradMap::x, return_value_policy<reference_existing_object>())
+        .def("getY", &GradMap::y, return_value_policy<reference_existing_object>())
+        .def("getZ", &GradMap::z, return_value_policy<reference_existing_object>());
 }
 
 DMapMatrix::DMapMatrix() : is_view(false) {

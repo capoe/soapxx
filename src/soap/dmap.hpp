@@ -83,18 +83,26 @@ struct DMap
     pid_gradmap_t::iterator beginGradients() { return pid_gradmap.begin(); }
     pid_gradmap_t::iterator endGradients() { return pid_gradmap.end(); }
     int size() { return dmap.size(); }
+    dtype_t val() { return (*(dmap[0].second))(0); }
     void sort();
+    void sortGradients();
     void multiply(double c);
     boost::python::list listChannels();
-    double dot(DMap *other);
     void add(DMap *other);
     void add(DMap *other, double c);
+    void addIgnoreGradients(DMap *other, double c);
+    void addGradients(DMap *other, double c);
+    double dot(DMap *other);
     double dotFilter(DMap *other);
+    DMap *dotGradLeft(DMap *other, double coeff, double power, DMap *res);
     void normalize();
     void convolve(int N, int L);
     void adapt(AtomicSpectrum *spectrum);
     void adapt(AtomicSpectrum::map_xnkl_t &map_xnkl);
-    void adaptPidGradients(AtomicSpectrum::map_pid_xnkl_t &map_pid_xnkl);
+    void adaptPidGradients(
+        int center_pid, 
+        AtomicSpectrum::map_pid_xnkl_t &map_pid_xnkl, 
+        bool comoving_center=true);
     void adaptCoherent(AtomicSpectrum *spectrum);
     std::string getFilter() { return filter; }
     dmap_t dmap;
@@ -114,16 +122,21 @@ struct GradMap
     typedef std::vector<DMap*> gradmap_t;
     GradMap();
     GradMap(int particle_id, std::string filter);
+    GradMap(int particle_id, std::string filter, double gx, double gy, double gz);
     ~GradMap();
     void clear();
-    void normalize();
+    void zero();
     void multiply(double c);
+    void add(GradMap *other, double scale);
     int getPid() { return pid; }
     void adapt(AtomicSpectrum::map_xnkl_t &map_xnkl);
     DMap *get(int idx) { assert(idx <= 2); return gradmap[idx]; }
     DMap *x() { return gradmap[0]; }
     DMap *y() { return gradmap[1]; }
     DMap *z() { return gradmap[2]; }
+    DMap::dtype_t xval() { return gradmap[0]->val(); }
+    DMap::dtype_t yval() { return gradmap[1]->val(); }
+    DMap::dtype_t zval() { return gradmap[2]->val(); }
     gradmap_t gradmap;
     int pid;
     std::string filter;
