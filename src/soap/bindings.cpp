@@ -4,6 +4,7 @@
 #include "npfga.hpp"
 #include "kernel.hpp"
 #include "dmap.hpp"
+#include "cgraph.hpp"
 
 namespace soap {
 
@@ -37,6 +38,10 @@ BOOST_PYTHON_MODULE(_soapxx)
 
     soap::npfga::FNode::registerPython();
     soap::npfga::FGraph::registerPython();
+    soap::cgraph::CGraph::registerPython();
+    soap::cgraph::CNode::registerPython();
+    soap::cgraph::CNodeFactory::registerAll();
+    soap::cgraph::OptimizerFactory::registerAll();
 
     soap::TopKernelFactory::registerAll();
     soap::BaseKernelFactory::registerAll();

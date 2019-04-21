@@ -67,6 +67,27 @@ boost::python::make_tuple( i, j ) ] );
 		return m;
 	}
 
+	/** Convert a numpy vector to a ublas one. */
+	template< typename T >
+	boost::numeric::ublas::vector< T > &
+	numpy_to_ublas(
+		boost::python::object a,
+		boost::numeric::ublas::vector< T > & m )
+	{
+		boost::python::tuple shape( a.attr("shape") );
+		if( boost::python::len( shape ) != 1 )
+		{
+			throw std::logic_error( "numeric::array must have 1 dimension for conversion to ub::vector" );
+		}
+		m.resize(
+			boost::python::extract< unsigned >( shape[0] ));
+		for( unsigned i = 0; i < m.size(); ++i )
+		{
+				m(i) = boost::python::extract< T >( a[i] );
+		}
+		return m;
+	}
+
 	/** Convert a ublas matrix to a numpy matrix. */
 	template< typename T >
 	boost::python::object
@@ -86,6 +107,27 @@ boost::python::make_tuple( i, j ) ] );
 			{
 				result[ boost::python::make_tuple( i, j ) ] = m( i, j );
 			}
+		}
+
+		return result;
+	}
+
+	/** Convert a ublas vector to a numpy array. */
+	template< typename T >
+	boost::python::object
+	ublas_to_numpy(
+		const boost::numeric::ublas::vector< T > & m )
+	{
+		//create a numpy array to put it in
+		boost::python::object result(
+			array_type(
+				boost::python::make_tuple( m.size() ),
+				dtype ) );
+
+		//copy the elements
+		for( unsigned i = 0; m.size() != i; ++i )
+		{
+            result[i] = m(i);
 		}
 
 		return result;
