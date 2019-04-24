@@ -11,6 +11,7 @@
 #include "soap/base/objectfactory.hpp"
 #include "soap/options.hpp"
 #include "soap/types.hpp"
+#include "soap/base/rng.hpp"
 
 namespace soap { namespace cgraph {
 namespace ub = boost::numeric::ublas;
@@ -21,6 +22,7 @@ typedef ub::vector<dtype_t> vec_t;
 typedef ub::matrix<dtype_t> mat_t;
 
 struct CNode;
+struct CNodeGrads;
 struct CNodeParams
 {
     CNodeParams(int id, CNode *node);
@@ -30,6 +32,7 @@ struct CNodeParams
     int nParams() { return params.size(); }
     void setConstant(bool set_constant) { constant = set_constant; }
     bool isConstant() { return constant; }
+    bpy::object valsNumpy(std::string np_dtype);
     void setParamsNumpy(bpy::object &np_params, std::string np_dtype);
     void setParams(vec_t &arg_params) { params = arg_params; }
     // DATA
@@ -46,6 +49,7 @@ struct CGraphParams
     CGraphParams() : id_counter(0) {;}
     ~CGraphParams();
     CNodeParams *allocate(CNode *node);
+    void add(CNodeGrads &grads, dtype_t coeff);
     int nParamSets() { return paramslist.size(); }
     int nParams();
     paramslist_t::iterator begin() { return paramslist.begin(); }
@@ -95,17 +99,23 @@ struct CGraph
     nodelist_t::iterator endNodes() { return nodes.end(); }
     nodelist_t::iterator beginDerived() { return derived.begin(); }
     nodelist_t::iterator endDerived() { return derived.end(); }
-    nodelist_t::iterator beginObjectives() { return objectives.begin(); }
-    nodelist_t::iterator endObjectives() { return objectives.end(); }
     nodelist_t::iterator beginOutputs() { return outputs.begin(); }
     nodelist_t::iterator endOutputs() { return outputs.end(); }
     nodelist_t::iterator beginTargets() { return targets.begin(); }
     nodelist_t::iterator endTargets() { return targets.end(); }
+    nodelist_t::iterator beginObjectives() { return objectives.begin(); }
+    nodelist_t::iterator endObjectives() { return objectives.end(); }
+    nodelist_t &getNodes() { return nodes; }
+    nodelist_t &getDerived() { return derived; }
+    nodelist_t &getOutputs() { return outputs; }
+    nodelist_t &getTargets() { return targets; }
+    nodelist_t &getObjectives() { return objectives; }
     CGraphParams::paramslist_t::iterator beginParams() { return params.begin(); }
     CGraphParams::paramslist_t::iterator endParams() { return params.end(); }
     CGraphParams &getParams() { return params; }
     int size() { return nodes.size(); }
     void allocateParams();
+    void allocateParamsFor(CNode *node);
     void evaluateNumpy(bpy::object &npy_X, std::string np_dtype);
     void evaluate(mat_t &X);
     void feedNumpy(bpy::object &npy_X, bpy::object &npy_y, 
@@ -122,17 +132,38 @@ struct CGraph
     CGraphParams params;
 };
 
+struct CNodeDropout
+{
+    CNodeDropout(int seed);
+    ~CNodeDropout() { if (rng) delete rng; }
+    void affect(bpy::list &py_nodelist, 
+        bpy::object &np_probs, std::string np_dtype);
+    void sample();
+    static void registerPython();
+    // DATA
+    soap::base::RNG *rng;
+    vec_t probs_active;
+    CGraph::nodelist_t nodelist;
+};
+
 struct CNode
 {
     CNode() : op("?"), active(true), params(NULL), params_constant(false) {;}
     virtual ~CNode();
+    virtual void linkPython(bpy::list &py_nodelist);
     virtual void link(CGraph::nodelist_t &nodelist);
     virtual void resize(int n_slots);
     virtual int nParams() { return 0; }
     bpy::object valsNumpy(std::string np_dtype);
     CNodeGrads &getGrads() { return grads; }
     CNodeParams *getParams() { return params; }
+    bpy::list getInputsPython();
     void setParamsConstant(bool set_constant);
+    void setBranchActive(bool set_active);
+    bool isActive() { return active; }
+    void setActive(bool set_active) { active = set_active; }
+    virtual void zero();
+    virtual void resetAndResize();
     virtual void feed(mat_t &X, int colidx);
     virtual void evaluate();
     std::string getOp() { return op; }
@@ -148,11 +179,11 @@ struct CNode
     CNodeGrads grads;
 };
 
-struct CNodeIdentity : public CNode
+struct CNodeInput : public CNode
 {
-    CNodeIdentity() { op = "identity"; }
+    CNodeInput() { op = "input"; }
     int nParams() { return 0; }
-    void evaluate() { return; }
+    void evaluate();
 };
 
 struct CNodeSigmoid : public CNode
@@ -166,6 +197,48 @@ struct CNodeLinear : public CNode
 {   
     CNodeLinear() { op = "linear"; }
     int nParams() { return inputs.size()+1; }
+    void evaluate();
+};
+
+struct CNodeExp : public CNode
+{
+    CNodeExp() { op = "exp"; }
+    int nParams() { return 1; }
+    void evaluate();
+};
+
+struct CNodeLog : public CNode
+{
+    CNodeLog() { op = "log"; }
+    int nParams() { return 0; }
+    void evaluate();
+};
+
+struct CNodeMod : public CNode
+{
+    CNodeMod() { op = "mod"; }
+    int nParams() { return 0; }
+    void evaluate();
+};
+
+struct CNodePow : public CNode
+{
+    CNodePow() { op = "pow"; }
+    int nParams() { return 1; }
+    void evaluate();
+};
+
+struct CNodeMult : public CNode
+{
+    CNodeMult() { op = "mult"; }
+    int nParams() { return 0; }
+    void evaluate();
+};
+
+struct CNodeDiv : public CNode
+{
+    CNodeDiv() { op = "div"; }
+    int nParams() { return 0; }
     void evaluate();
 };
 
@@ -213,21 +286,34 @@ struct OptimizationAlgorithm
     OptimizationAlgorithm() : op("?") {;}
     virtual ~OptimizationAlgorithm() {;}
     virtual void fit(CGraph *cgraph, mat_t &X, mat_t &Y) = 0;
+    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate) = 0;
     std::string op;
 };
 
-struct AdaGrad : public OptimizationAlgorithm
+struct OptAdaGrad : public OptimizationAlgorithm
 {
-    AdaGrad() { op = "adagrad"; }
+    OptAdaGrad() { op = "adagrad"; }
     void fit(CGraph *cgraph, mat_t &X, mat_t &Y);
+    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate);
+};
+
+struct OptSteep : public OptimizationAlgorithm
+{
+    OptSteep() { op = "steep"; }
+    void fit(CGraph *cgraph, mat_t &X, mat_t &Y);
+    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate);
 };
 
 struct Optimizer
 {
+    Optimizer();
     Optimizer(Options *arg_options);
     ~Optimizer();
     void fitNumpy(CGraph *cgraph, bpy::object &np_X, bpy::object &np_Y,
         std::string np_dtype_X, std::string np_dtype_Y);
+    void stepNumpy(CGraph *cgraph, bpy::object &np_X, bpy::object &np_Y,
+        std::string np_dtype_X, std::string np_dtype_Y,
+        int n_steps, double rate);
     static void registerPython();
     // DATA
     OptimizationAlgorithm *optalg;

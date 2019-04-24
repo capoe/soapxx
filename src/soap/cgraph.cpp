@@ -43,14 +43,14 @@ void CGraph::clear() {
 }
 
 CNode *CGraph::addInput() {
-    CNode *new_node = CNodeCreator().create("identity");
+    CNode *new_node = CNodeCreator().create("input");
     inputs.push_back(new_node);
     nodes.push_back(new_node);
     return new_node;
 }
 
 CNode *CGraph::addTarget() {
-    CNode *new_node = CNodeCreator().create("identity");
+    CNode *new_node = CNodeCreator().create("input");
     targets.push_back(new_node);
     return new_node;
 }
@@ -117,6 +117,10 @@ void CGraph::allocateParams() {
         << params.nParamSets() << " sets" << std::endl;
 }
 
+void CGraph::allocateParamsFor(CNode *node) {
+    params.allocate(node);
+}
+
 void CGraph::evaluateNumpy(bpy::object &np_X, std::string np_dtype_X) {
     mat_t X;
     soap::linalg::numpy_converter npc_X(np_dtype_X.c_str());
@@ -180,20 +184,31 @@ void CGraph::registerPython() {
     using namespace boost::python;
     class_<CGraph, CGraph*>("CGraph", init<>())
         .add_property("size", &CGraph::size)
-        .add_property("nodes", 
-            range<return_value_policy<reference_existing_object>>(
-            &CGraph::beginNodes, &CGraph::endNodes))
-        .add_property("objectives", 
-            range<return_value_policy<reference_existing_object>>(
-            &CGraph::beginObjectives, &CGraph::endObjectives))
-        .add_property("outputs", 
-            range<return_value_policy<reference_existing_object>>(
-            &CGraph::beginOutputs, &CGraph::endOutputs))
+        //.add_property("nodes", 
+        //    range<return_value_policy<reference_existing_object>>(
+        //    &CGraph::beginNodes, &CGraph::endNodes))
+        //.add_property("objectives", 
+        //    range<return_value_policy<reference_existing_object>>(
+        //    &CGraph::beginObjectives, &CGraph::endObjectives))
+        //.add_property("outputs", 
+        //    range<return_value_policy<reference_existing_object>>(
+        //    &CGraph::beginOutputs, &CGraph::endOutputs))
         .add_property("params", 
             range<return_value_policy<reference_existing_object>>(
             &CGraph::beginParams, &CGraph::endParams))
+        .def("nodes", &CGraph::getNodes, 
+            return_value_policy<reference_existing_object>())
+        .def("derived", &CGraph::getDerived, 
+            return_value_policy<reference_existing_object>())
+        .def("outputs", &CGraph::getOutputs, 
+            return_value_policy<reference_existing_object>())
+        .def("targets", &CGraph::getTargets, 
+            return_value_policy<reference_existing_object>())
+        .def("objectives", &CGraph::getObjectives, 
+            return_value_policy<reference_existing_object>())
         .def("__len__", &CGraph::size)
         .def("allocateParams", &CGraph::allocateParams)
+        .def("allocateParamsFor", &CGraph::allocateParamsFor)
         .def("evaluate", &CGraph::evaluateNumpy)
         .def("feed", &CGraph::feedNumpy)
         .def("addInput", &CGraph::addInput, 
@@ -209,6 +224,7 @@ void CGraph::registerPython() {
     class_<CNodeParams, CNodeParams*>("CNodeParams", no_init)
         .add_property("size", &CNodeParams::nParams)
         .add_property("id", &CNodeParams::getId)
+        .def("vals", &CNodeParams::valsNumpy)
         .def("set", &CNodeParams::setParamsNumpy)
         .def("node", &CNodeParams::getNode, 
             return_value_policy<reference_existing_object>());
@@ -216,6 +232,39 @@ void CGraph::registerPython() {
         .def(vector_indexing_suite<CGraph::nodelist_t>());
     class_<CGraphParams::paramslist_t>("ParamsList")
         .def(vector_indexing_suite<CGraphParams::paramslist_t>());
+    class_<CNodeDropout, CNodeDropout*>("CNodeDropout", init<int>())
+        .def("affect", &CNodeDropout::affect)
+        .def("sample", &CNodeDropout::sample);
+}
+
+CNodeDropout::CNodeDropout(int seed) {
+    rng = new soap::base::RNG();
+    srand(seed);
+    rng->init(rand(), rand(), rand(), rand());
+}
+
+void CNodeDropout::affect(bpy::list &py_nodelist, 
+        bpy::object &np_probs, std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    npc.numpy_to_ublas<dtype_t>(np_probs, probs_active);
+    nodelist.clear();
+    for (int i=0; i<boost::python::len(py_nodelist); ++i) {
+        nodelist.push_back(boost::python::extract<CNode*>(py_nodelist[i]));
+    }
+    assert(probs_active.size() == nodelist.size() 
+        && "Inconsistent arg dimensions in CNodeDropout::affect");
+}
+
+void CNodeDropout::sample() {
+    int i = 0;
+    for (auto it=nodelist.begin(); it!=nodelist.end(); ++it, ++i) {
+        double p = rng->uniform();
+        if (p <= probs_active[i]) {
+            (*it)->setActive(true);
+        } else {
+            (*it)->setActive(false);
+        }
+    }
 }
 
 // ===========
@@ -236,6 +285,11 @@ CNodeParams::~CNodeParams() {
 void CNodeParams::setParamsNumpy(bpy::object &np_params, std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
     npc.numpy_to_ublas<dtype_t>(np_params, params);
+}
+
+bpy::object CNodeParams::valsNumpy(std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    return npc.ublas_to_numpy<dtype_t>(params);
 }
 
 // ============
@@ -266,6 +320,31 @@ CNodeParams *CGraphParams::allocate(CNode *node) {
     return new_params;
 }
 
+void CGraphParams::add(CNodeGrads &other, dtype_t scale) {
+    auto it = this->begin();
+    auto jt = other.begin();
+    while (jt != other.end()) {
+        //GLOG() << (*it)->id << ":" << jt->first << std::endl;
+        if (it == this->end() || jt->first < (*it)->id) {
+            assert(false);
+        } else if (jt->first == (*it)->id) {
+            // TODO Accelerate >>>
+            mat_t &gradvec = *(jt->second);
+            vec_t &parvec = (*it)->params;
+            assert(gradvec.size1() == 1);
+            assert(gradvec.size2() == parvec.size());
+            for (int i=0; i<parvec.size(); ++i) {
+                parvec(i) += scale*gradvec(0,i);
+            }
+            // <<< Accelerate TODO
+            ++it;
+            ++jt;
+        } else if (jt->first > (*it)->id) {
+            ++it;
+        }
+    }
+}
+
 // =====
 // CNODE
 // =====
@@ -285,6 +364,11 @@ void CNode::resize(int n_slots) {
     //vals = vec_t(n_slots, 0.);
 }
 
+void CNode::zero() {
+    for (int i=0; i<vals.size(); ++i) vals(i) = 0.;
+    grads.clear();
+}
+
 void CNode::feed(mat_t &X, int colidx) {
     if (vals.size() != X.size1()) this->resize(X.size1());
     for (int i=0; i<X.size1(); ++i) {
@@ -301,9 +385,29 @@ void CNode::evaluate() {
     assert(false);
 }
 
+void CNode::linkPython(bpy::list &py_nodelist) {
+    CGraph::nodelist_t nodelist;
+    for (int i=0; i<boost::python::len(py_nodelist); ++i) {
+        nodelist.push_back(boost::python::extract<CNode*>(py_nodelist[i]));
+    }
+    this->link(nodelist);
+}
+
 void CNode::link(CGraph::nodelist_t &nodelist) {
+    inputs.clear();
     for (auto it=nodelist.begin(); it!=nodelist.end(); ++it) 
         inputs.push_back(*it);
+}
+
+void CNode::setBranchActive(bool set_active) {
+    this->setActive(set_active);
+    for (auto par: inputs) par->setBranchActive(set_active);
+}
+
+bpy::list CNode::getInputsPython() {
+    bpy::list list;
+    for (auto par: inputs) list.append(par);
+    return list;
 }
 
 void CNode::registerPython() {
@@ -315,26 +419,45 @@ void CNode::registerPython() {
         .def("params", &CNode::getParams, 
             return_value_policy<reference_existing_object>())
         .def("setParamsConstant", &CNode::setParamsConstant)
+        .def("inputs", &CNode::getInputsPython)
+        .def("link", &CNode::linkPython)
+        .def("setBranchActive", &CNode::setBranchActive)
+        .def("evaluate", &CNode::evaluate)
+        .add_property("active", &CNode::isActive, &CNode::setActive)
         .add_property("size", &CNode::inputSize)
         .add_property("op", &CNode::getOp);
     class_<CNodeGrads, CNodeGrads*>("CNodeGrads", init<>())
         .def("vals", &CNodeGrads::valsNumpy)
         .def("listParamSets", &CNodeGrads::listParamSets);
-    class_<Optimizer, Optimizer*>("Optimizer", init<Options*>()) 
+    class_<Optimizer, Optimizer*>("CGraphOptimizer", init<Options*>()) 
+        .def(init<>())
+        .def("step", &Optimizer::stepNumpy)
         .def("fit", &Optimizer::fitNumpy);
 }
 
+void CNodeInput::evaluate() {
+    if (active) ;
+    else {
+        this->zero();
+    }
+}
+
 void CNodeSigmoid::evaluate() {
-    vec_t &p = params->params;
     // Allocate output
     int n_slots = vals.size();
     if (inputs.size() > 0) {
         n_slots = inputs[0]->vals.size();
         this->resize(n_slots);
     }
+    this->zero();
+    // Check activity
+    if (!active) {
+        return;
+    }
+    // Evaluate output
+    vec_t &p = params->params;
     int n_params = p.size();
     int n_inputs = inputs.size();
-    // Evaluate output
     for (int a=0; a<n_slots; ++a) {
         vals(a) = -p(n_inputs); // Last parameter is bias
     }
@@ -350,7 +473,6 @@ void CNodeSigmoid::evaluate() {
         slot_scale(a) = vals(a)*(1-vals(a));
     }
     // Evaluate gradients
-    grads.clear();
     if (!params->isConstant()) {
         mat_t &pgrads = *(grads.allocate(params->id, n_slots, n_params));
         for (int i=0; i<n_inputs; ++i) {
@@ -369,17 +491,119 @@ void CNodeSigmoid::evaluate() {
     }
 }
 
-void CNodeLinear::evaluate() {
-    vec_t &p = params->params;
+void CNode::resetAndResize() {
     // Allocate output
     int n_slots = vals.size();
     if (inputs.size() > 0) {
         n_slots = inputs[0]->vals.size();
         this->resize(n_slots);
     }
+    this->zero();
+}
+
+void CNodeExp::evaluate() {
+    this->resetAndResize();
+    if (!active) return;
+    vec_t &p = params->params;
+    vec_t &x = inputs[0]->vals;
+    for (int a=0; a<vals.size(); ++a) {
+        vals(a) = std::exp(p(0)*x(a));
+    }
+    if (!params->isConstant()) {
+        mat_t &pgrads = *(grads.allocate(params->id, vals.size(), p.size()));
+        for (int a=0; a<vals.size(); ++a) {
+            pgrads(a,0) = x(a)*vals(a);
+        }
+    }
+    vec_t grad_slot_scale = p(0)*vals;
+    grads.add(inputs[0]->grads, grad_slot_scale);
+}
+
+void CNodeLog::evaluate() {
+    this->resetAndResize();
+    if (!active) return;
+    vec_t &x = inputs[0]->vals;
+    vec_t grad_slot_scale = vec_t(vals.size(), 0.);
+    for (int a=0; a<vals.size(); ++a) {
+        vals(a) = std::log(x(a));
+        grad_slot_scale(a) = 1./x(a);
+    }
+    grads.add(inputs[0]->grads, grad_slot_scale);
+}
+
+void CNodeMod::evaluate() {
+    this->resetAndResize();
+    if (!active) return;
+    vec_t &x = inputs[0]->vals;
+    vec_t grad_slot_scale = vec_t(vals.size(), 0.);
+    for (int a=0; a<vals.size(); ++a) {
+        vals(a) = std::abs(x(a));
+        grad_slot_scale(a) = (x(a) >= 0.) ? 1. : -1.;
+    }
+    grads.add(inputs[0]->grads, grad_slot_scale);
+}
+
+void CNodePow::evaluate() {
+    this->resetAndResize();
+    if (!active) return;
+    vec_t &p = params->params;
+    vec_t &x = inputs[0]->vals;
+    vec_t grad_slot_scale = vec_t(vals.size(), 0.);
+    for (int a=0; a<vals.size(); ++a) {
+        vals(a) = std::pow(x(a), p(0));
+        if (std::abs(x(a)) < 1e-20) grad_slot_scale(a) = 0.; // TODO Define eps=1e-20
+        else grad_slot_scale(a) = p(0)*std::pow(x(a), p(0)-1);
+    }
+    if (!params->isConstant()) {
+        mat_t &pgrads = *(grads.allocate(params->id, vals.size(), p.size()));
+        for (int a=0; a<vals.size(); ++a) {
+            if (x(a) < 1e-20) pgrads(a,0) = 0.; // TODO Define eps=1e-20
+            else pgrads(a,0) = vals(a)*std::log(x(a));
+        }
+    }
+    grads.add(inputs[0]->grads, grad_slot_scale);
+}
+
+void CNodeMult::evaluate() {
+    this->resetAndResize();
+    if (!active) return;
+    vec_t &u = inputs[0]->vals;
+    vec_t &v = inputs[1]->vals;
+    for (int a=0; a<vals.size(); ++a) {
+        vals(a) = u(a)*v(a);
+    }
+    grads.add(inputs[0]->grads, v);
+    grads.add(inputs[1]->grads, u);
+}
+
+void CNodeDiv::evaluate() {
+    this->resetAndResize();
+    if (!active) return;
+    vec_t &u = inputs[0]->vals;
+    vec_t &v = inputs[1]->vals;
+    vec_t su = vec_t(vals.size(), 0.);
+    vec_t sv = vec_t(vals.size(), 0.);
+    for (int a=0; a<vals.size(); ++a) {
+        vals(a) = u(a)/v(a);
+        su(a) = 1./v(a);
+        sv(a) = -su(a)*vals(a);
+    }
+    grads.add(inputs[0]->grads, su);
+    grads.add(inputs[1]->grads, sv);
+}
+
+void CNodeLinear::evaluate() {
+    // Allocate output
+    int n_slots = vals.size();
+    this->resetAndResize();
+    // Check activity
+    if (!active) {
+        return;
+    }
+    // Evaluate output
+    vec_t &p = params->params;
     int n_params = p.size();
     int n_inputs = inputs.size();
-    // Evaluate output
     for (int a=0; a<vals.size(); ++a) {
         vals(a) = p(inputs.size()); // Last parameter is y-intercept
     }
@@ -390,7 +614,6 @@ void CNodeLinear::evaluate() {
         }
     }
     // Evaluate gradients
-    grads.clear();
     if (!params->isConstant()) {
         mat_t &pgrads = *(grads.allocate(params->id, vals.size(), p.size()));
         for (int i=0; i<inputs.size(); ++i) {
@@ -416,9 +639,13 @@ void CNodeMSE::evaluate() {
     assert(inputs[1]->vals.size() == n_slots && "MSE: Input vector size mismatch");
     // Allocate output
     this->resize(1);
-    vals(0) = 0.;
-    vec_t grad_slot_scale(n_slots, 0.);
+    this->zero();
+    // Check activity
+    if (!active) {
+        return;
+    }
     // Evaluate output
+    vec_t grad_slot_scale(n_slots, 0.);
     vec_t &y0 = inputs[0]->vals;
     vec_t &y1 = inputs[1]->vals;
     for (int a=0; a<n_slots; ++a) {
@@ -428,7 +655,6 @@ void CNodeMSE::evaluate() {
     vals *= 1./n_slots;
     grad_slot_scale *= 2./n_slots;
     // Evaluate gradients
-    grads.clear();
     grads.add(inputs[0]->grads, grad_slot_scale);
     grads.sumSlots();
 }
@@ -563,6 +789,10 @@ bpy::object CNodeGrads::valsNumpy(int pid, std::string np_dtype) {
 // OPTIMIZATION
 // ============
 
+Optimizer::Optimizer() : options(NULL) {
+    optalg = OptimizerCreator().create("steep");
+}
+
 Optimizer::Optimizer(Options *arg_options) : options(arg_options) {
     optalg = OptimizerCreator().create(options->get<std::string>("opt.type"));
 }
@@ -582,22 +812,81 @@ void Optimizer::fitNumpy(CGraph *cgraph, bpy::object &np_X, bpy::object &np_Y,
     optalg->fit(cgraph, X, Y);
 }
 
-void AdaGrad::fit(CGraph *cgraph, mat_t &X, mat_t &Y) {
-    GLOG() << "Starting " << op << " optimization" << std::endl;
-    cgraph->feed(X, Y);
-    CGraphParams &params = cgraph->getParams();
-    GLOG() << "CGraph with " << cgraph->size() << " nodes, " 
-        << params.nParamSets() << " parameter sets" << std::endl;
+void Optimizer::stepNumpy(CGraph *cgraph, bpy::object &np_X, bpy::object &np_Y,
+        std::string np_dtype_X, std::string np_dtype_Y,
+        int n_steps, double rate) {
+    mat_t X;
+    soap::linalg::numpy_converter npc_X(np_dtype_X.c_str());
+    npc_X.numpy_to_ublas<dtype_t>(np_X, X);
+    mat_t Y;
+    soap::linalg::numpy_converter npc_Y(np_dtype_Y.c_str());
+    npc_Y.numpy_to_ublas<dtype_t>(np_Y, Y);
+    optalg->step(cgraph, X, Y, n_steps, rate);
+}
+
+void OptAdaGrad::fit(CGraph *cgraph, mat_t &X, mat_t &Y) {
+    assert(false && "TODO");
+    // Resample -> python
+    // Step
+    // - Feed
+    // - Cumulative gradient magnitude -> rates
+    // - Update parameters params->add(grads, rates)
+    // Momentum?
+    // 
+    // Implement drop-out (= forward zeros in CNode::evaluate)
+    // Flag nodes for deletion -> adaptive graph
+}
+
+void OptAdaGrad::step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate) {
+    GLOG.toggleSilence();
+    for (int n=0; n<n_steps; ++n) {
+        cgraph->feed(X, Y);
+        CGraphParams &params = cgraph->getParams();
+        for (auto it=cgraph->beginObjectives(); it!=cgraph->endObjectives(); ++it) {
+            CNode *eps = *it;
+            GLOG() << "Objective = " << eps->vals(0) << std::endl;
+            CNodeGrads &grads = eps->getGrads();
+            params.add(grads, -1.*rate);
+        }
+    }
+    GLOG.toggleSilence();
     for (auto it=cgraph->beginObjectives(); it!=cgraph->endObjectives(); ++it) {
         CNode *eps = *it;
-        CNodeGrads &grads = eps->getGrads();
-        GLOG() << "Objective node with " << grads.sparse_grads.size() 
-            << " gradient sets" << std::endl;
+        GLOG() << "+ " << n_steps << " steps : " << eps->getOp() << " = " << eps->vals(0) << std::endl;
+    }
+}
+
+void OptSteep::fit(CGraph *cgraph, mat_t &X, mat_t &Y) {
+    assert(false && "TODO");
+}
+
+void OptSteep::step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate) {
+    GLOG.toggleSilence();
+    for (int n=0; n<n_steps; ++n) {
+        cgraph->feed(X, Y);
+        CGraphParams &params = cgraph->getParams();
+        for (auto it=cgraph->beginObjectives(); it!=cgraph->endObjectives(); ++it) {
+            CNode *eps = *it;
+            GLOG() << "Objective = " << eps->vals(0) << std::endl;
+            CNodeGrads &grads = eps->getGrads();
+            params.add(grads, -1.*rate);
+        }
+    }
+    GLOG.toggleSilence();
+    for (auto it=cgraph->beginObjectives(); it!=cgraph->endObjectives(); ++it) {
+        CNode *eps = *it;
+        GLOG() << "+ " << n_steps << " steps : " << eps->getOp() << " = " << eps->vals(0) << std::endl;
     }
 }
 
 void CNodeFactory::registerAll(void) {
-	CNodeCreator().Register<CNodeIdentity>("identity");
+	CNodeCreator().Register<CNodeInput>("input");
+	CNodeCreator().Register<CNodeExp>("exp");
+	CNodeCreator().Register<CNodeLog>("log");
+	CNodeCreator().Register<CNodeMod>("mod");
+	CNodeCreator().Register<CNodePow>("pow");
+	CNodeCreator().Register<CNodeMult>("mult");
+	CNodeCreator().Register<CNodeDiv>("div");
 	CNodeCreator().Register<CNodeLinear>("linear");
 	CNodeCreator().Register<CNodeSigmoid>("sigmoid");
 	CNodeCreator().Register<CNodePearson>("pearson");
@@ -605,7 +894,8 @@ void CNodeFactory::registerAll(void) {
 }
 
 void OptimizerFactory::registerAll(void) {
-    OptimizerCreator().Register<AdaGrad>("adagrad");
+    OptimizerCreator().Register<OptAdaGrad>("adagrad");
+    OptimizerCreator().Register<OptSteep>("steep");
 }
 
 }}

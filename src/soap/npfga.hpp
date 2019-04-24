@@ -20,7 +20,7 @@ class FNode;
 typedef double dtype_t;
 typedef ub::matrix<dtype_t> matrix_t;
 typedef ub::zero_matrix<dtype_t> zero_matrix_t;
-typedef std::vector<FNode*> node_list_t;
+typedef std::vector<FNode*> nodelist_t;
 
 struct Instruction
 {
@@ -130,12 +130,14 @@ class FNode
     FNodeDimension &getDimension() { return dimension; }
     int getGenerationIdx() { return generation_idx; }
     bool isRoot() { return is_root; }
-    node_list_t getRoots();
+    nodelist_t getRoots();
     bpy::list getRootsPython();
     bool isDimensionless() { return dimension.isDimensionless(); }
     bool notNegative() { return !maybe_negative; }
     bool notZero() { return !maybe_zero; }
     double &getValue() { return value; }
+    double getPrefactor() { return prefactor; }
+    double getUnitPrefactor() { return unit_prefactor; }
     double getConfidence() { return stats.q; }
     double getCovariance() { return stats.cov; }
     void setConfidence(double q_value) { stats.q = q_value; }
@@ -443,8 +445,9 @@ class FGraph
     // Methods
     void addRootNode(std::string varname, std::string varplus,
         std::string varzero, double unit_prefactor, std::string unit);
-    node_list_t &getRoots() { return root_fnodes; }
+    nodelist_t &getRoots() { return root_fnodes; }
     bpy::list getRootsPython();
+    nodelist_t &getFNodes() { return fnodes; }
     void registerNewNode(FNode *new_node);
     void generate();
     void addLayer(std::string uops, std::string bops);

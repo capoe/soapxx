@@ -370,26 +370,26 @@ FNode::~FNode() {
     if (instruction) delete instruction;
 }
 
-node_list_t FNode::getRoots() {
+nodelist_t FNode::getRoots() {
     std::map<FNode*, bool> roots;
     if (is_root) {
         roots[this] = true;
     } else {
         for (auto par: parents) {
-            node_list_t list = par->getRoots();
+            nodelist_t list = par->getRoots();
             for (auto node: list) {
                 roots[node] = true;
             }
         }
     }
-    node_list_t out;
+    nodelist_t out;
     for (auto it=roots.begin(); it!=roots.end(); ++it)
         out.push_back(it->first);
     return out;
 }
 
 boost::python::list FNode::getRootsPython() {
-    node_list_t roots = this->getRoots();
+    nodelist_t roots = this->getRoots();
     boost::python::list list;
     for (auto root: roots) list.append(root);
     return list;
@@ -465,6 +465,8 @@ void FNode::registerPython() {
     class_<FNode, FNode*>("FNode", init<>())
         .def("getRoots", &FNode::getRootsPython)
         .def("getParents", &FNode::getParentsPython)
+        .add_property("prefactor", &FNode::getPrefactor)
+        .add_property("unit_prefactor", &FNode::getUnitPrefactor)
         .add_property("generation", &FNode::getGenerationIdx)
         .add_property("is_root", &FNode::isRoot)
         .add_property("tag", &FNode::calculateTag)
@@ -686,7 +688,7 @@ void FGraph::addRootNode(std::string varname, std::string maybe_neg,
 }
 
 boost::python::list FGraph::getRootsPython() {
-    node_list_t roots = this->getRoots();
+    nodelist_t roots = this->getRoots();
     boost::python::list list;
     for (auto root: roots) list.append(root);
     return list;
@@ -891,6 +893,10 @@ void FGraph::registerPython() {
         .def(init<>())
         .def("addRootNode", &FGraph::addRootNode)
         .def("getRoots", &FGraph::getRootsPython)
+        .def("roots", &FGraph::getRoots,
+            return_value_policy<reference_existing_object>())
+        .def("nodes", &FGraph::getFNodes,
+            return_value_policy<reference_existing_object>())
         .def("addLayer", &FGraph::addLayer)
         .def("generate", &FGraph::generate)
         .def("save", &FGraph::save)
@@ -900,7 +906,9 @@ void FGraph::registerPython() {
             &FGraph::beginNodes, &FGraph::endNodes))
         .def("evaluateSingleNode", &FGraph::evaluateSingleNodeNumpy)
         .def("apply", &FGraph::applyNumpy)
-        .def("applyAndCorrelate", &FGraph::applyAndCorrelateNumpy);
+        .def("applyAndCorrelate", &FGraph::applyAndCorrelateNumpy);    
+    class_<nodelist_t>("FNodeList")
+        .def(vector_indexing_suite<nodelist_t>());
 }
 
 void zscoreMatrixByColumn(matrix_t &X) {

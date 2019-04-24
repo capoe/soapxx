@@ -9,7 +9,8 @@ add_subdirectory(soapy)
 
 # COMPILE SOURCES
 get_directory_property(LINALG_LOCAL_SOURCES DIRECTORY linalg DEFINITION LOCAL_SOURCES)
-set(LOCAL_SOURCES ${LOCAL_SOURCES} ${LINALG_LOCAL_SOURCES})
+get_directory_property(BASE_LOCAL_SOURCES DIRECTORY base DEFINITION LOCAL_SOURCES)
+set(LOCAL_SOURCES ${LOCAL_SOURCES} ${LINALG_LOCAL_SOURCES} ${BASE_LOCAL_SOURCES})
 message("Sources: soap/")
 foreach(item ${LOCAL_SOURCES})
     message(STATUS " o " ${item})
