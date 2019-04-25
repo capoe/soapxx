@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <fstream>
 #include <numeric>
+#include <boost/format.hpp>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
@@ -12,7 +13,6 @@
 #include "soap/globals.hpp"
 #include "soap/linalg/numpy.hpp"
 #include "soap/linalg/operations.hpp"
-#include "boost/format.hpp"
 
 namespace soap { namespace cgraph {
 
@@ -44,6 +44,7 @@ void CGraph::clear() {
 
 CNode *CGraph::addInput() {
     CNode *new_node = CNodeCreator().create("input");
+    allocateParamsFor(new_node);
     inputs.push_back(new_node);
     nodes.push_back(new_node);
     return new_node;
@@ -51,6 +52,7 @@ CNode *CGraph::addInput() {
 
 CNode *CGraph::addTarget() {
     CNode *new_node = CNodeCreator().create("input");
+    allocateParamsFor(new_node);
     targets.push_back(new_node);
     return new_node;
 }
@@ -67,6 +69,7 @@ CNode *CGraph::addNodePython(std::string op, boost::python::list &py_nodelist) {
 CNode *CGraph::addNode(std::string op, CGraph::nodelist_t &nodelist) {
     CNode *new_node = CNodeCreator().create(op);
     new_node->link(nodelist);
+    allocateParamsFor(new_node);
     nodes.push_back(new_node);
     derived.push_back(new_node);
     return new_node;
@@ -84,6 +87,7 @@ CNode *CGraph::addOutputPython(std::string op, boost::python::list &py_nodelist)
 CNode *CGraph::addOutput(std::string op, CGraph::nodelist_t &nodelist) {
     CNode *new_node = CNodeCreator().create(op);
     new_node->link(nodelist);
+    allocateParamsFor(new_node);
     nodes.push_back(new_node);
     derived.push_back(new_node);
     outputs.push_back(new_node);
@@ -102,6 +106,7 @@ CNode *CGraph::addObjectivePython(std::string op, boost::python::list &py_nodeli
 CNode *CGraph::addObjective(std::string op, CGraph::nodelist_t &nodelist) {
     CNode *new_node = CNodeCreator().create(op);
     new_node->link(nodelist);
+    allocateParamsFor(new_node);
     objectives.push_back(new_node);
     return new_node;
 }
@@ -180,6 +185,15 @@ void CGraph::feed(mat_t &X, mat_t &Y) {
     GLOG() << std::endl;
 }
 
+void CGraph::bypassInactiveNodes() {
+    nodelist_t derived_out;
+    for (auto it=beginDerived(); it!=endDerived(); ++it) {
+        if ((*it)->isActive()) derived_out.push_back(*it);
+        else ;
+    }
+    derived = derived_out;
+}
+
 void CGraph::registerPython() {
     using namespace boost::python;
     class_<CGraph, CGraph*>("CGraph", init<>())
@@ -198,6 +212,8 @@ void CGraph::registerPython() {
             &CGraph::beginParams, &CGraph::endParams))
         .def("nodes", &CGraph::getNodes, 
             return_value_policy<reference_existing_object>())
+        .def("inputs", &CGraph::getInputs, 
+            return_value_policy<reference_existing_object>())
         .def("derived", &CGraph::getDerived, 
             return_value_policy<reference_existing_object>())
         .def("outputs", &CGraph::getOutputs, 
@@ -207,6 +223,7 @@ void CGraph::registerPython() {
         .def("objectives", &CGraph::getObjectives, 
             return_value_policy<reference_existing_object>())
         .def("__len__", &CGraph::size)
+        .def("bypassInactiveNodes", &CGraph::bypassInactiveNodes)
         .def("allocateParams", &CGraph::allocateParams)
         .def("allocateParamsFor", &CGraph::allocateParamsFor)
         .def("evaluate", &CGraph::evaluateNumpy)
@@ -324,19 +341,18 @@ void CGraphParams::add(CNodeGrads &other, dtype_t scale) {
     auto it = this->begin();
     auto jt = other.begin();
     while (jt != other.end()) {
-        //GLOG() << (*it)->id << ":" << jt->first << std::endl;
         if (it == this->end() || jt->first < (*it)->id) {
             assert(false);
         } else if (jt->first == (*it)->id) {
-            // TODO Accelerate >>>
             mat_t &gradvec = *(jt->second);
             vec_t &parvec = (*it)->params;
-            assert(gradvec.size1() == 1);
-            assert(gradvec.size2() == parvec.size());
+            assert(gradvec.size2() == 1);
+            assert(gradvec.size1() == parvec.size());
             for (int i=0; i<parvec.size(); ++i) {
-                parvec(i) += scale*gradvec(0,i);
+                parvec(i) += scale*gradvec(i,0);
             }
-            // <<< Accelerate TODO
+            //soap::linalg::linalg_axpy(scale, gradvec, 
+            //    parvec, parvec.size(), 1, 1, 0, 0);
             ++it;
             ++jt;
         } else if (jt->first > (*it)->id) {
@@ -369,6 +385,17 @@ void CNode::zero() {
     grads.clear();
 }
 
+void CNode::resetAndResize() {
+    // Allocate output
+    if (inputs.size() > 0) {
+        int n_slots = vals.size();
+        int n_slots_req = inputs[0]->vals.size();
+        if (n_slots != n_slots_req)
+            this->resize(n_slots_req);
+    }
+    this->zero();
+}
+
 void CNode::feed(mat_t &X, int colidx) {
     if (vals.size() != X.size1()) this->resize(X.size1());
     for (int i=0; i<X.size1(); ++i) {
@@ -394,6 +421,9 @@ void CNode::linkPython(bpy::list &py_nodelist) {
 }
 
 void CNode::link(CGraph::nodelist_t &nodelist) {
+    if (params != NULL)
+        assert(nodelist.size() == inputs.size() 
+            && "Relink only permitted with same number of inputs.");
     inputs.clear();
     for (auto it=nodelist.begin(); it!=nodelist.end(); ++it) 
         inputs.push_back(*it);
@@ -427,6 +457,7 @@ void CNode::registerPython() {
         .add_property("size", &CNode::inputSize)
         .add_property("op", &CNode::getOp);
     class_<CNodeGrads, CNodeGrads*>("CNodeGrads", init<>())
+        .add_property("size", &CNodeGrads::size)
         .def("vals", &CNodeGrads::valsNumpy)
         .def("listParamSets", &CNodeGrads::listParamSets);
     class_<Optimizer, Optimizer*>("CGraphOptimizer", init<Options*>()) 
@@ -478,27 +509,17 @@ void CNodeSigmoid::evaluate() {
         for (int i=0; i<n_inputs; ++i) {
             vec_t &vi = inputs[i]->vals;
             for (int a=0; a<n_slots; ++a) {
-                pgrads(a,i) = slot_scale(a)*vi(a);
+                pgrads(i,a) = slot_scale(a)*vi(a);
             }
         }
         for (int a=0; a<n_slots; ++a) {
-            pgrads(a,n_inputs) = slot_scale(a)*1.; // Last parameter is bias
+            pgrads(n_inputs,a) = slot_scale(a)*1.; // Last parameter is bias
         }
     }
     for (int i=0; i<n_inputs; ++i) {
         vec_t grad_slot_scale = p(i)*slot_scale;
         grads.add(inputs[i]->grads, grad_slot_scale);
     }
-}
-
-void CNode::resetAndResize() {
-    // Allocate output
-    int n_slots = vals.size();
-    if (inputs.size() > 0) {
-        n_slots = inputs[0]->vals.size();
-        this->resize(n_slots);
-    }
-    this->zero();
 }
 
 void CNodeExp::evaluate() {
@@ -512,7 +533,7 @@ void CNodeExp::evaluate() {
     if (!params->isConstant()) {
         mat_t &pgrads = *(grads.allocate(params->id, vals.size(), p.size()));
         for (int a=0; a<vals.size(); ++a) {
-            pgrads(a,0) = x(a)*vals(a);
+            pgrads(0,a) = x(a)*vals(a);
         }
     }
     vec_t grad_slot_scale = p(0)*vals;
@@ -557,8 +578,8 @@ void CNodePow::evaluate() {
     if (!params->isConstant()) {
         mat_t &pgrads = *(grads.allocate(params->id, vals.size(), p.size()));
         for (int a=0; a<vals.size(); ++a) {
-            if (x(a) < 1e-20) pgrads(a,0) = 0.; // TODO Define eps=1e-20
-            else pgrads(a,0) = vals(a)*std::log(x(a));
+            if (x(a) < 1e-20) pgrads(0,a) = 0.; // TODO Define eps=1e-20
+            else pgrads(0,a) = vals(a)*std::log(x(a));
         }
     }
     grads.add(inputs[0]->grads, grad_slot_scale);
@@ -593,15 +614,11 @@ void CNodeDiv::evaluate() {
 }
 
 void CNodeLinear::evaluate() {
-    // Allocate output
-    int n_slots = vals.size();
     this->resetAndResize();
-    // Check activity
-    if (!active) {
-        return;
-    }
+    if (!active) return;
     // Evaluate output
     vec_t &p = params->params;
+    int n_slots = vals.size();
     int n_params = p.size();
     int n_inputs = inputs.size();
     for (int a=0; a<vals.size(); ++a) {
@@ -619,17 +636,44 @@ void CNodeLinear::evaluate() {
         for (int i=0; i<inputs.size(); ++i) {
             vec_t &vi = inputs[i]->vals;
             for (int a=0; a<vals.size(); ++a) {
-                pgrads(a,i) = vi(a);
+                pgrads(i,a) = vi(a);
             }
         }
         for (int a=0; a<vals.size(); ++a) {
-            pgrads(a,inputs.size()) = 1.; // Last parameter is bias
+            pgrads(inputs.size(),a) = 1.; // Last parameter is bias
         }
     }
     for (int i=0; i<n_inputs; ++i) {
         dtype_t grad_scale = p(i);
         grads.add(inputs[i]->grads, grad_scale);
     }
+}
+
+void CNodeXENT::evaluate() {
+    int n_inputs = inputs.size();
+    assert(n_inputs == 2 && "XENT node only allows two inputs = [output,target]");
+    int n_slots = inputs[0]->vals.size();
+    assert(inputs[1]->vals.size() == n_slots && "XENT: Input vector size mismatch");
+    // Allocate output
+    this->resize(1);
+    this->zero();
+    // Check activity
+    if (!active) {
+        return;
+    }
+    // Evaluate output
+    vec_t grad_slot_scale(n_slots, 0.);
+    vec_t &yp = inputs[0]->vals;
+    vec_t &yt = inputs[1]->vals;
+    for (int a=0; a<n_slots; ++a) {
+        vals(0) += yt(a)*std::log(yp(a)) + (1.-yt(a))*std::log(1-yp(a));
+        grad_slot_scale(a) = yt(a)/yp(a) - (1.-yt(a))/(1.-yp(a));
+    }
+    vals *= -1./n_slots;
+    grad_slot_scale *= -1./n_slots;
+    // Evaluate gradients
+    grads.add(inputs[0]->grads, grad_slot_scale);
+    grads.sumSlots();
 }
 
 void CNodeMSE::evaluate() {
@@ -686,10 +730,10 @@ void CNodeGrads::sort() {
 void CNodeGrads::sumSlots() {
     for (auto it=begin(); it!=end(); ++it) {
         mat_t *full = it->second;
-        mat_t *reduced = new mat_t(1, full->size2(), 0.);
+        mat_t *reduced = new mat_t(full->size1(), 1, 0.);
         for (int i=0; i<full->size1(); ++i) {
             for (int j=0; j<full->size2(); ++j) {
-                (*reduced)(0,j) += (*full)(i,j);
+                (*reduced)(i,0) += (*full)(i,j);
             }
         }
         delete full;
@@ -703,11 +747,27 @@ void CNodeGrads::add(CNodeGrads &other, vec_t &slot_scale) {
     auto jt = other.begin();
     while (jt != other.end()) {
         if (it == this->end() || jt->first < it->first) {
-            mat_t *add_mat = new mat_t(jt->second->size1(), jt->second->size2());
+            int n_rows = jt->second->size1();
+            int n_cols = jt->second->size2();
             // TODO Accelerate >>>
-            for (int i=0; i<jt->second->size1(); ++i) {
-                for (int j=0; j<jt->second->size2(); ++j) {
-                    (*add_mat)(i,j) = slot_scale(i)*(*(jt->second))(i,j);
+            // Manual code:
+            // >>> mat_t *add_mat = new mat_t(n_rows, n_cols, 0);
+            // >>> for (int i=0; i<jt->second->size2(); ++i) {
+            // >>>     for (int j=0; j<jt->second->size1(); ++j) {
+            // >>>         (*add_mat)(j,i) = slot_scale(i)*(*(jt->second))(j,i);
+            // >>>     }
+            // >>> }
+            mat_t *add_mat;
+            if (n_rows > n_cols) {
+                add_mat = new mat_t(n_rows, n_cols, 0);
+                for (int j=0; j<n_cols; ++j) {
+                    soap::linalg::linalg_axpy(slot_scale[j], *(jt->second), 
+                        *add_mat, n_rows, n_cols, n_cols, j, j);
+                }
+            } else {
+                add_mat = new mat_t(n_rows, n_cols);
+                for (int i=0; i<n_rows; ++i) {
+                    soap::linalg::linalg_mul(*(jt->second), slot_scale, *add_mat, n_cols, i*n_cols, 0, i*n_cols);
                 }
             }
             // <<< Accelerate TODO
@@ -715,9 +775,26 @@ void CNodeGrads::add(CNodeGrads &other, vec_t &slot_scale) {
             ++jt;
         } else if (jt->first == it->first) {
             // TODO Accelerate >>>
-            for (int i=0; i<jt->second->size1(); ++i) {
-                for (int j=0; j<jt->second->size2(); ++j) {
-                    (*(it->second))(i,j) += slot_scale(i)*(*(jt->second))(i,j);
+            // Manual code:
+            // >>> for (int i=0; i<jt->second->size2(); ++i) {
+            // >>>     for (int j=0; j<jt->second->size1(); ++j) {
+            // >>>         (*(it->second))(j,i) += slot_scale(i)*(*(jt->second))(j,i);
+            // >>>     }
+            // >>> }
+            int n_rows = jt->second->size1();
+            int n_cols = jt->second->size2();
+            if (n_rows > n_cols) {
+                for (int j=0; j<n_cols; ++j) {
+                    soap::linalg::linalg_axpy(slot_scale[j], *(jt->second), 
+                        *(it->second), n_rows, n_cols, n_cols, j, j);
+                }
+            } else {
+                vec_t tmp(n_cols);
+                for (int i=0; i<n_rows; ++i) {
+                    soap::linalg::linalg_mul(*(jt->second), slot_scale, tmp, 
+                        n_cols, i*n_cols, 0, 0);
+                    soap::linalg::linalg_axpy(1., tmp, *(it->second),
+                        n_cols, 1, 1, 0, i*n_cols);
                 }
             }
             // <<< Accelerate TODO
@@ -739,12 +816,23 @@ void CNodeGrads::add(CNodeGrads &other, dtype_t scale) {
     auto jt = other.begin();
     while (jt != other.end()) {
         if (it == this->end() || jt->first < it->first) {
-            mat_t *add_mat = new mat_t(jt->second->size1(), jt->second->size2());
-            *add_mat = scale*(*(jt->second));
+            // TODO Accelerate >>>
+            // Manual code:
+            // >>> mat_t *add_mat = new mat_t(jt->second->size1(), jt->second->size2());
+            // >>> *add_mat = scale*(*(jt->second));
+            mat_t *add_mat = new mat_t(jt->second->size1(), jt->second->size2(), 0.);
+            soap::linalg::linalg_axpy(scale, *(jt->second), *add_mat, 
+                add_mat->size1()*add_mat->size2(), 1, 1, 0, 0);
+            // <<< Accelerate TODO
             add_entries.push_back(paramset_t(jt->first, add_mat));
             ++jt;
         } else if (jt->first == it->first) {
-            (*(it->second)) += scale*(*(jt->second));
+            // TODO Accelerate >>>
+            // Manual code:
+            // >>> (*(it->second)) += scale*(*(jt->second));
+            soap::linalg::linalg_axpy(scale, *(jt->second), *(it->second), 
+                it->second->size1()*it->second->size2(), 1, 1, 0, 0);
+            // <<< Accelerate TODO
             ++it;
             ++jt;
         } else if (jt->first > it->first) {
@@ -759,7 +847,7 @@ void CNodeGrads::add(CNodeGrads &other, dtype_t scale) {
 
 mat_t *CNodeGrads::allocate(int params_id, int n_slots, int n_params) {
     assert(sparse_id_map.find(params_id) == sparse_id_map.end());
-    mat_t *new_mat = new mat_t(n_slots, n_params, 0.);   
+    mat_t *new_mat = new mat_t(n_params, n_slots, 0.);   
     sparse_grads.push_back(paramset_t(params_id, new_mat));
     sparse_id_map[params_id] = true;
     this->sort();
@@ -767,7 +855,7 @@ mat_t *CNodeGrads::allocate(int params_id, int n_slots, int n_params) {
 }
 
 void CNodeGrads::listParamSets() {
-    GLOG << "Dependent on " << sparse_grads.size() << " parameter sets" << std::endl;
+    GLOG() << "Dependent on " << sparse_grads.size() << " parameter sets" << std::endl;
     for (auto it=begin(); it!=end(); ++it) {
         GLOG() << " - PID=" << it->first << " Size=[" << it->second->size1()
             << "x" << it->second->size2() << "]" << std::endl;
@@ -832,8 +920,6 @@ void OptAdaGrad::fit(CGraph *cgraph, mat_t &X, mat_t &Y) {
     // - Cumulative gradient magnitude -> rates
     // - Update parameters params->add(grads, rates)
     // Momentum?
-    // 
-    // Implement drop-out (= forward zeros in CNode::evaluate)
     // Flag nodes for deletion -> adaptive graph
 }
 
@@ -891,6 +977,7 @@ void CNodeFactory::registerAll(void) {
 	CNodeCreator().Register<CNodeSigmoid>("sigmoid");
 	CNodeCreator().Register<CNodePearson>("pearson");
 	CNodeCreator().Register<CNodeMSE>("mse");
+	CNodeCreator().Register<CNodeXENT>("xent");
 }
 
 void OptimizerFactory::registerAll(void) {

@@ -59,9 +59,10 @@ struct CGraphParams
     paramslist_t paramslist;
 };
 
-struct CNodeGrads
+class CNodeGrads
 {
-    typedef std::pair<int,mat_t*> paramset_t; // <- mat_t: [n_slots x n_params]
+  public:
+    typedef std::pair<int,mat_t*> paramset_t; // <- mat_t: [n_params x n_slots]
     typedef std::vector<paramset_t> sparse_grad_t;
     CNodeGrads() {;}
     ~CNodeGrads();
@@ -71,11 +72,13 @@ struct CNodeGrads
     void listParamSets();
     void clear();
     void sort();
+    int size() { return sparse_grads.size(); }
     void sumSlots();
     void add(CNodeGrads &other, vec_t &slot_scale);
     void add(CNodeGrads &other, dtype_t scale);
     bpy::object valsNumpy(int pid, std::string np_dtype);
     static void registerPython();
+  private:
     // DATA
     std::map<int, bool> sparse_id_map; // NOTE Only used for sanity checks
     sparse_grad_t sparse_grads;
@@ -106,6 +109,7 @@ struct CGraph
     nodelist_t::iterator beginObjectives() { return objectives.begin(); }
     nodelist_t::iterator endObjectives() { return objectives.end(); }
     nodelist_t &getNodes() { return nodes; }
+    nodelist_t &getInputs() { return inputs; }
     nodelist_t &getDerived() { return derived; }
     nodelist_t &getOutputs() { return outputs; }
     nodelist_t &getTargets() { return targets; }
@@ -114,6 +118,7 @@ struct CGraph
     CGraphParams::paramslist_t::iterator endParams() { return params.end(); }
     CGraphParams &getParams() { return params; }
     int size() { return nodes.size(); }
+    void bypassInactiveNodes();
     void allocateParams();
     void allocateParamsFor(CNode *node);
     void evaluateNumpy(bpy::object &npy_X, std::string np_dtype);
@@ -251,6 +256,13 @@ struct CNodePearson : public CNode
 struct CNodeMSE : public CNode 
 {
     CNodeMSE() { op = "mse"; }
+    int nParams() { return 0; }
+    void evaluate();
+};
+
+struct CNodeXENT : public CNode 
+{
+    CNodeXENT() { op = "xent"; }
     int nParams() { return 0; }
     void evaluate();
 };

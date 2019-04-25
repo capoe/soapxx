@@ -122,6 +122,24 @@ void linalg_mul(
     vdMul(mkl_n, pA, pb, pC);
 }
 
+void linalg_mul(
+    ub::matrix<double> &A, 
+    ub::vector<double> &b,
+    ub::vector<double> &c,
+    int n,
+    int off_A,
+    int off_b,
+    int off_c) {
+    MKL_INT mkl_n = n;
+    double *pA = const_cast<double*>(&A.data().begin()[0]);
+    double *pb = const_cast<double*>(&b.data()[0]);
+    double *pc = const_cast<double*>(&c.data().begin()[0]);
+    pA += off_A;
+    pb += off_b;
+    pc += off_c;
+    vdMul(mkl_n, pA, pb, pc);
+}
+
 void linalg_sub(
     ub::matrix<double> &A, 
     ub::vector<double> &b,
@@ -138,6 +156,57 @@ void linalg_sub(
     pb += off_b;
     pC += off_C;
     vdSub(mkl_n, pA, pb, pC);
+}
+
+void linalg_axpy(
+    double a,
+    ub::matrix<double> &X, 
+    ub::matrix<double> &Y,
+    int n,
+    int incr_X,
+    int incr_Y,
+    int off_X,
+    int off_Y) {
+    MKL_INT mkl_n = n;
+    double *pX = const_cast<double*>(&X.data().begin()[0]);
+    double *pY = const_cast<double*>(&Y.data().begin()[0]);
+    pX += off_X;
+    pY += off_Y;
+    cblas_daxpy(mkl_n, a, pX, incr_X, pY, incr_Y);
+}
+
+void linalg_axpy(
+    double a,
+    ub::vector<double> &X, 
+    ub::matrix<double> &Y,
+    int n,
+    int incr_X,
+    int incr_Y,
+    int off_X,
+    int off_Y) {
+    MKL_INT mkl_n = n;
+    double *pX = const_cast<double*>(&X.data()[0]);
+    double *pY = const_cast<double*>(&Y.data().begin()[0]);
+    pX += off_X;
+    pY += off_Y;
+    cblas_daxpy(mkl_n, a, pX, incr_X, pY, incr_Y);
+}
+
+void linalg_axpy(
+    double a,
+    ub::matrix<double> &X, 
+    ub::vector<double> &Y,
+    int n,
+    int incr_X,
+    int incr_Y,
+    int off_X,
+    int off_Y) {
+    MKL_INT mkl_n = n;
+    double *pX = const_cast<double*>(&X.data().begin()[0]);
+    double *pY = const_cast<double*>(&Y.data()[0]);
+    pX += off_X;
+    pY += off_Y;
+    cblas_daxpy(mkl_n, a, pX, incr_X, pY, incr_Y);
 }
 
 void linalg_matrix_block_dot(

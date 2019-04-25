@@ -19,7 +19,6 @@ def test_linear():
     c2 = cgraph.addInput()
     c3 = cgraph.addInput()
     c4 = cgraph.addNode("linear", [c1,c2,c3])
-    cgraph.allocateParams()
     c4.params().set(w, "float64") 
     cgraph.evaluate(X, str(X.dtype))
     y = c4.vals("float64")
@@ -41,7 +40,6 @@ def test_operators():
     X1 = np.random.uniform(size=(15,1))
     X2 = np.random.uniform(-1,1,size=(15,1))
     X = np.concatenate([X1,X2], axis=1)
-    cgraph.allocateParams()
     for n in range(3):
         for params in cgraph.params:
             rnd_vals = np.random.uniform(-1, 1, size=(params.size,))
@@ -90,7 +88,6 @@ def test_operators_grad():
         c6 = cgraph.addNode("linear", [cu,c5])
         t1 = cgraph.addTarget()
         o1 = cgraph.addObjective("mse", [c6,t1])
-        cgraph.allocateParams()
         for node in cgraph.nodes():
             node.params().set(
                 np.random.uniform(size=(node.params().size,)), 
@@ -119,8 +116,8 @@ def test_operators_grad():
                 cgraph.feed(X, Y, str(X.dtype), str(Y.dtype))
                 mseh = o1.vals("float64")[0]
                 g4i_num = (mseh-mse)/h
-                log << "  %-4s / %-7s %+1.4e == %+1.4e ?" % (operator, cgrad.op, g4i_num, g4[0,i]) << log.flush
-                assert_equal(g4[0][i]-g4i_num, 0.0, 1e-4)
+                log << "  %-4s / %-7s %+1.4e == %+1.4e ?" % (operator, cgrad.op, g4i_num, g4[i,0]) << log.flush
+                assert_equal(g4[i,0]-g4i_num, 0.0, 1e-4)
                 log << log.endl
 
 def test_sigmoid():
@@ -132,7 +129,6 @@ def test_sigmoid():
     c2 = cgraph.addInput()
     c3 = cgraph.addInput()
     c4 = cgraph.addNode("sigmoid", [c1,c2,c3])
-    cgraph.allocateParams()
     c4.params().set(w, "float64") 
     cgraph.evaluate(X, str(X.dtype))
     y = c4.vals("float64")
@@ -148,7 +144,6 @@ def test_misc():
     c3 = cgraph.addInput()
     c4 = cgraph.addNode("sigmoid", [c1,c2,c3])
     c5 = cgraph.addNode("linear", [c1,c4])
-    cgraph.allocateParams()
     X = np.random.uniform(size=(15,3))
     w4 = np.array([0.,-1.,0.2,0.1])
     w5 = np.array([-0.1,0.5,1.2])
@@ -175,7 +170,6 @@ def test_mse():
     c4 = cgraph.addNode("sigmoid", [c1,c2,c3])
     t1 = cgraph.addTarget()
     o1 = cgraph.addObjective("mse", [c4,t1])
-    cgraph.allocateParams()
     c4.params().set(w, "float64") 
     cgraph.feed(X, Y, str(X.dtype), str(Y.dtype))
     y = c4.vals("float64")
@@ -185,6 +179,70 @@ def test_mse():
     assert_equal(np.max(np.abs(y-y_check)), 0.0, 1e-10)
     assert_equal(mse_check-mse, 0.0, 1e-10)
     log << log.endl
+
+def test_xent():
+    log << log.mg << "%-17s" % "<test_xent>" << log.flush
+    w = np.array([0.,-1.,0.2,0.1])
+    X = np.random.uniform(size=(15,3))
+    Y = 1.*np.random.randint(0, 2, size=(15,1))
+    cgraph = soap.CGraph()
+    c1 = cgraph.addInput()
+    c2 = cgraph.addInput()
+    c3 = cgraph.addInput()
+    c4 = cgraph.addNode("sigmoid", [c1,c2,c3])
+    t1 = cgraph.addTarget()
+    o1 = cgraph.addObjective("xent", [c4,t1])
+    c4.params().set(w, "float64") 
+    cgraph.feed(X, Y, str(X.dtype), str(Y.dtype))
+    y = c4.vals("float64")
+    y_check = 1./(1. + np.exp(-X.dot(w[0:3])-w[3]))
+    xent = o1.vals("float64")
+    xent_check = -1./Y.shape[0]*np.sum(Y[:,0]*np.log(y_check) + (1.-Y[:,0])*np.log(1.-y_check))
+    assert_equal(np.max(np.abs(y-y_check)), 0.0, 1e-10)
+    assert_equal(xent_check-xent, 0.0, 1e-10)
+    log << log.endl
+
+def test_xent_grad():
+    log << log.mg << "%-17s" % "<test_xent_grad>" << log.endl
+    w = np.array([0.,-1.,0.2,0.1])
+    X = np.random.uniform(size=(15,3))
+    Y = np.random.uniform(size=(15,1))
+    cgraph = soap.CGraph()
+    c1 = cgraph.addInput()
+    c2 = cgraph.addInput()
+    c3 = cgraph.addInput()
+    c4 = cgraph.addNode("linear", [c1,c2,c3])
+    c5 = cgraph.addNode("sigmoid", [c2,c3,c4])
+    c6 = cgraph.addNode("sigmoid", [c4,c5])
+    t1 = cgraph.addTarget()
+    o1 = cgraph.addObjective("xent", [c6,t1])
+    for node in cgraph.nodes():
+        node.params().set(
+            np.random.uniform(size=(node.params().size,)), 
+            "float64")
+    cgrads = [c4,c5]
+    for i in range(2):  
+        cgrad = cgrads[i]
+        # Evaluate graph 
+        cgrad.params().set(w, "float64") 
+        cgraph.feed(X, Y, str(X.dtype), str(Y.dtype))
+        xent = o1.vals("float64")[0]
+        # Analytical gradients
+        p4_id = cgrad.params().id
+        o1.grads().listParamSets()
+        g4 = o1.grads().vals(p4_id, "float64");
+        # Numerical gradients
+        h = 1e-8
+        for i in range(len(w)):
+            wh = np.copy(w)
+            wh[i] += h
+            cgrad.params().set(wh, "float64")
+            cgraph.feed(X, Y, str(X.dtype), str(Y.dtype))
+            xenth = o1.vals("float64")[0]
+            g4i_num = (xenth-xent)/h
+            log << "  %-7s %+1.4e == %+1.4e ?" % (cgrad.op, g4i_num, g4[i,0]) << log.flush
+            assert_equal(g4[i][0]-g4i_num, 0.0, 1e-7)
+            log << log.endl
 
 def test_mse_grad():
     log << log.mg << "%-17s" % "<test_mse_grad>" << log.endl
@@ -200,7 +258,6 @@ def test_mse_grad():
     c6 = cgraph.addNode("linear", [c4,c5])
     t1 = cgraph.addTarget()
     o1 = cgraph.addObjective("mse", [c6,t1])
-    cgraph.allocateParams()
     for node in cgraph.nodes():
         node.params().set(
             np.random.uniform(size=(node.params().size,)), 
@@ -227,8 +284,8 @@ def test_mse_grad():
             cgraph.feed(X, Y, str(X.dtype), str(Y.dtype))
             mseh = o1.vals("float64")[0]
             g4i_num = (mseh-mse)/h
-            log << "  %-7s %+1.4e == %+1.4e ?" % (cgrad.op, g4i_num, g4[0,i]) << log.flush
-            assert_equal(g4[0][i]-g4i_num, 0.0, 1e-7)
+            log << "  %-7s %+1.4e == %+1.4e ?" % (cgrad.op, g4i_num, g4[i,0]) << log.flush
+            assert_equal(g4[i][0]-g4i_num, 0.0, 1e-7)
             log << log.endl
 
 if __name__ == "__main__":
@@ -236,8 +293,10 @@ if __name__ == "__main__":
     test_sigmoid()
     test_misc()
     test_mse()
+    test_xent()
     test_operators()
     test_mse_grad()
+    test_xent_grad()
     test_operators_grad()
     log << "All passed." << log.endl
 

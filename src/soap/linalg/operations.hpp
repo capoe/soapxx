@@ -62,6 +62,15 @@ namespace soap { namespace linalg {
         int off_b,
         int off_C);
 
+    void linalg_mul(
+        ub::matrix<double> &A, 
+        ub::vector<double> &b,
+        ub::vector<double> &c,
+        int n,
+        int off_A,
+        int off_b,
+        int off_c);
+
     // Component-wise subtraction
     void linalg_sub(
         ub::matrix<double> &A, 
@@ -71,6 +80,36 @@ namespace soap { namespace linalg {
         int off_A,
         int off_b,
         int off_C);
+
+    void linalg_axpy(
+        double a,
+        ub::matrix<double> &X, 
+        ub::matrix<double> &Y,
+        int n,
+        int incr_X,
+        int incr_Y,
+        int off_X,
+        int off_Y);
+
+    void linalg_axpy(
+        double a,
+        ub::vector<double> &X, 
+        ub::matrix<double> &Y,
+        int n,
+        int incr_X,
+        int incr_Y,
+        int off_X,
+        int off_Y);
+
+    void linalg_axpy(
+        double a,
+        ub::matrix<double> &X, 
+        ub::vector<double> &Y,
+        int n,
+        int incr_X,
+        int incr_Y,
+        int off_X,
+        int off_Y);
 
     // Matrix product between a small mxn block A and large NxK matrix B,
     // where A is excised from a larger block-diagonal MxN matrix AA. The
