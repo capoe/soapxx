@@ -56,7 +56,9 @@ BOOST_PYTHON_MODULE(_soapxx)
     soap::BlockLaplacian::registerPython();
     soap::Proto::registerPython();
 
-    boost::python::def("silence", &soap::GLOG_SILENCE);
-    boost::python::def("verbose", &soap::GLOG_VERBOSE);
+    boost::python::def("silent", &soap::GLOG_SET_SILENT);
+    boost::python::def("verbose", &soap::GLOG_SET_VERBOSE);
     boost::python::def("toggle_logger", &soap::GLOG_TOGGLE_SILENCE);
+    boost::python::def("is_silent", &soap::GLOG_IS_SILENT);
+    boost::python::def("silence", &soap::GLOG_SILENCE); // <- Deprecate
 }

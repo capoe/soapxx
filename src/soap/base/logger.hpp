@@ -27,6 +27,7 @@ public:
                 _writePreface(true) {}
 
     void silence() { _silent = true; }
+    void setSilent(bool set_silent) { _silent = set_silent; }
     void toggleSilence() { _silent = !_silent; }
 
         // sets the log level (needed for output)
@@ -166,6 +167,11 @@ public:
             _silent = true;
             dynamic_cast<LogBuffer*>(rdbuf())->silence();
         }
+        void setSilent(bool set_silent) {
+            _silent = set_silent;
+            dynamic_cast<LogBuffer*>(rdbuf())->setSilent(set_silent);
+        }
+        bool isSilent() { return _silent; }
         void toggleSilence() {
             _silent = !_silent;
             dynamic_cast<LogBuffer*>(rdbuf())->toggleSilence();

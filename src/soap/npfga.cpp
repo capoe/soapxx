@@ -912,23 +912,23 @@ void FGraph::registerPython() {
 }
 
 void zscoreMatrixByColumn(matrix_t &X) {
-    // NOTE Slow manual routine. See below for fast version.
-    //for (int j=0; j<X.size2(); ++j) {
-    //    double x_avg = 0.0;
-    //    double x2_avg = 0.0;
-    //    for (int i=0; i<X.size1(); ++i) {
-    //        x_avg += X(i,j);
-    //        x2_avg += X(i,j)*X(i,j);
-    //    }
-    //    x_avg /= X.size1();
-    //    x2_avg /= X.size1();
-    //    double x_std = std::sqrt(x2_avg - x_avg*x_avg);
-    //    if (x_std != x_std) x_std = 0.0; // if arg of sqrt < 0 TODO Fix numerical issues here
-    //    for (int i=0; i<X.size1(); ++i) {
-    //        X(i,j) -= x_avg;
-    //        X(i,j) /= (x_std + 1e-20); // TODO Make epsilon=1e-20 an option
-    //    }
-    //}
+    // Manual routine (without MKL)
+    // >>> for (int j=0; j<X.size2(); ++j) {
+    // >>>     double x_avg = 0.0;
+    // >>>     double x2_avg = 0.0;
+    // >>>     for (int i=0; i<X.size1(); ++i) {
+    // >>>         x_avg += X(i,j);
+    // >>>         x2_avg += X(i,j)*X(i,j);
+    // >>>     }
+    // >>>     x_avg /= X.size1();
+    // >>>     x2_avg /= X.size1();
+    // >>>     double x_std = std::sqrt(x2_avg - x_avg*x_avg);
+    // >>>     if (x_std != x_std) x_std = 0.0; // i.e. if arg of sqrt < 0
+    // >>>     for (int i=0; i<X.size1(); ++i) {
+    // >>>         X(i,j) -= x_avg;
+    // >>>         X(i,j) /= (x_std + 1e-20);
+    // >>>     }
+    // >>> }
     int n_rows = X.size1();
     int n_cols = X.size2();
     ub::vector<double> avg(n_cols, 0.0);
@@ -956,7 +956,7 @@ void correlateMatrixColumnsPearson(matrix_t &X_in, matrix_t &Y_in, matrix_t &cov
     zscoreMatrixByColumn(X_in);
     zscoreMatrixByColumn(Y_in);
     // NOTE Slow ublas routine. See faster versino below.
-    //cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_in), Y_in);
+    // >>> cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_in), Y_in);
     soap::linalg::linalg_matrix_dot(X_in, Y_in, cov_out, 1./X_in.size1(), 0.0, true, false);
 }
 
@@ -972,7 +972,7 @@ void correlateMatrixColumnsSpearman(matrix_t &X_in, matrix_t &Y_in, matrix_t &co
     zscoreMatrixByColumn(X_ranks);
     zscoreMatrixByColumn(Y_ranks);
     // NOTE Slow ublas routine. See faster versino below.
-    //cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_ranks), Y_ranks);
+    // >>> cov_out = 1./X_in.size1()*ub::prod(ub::trans(X_ranks), Y_ranks);
     soap::linalg::linalg_matrix_dot(X_ranks, Y_ranks, cov_out, 1./X_in.size1(), 0.0, true, false);
 }
 

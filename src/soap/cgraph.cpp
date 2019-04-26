@@ -198,15 +198,6 @@ void CGraph::registerPython() {
     using namespace boost::python;
     class_<CGraph, CGraph*>("CGraph", init<>())
         .add_property("size", &CGraph::size)
-        //.add_property("nodes", 
-        //    range<return_value_policy<reference_existing_object>>(
-        //    &CGraph::beginNodes, &CGraph::endNodes))
-        //.add_property("objectives", 
-        //    range<return_value_policy<reference_existing_object>>(
-        //    &CGraph::beginObjectives, &CGraph::endObjectives))
-        //.add_property("outputs", 
-        //    range<return_value_policy<reference_existing_object>>(
-        //    &CGraph::beginOutputs, &CGraph::endOutputs))
         .add_property("params", 
             range<return_value_policy<reference_existing_object>>(
             &CGraph::beginParams, &CGraph::endParams))
@@ -288,11 +279,25 @@ void CNodeDropout::sample() {
 // CNODEPARAMS
 // ===========
 
+CNodeParams::CNodeParams()
+    : id(-1), node(NULL), constant(false), active(false) {
+}
+
 CNodeParams::CNodeParams(int params_id, CNode *arg_node)
     : id(params_id), constant(false), active(true), node(arg_node)  {
     params = vec_t(node->nParams(), 0.);
     constant = arg_node->params_constant;
     arg_node->params = this;
+}
+
+CNodeParams *CNodeParams::deepCopy() {
+    CNodeParams *cnparams = new CNodeParams();
+    cnparams->id = id;
+    cnparams->node = node;
+    cnparams->constant = constant;
+    cnparams->active = active;
+    cnparams->params = vec_t(params.size(), 0.);
+    return cnparams;
 }
 
 CNodeParams::~CNodeParams() {
@@ -337,6 +342,16 @@ CNodeParams *CGraphParams::allocate(CNode *node) {
     return new_params;
 }
 
+CGraphParams *CGraphParams::deepCopy() {
+    CGraphParams *cgparams = new CGraphParams();
+    cgparams->id_counter = id_counter;
+    for (auto it=begin(); it!=end(); ++it) {
+        CNodeParams *params = (*it)->deepCopy();
+        cgparams->paramslist.push_back(params);
+    }
+    return cgparams;
+}
+
 void CGraphParams::add(CNodeGrads &other, dtype_t scale) {
     auto it = this->begin();
     auto jt = other.begin();
@@ -361,6 +376,56 @@ void CGraphParams::add(CNodeGrads &other, dtype_t scale) {
     }
 }
 
+void CGraphParams::addSquare(
+        CNodeGrads &other, dtype_t coeff1, dtype_t coeff2) {
+    auto it = this->begin();
+    auto jt = other.begin();
+    while (jt != other.end()) {
+        if (it == this->end() || jt->first < (*it)->id) {
+            assert(false);
+        } else if (jt->first == (*it)->id) {
+            mat_t &gradvec = *(jt->second);
+            vec_t &parvec = (*it)->params;
+            assert(gradvec.size2() == 1);
+            assert(gradvec.size1() == parvec.size());
+            for (int i=0; i<parvec.size(); ++i) {
+                parvec(i) = coeff1*parvec(i) + coeff2*std::pow(gradvec(i,0), 2);
+            }
+            ++it;
+            ++jt;
+        } else if (jt->first > (*it)->id) {
+            ++it;
+        }
+    }
+}
+
+void CGraphParams::add(
+        CNodeGrads &other, dtype_t coeff, CGraphParams &frictions) {
+    auto it = this->begin();
+    auto ft = frictions.begin();
+    auto jt = other.begin();
+    while (jt != other.end()) {
+        if (it == this->end() || jt->first < (*it)->id) {
+            assert(false);
+        } else if (jt->first == (*it)->id) {
+            mat_t &gradvec = *(jt->second);
+            vec_t &parvec = (*it)->params;
+            vec_t &frictvec = (*ft)->params;
+            assert(gradvec.size2() == 1);
+            assert(gradvec.size1() == parvec.size());
+            for (int i=0; i<parvec.size(); ++i) {
+                parvec(i) += coeff*gradvec(i,0)/(std::sqrt(frictvec(i))+1e-10); // TODO epsilon
+            }
+            ++it;
+            ++ft;
+            ++jt;
+        } else if (jt->first > (*it)->id) {
+            ++it;
+            ++ft;
+        }
+    }
+}
+
 // =====
 // CNODE
 // =====
@@ -377,7 +442,6 @@ void CNode::setParamsConstant(bool set_constant) {
 void CNode::resize(int n_slots) {
     bool preserve = false;
     vals.resize(n_slots, preserve);
-    //vals = vec_t(n_slots, 0.);
 }
 
 void CNode::zero() {
@@ -386,7 +450,6 @@ void CNode::zero() {
 }
 
 void CNode::resetAndResize() {
-    // Allocate output
     if (inputs.size() > 0) {
         int n_slots = vals.size();
         int n_slots_req = inputs[0]->vals.size();
@@ -474,19 +537,11 @@ void CNodeInput::evaluate() {
 }
 
 void CNodeSigmoid::evaluate() {
-    // Allocate output
-    int n_slots = vals.size();
-    if (inputs.size() > 0) {
-        n_slots = inputs[0]->vals.size();
-        this->resize(n_slots);
-    }
-    this->zero();
-    // Check activity
-    if (!active) {
-        return;
-    }
+    this->resetAndResize();
+    if (!active) return;
     // Evaluate output
     vec_t &p = params->params;
+    int n_slots = vals.size();
     int n_params = p.size();
     int n_inputs = inputs.size();
     for (int a=0; a<n_slots; ++a) {
@@ -657,10 +712,7 @@ void CNodeXENT::evaluate() {
     // Allocate output
     this->resize(1);
     this->zero();
-    // Check activity
-    if (!active) {
-        return;
-    }
+    if (!active) return;
     // Evaluate output
     vec_t grad_slot_scale(n_slots, 0.);
     vec_t &yp = inputs[0]->vals;
@@ -912,19 +964,21 @@ void Optimizer::stepNumpy(CGraph *cgraph, bpy::object &np_X, bpy::object &np_Y,
     optalg->step(cgraph, X, Y, n_steps, rate);
 }
 
+OptAdaGrad::~OptAdaGrad() {
+    if (frictions) delete frictions;
+    frictions = NULL;
+}
+
 void OptAdaGrad::fit(CGraph *cgraph, mat_t &X, mat_t &Y) {
-    assert(false && "TODO");
-    // Resample -> python
-    // Step
-    // - Feed
-    // - Cumulative gradient magnitude -> rates
-    // - Update parameters params->add(grads, rates)
-    // Momentum?
-    // Flag nodes for deletion -> adaptive graph
+    assert(false && "Use python wrapper in soap.soapy.cgraph");
 }
 
 void OptAdaGrad::step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate) {
-    GLOG.toggleSilence();
+    if (frictions == NULL) {
+        frictions = cgraph->getParams().deepCopy();
+    }
+    bool silent = GLOG.isSilent();
+    if (!silent) GLOG.toggleSilence();
     for (int n=0; n<n_steps; ++n) {
         cgraph->feed(X, Y);
         CGraphParams &params = cgraph->getParams();
@@ -932,22 +986,25 @@ void OptAdaGrad::step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double ra
             CNode *eps = *it;
             GLOG() << "Objective = " << eps->vals(0) << std::endl;
             CNodeGrads &grads = eps->getGrads();
-            params.add(grads, -1.*rate);
+            frictions->addSquare(grads, 1., 1.);
+            params.add(grads, -1.*rate, *frictions);
         }
     }
-    GLOG.toggleSilence();
+    if (!silent) GLOG.toggleSilence();
     for (auto it=cgraph->beginObjectives(); it!=cgraph->endObjectives(); ++it) {
         CNode *eps = *it;
-        GLOG() << "+ " << n_steps << " steps : " << eps->getOp() << " = " << eps->vals(0) << std::endl;
+        GLOG() << op << "   +" << n_steps << " steps : " << eps->getOp() 
+            << " = " << (boost::format("%1$1.4e") % eps->vals(0)).str() << std::endl;
     }
 }
 
 void OptSteep::fit(CGraph *cgraph, mat_t &X, mat_t &Y) {
-    assert(false && "TODO");
+    assert(false && "Use python wrapper in soap.soapy.cgraph");
 }
 
 void OptSteep::step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate) {
-    GLOG.toggleSilence();
+    bool silent = GLOG.isSilent();
+    if (!silent) GLOG.toggleSilence();
     for (int n=0; n<n_steps; ++n) {
         cgraph->feed(X, Y);
         CGraphParams &params = cgraph->getParams();
@@ -958,7 +1015,7 @@ void OptSteep::step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate
             params.add(grads, -1.*rate);
         }
     }
-    GLOG.toggleSilence();
+    if (!silent) GLOG.toggleSilence();
     for (auto it=cgraph->beginObjectives(); it!=cgraph->endObjectives(); ++it) {
         CNode *eps = *it;
         GLOG() << "+ " << n_steps << " steps : " << eps->getOp() << " = " << eps->vals(0) << std::endl;

@@ -4,9 +4,13 @@ namespace soap {
 
 Logger GLOG;
 
-void GLOG_SILENCE() {
-    //GLOG() << "Silencing logger ..." << std::endl;
-    GLOG.silence();
+void GLOG_SET_SILENT(bool silent) {
+    GLOG.setSilent(silent);
+    return;
+}
+
+void GLOG_SET_VERBOSE(bool verbose) {
+    GLOG.setVerbose(verbose);
     return;
 }
 
@@ -15,8 +19,12 @@ void GLOG_TOGGLE_SILENCE() {
     return;
 }
 
-void GLOG_VERBOSE(bool verbose) {
-    GLOG.setVerbose(verbose);
+bool GLOG_IS_SILENT() {
+    return GLOG.isSilent();
+}
+
+void GLOG_SILENCE() {
+    GLOG.silence();
     return;
 }
 

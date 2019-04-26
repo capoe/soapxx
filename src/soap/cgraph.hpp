@@ -8,6 +8,7 @@
 #include <boost/serialization/complex.hpp>
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/export.hpp>
+
 #include "soap/base/objectfactory.hpp"
 #include "soap/options.hpp"
 #include "soap/types.hpp"
@@ -25,12 +26,14 @@ struct CNode;
 struct CNodeGrads;
 struct CNodeParams
 {
+    CNodeParams();
     CNodeParams(int id, CNode *node);
     ~CNodeParams();
     CNode *getNode() { return node; }
     int getId() { return id; }
     int nParams() { return params.size(); }
     void setConstant(bool set_constant) { constant = set_constant; }
+    CNodeParams *deepCopy();
     bool isConstant() { return constant; }
     bpy::object valsNumpy(std::string np_dtype);
     void setParamsNumpy(bpy::object &np_params, std::string np_dtype);
@@ -49,7 +52,10 @@ struct CGraphParams
     CGraphParams() : id_counter(0) {;}
     ~CGraphParams();
     CNodeParams *allocate(CNode *node);
+    CGraphParams *deepCopy();
     void add(CNodeGrads &grads, dtype_t coeff);
+    void addSquare(CNodeGrads &grads, dtype_t coeff1, dtype_t coeff2);
+    void add(CNodeGrads &grads, dtype_t coeff, CGraphParams &frictions);
     int nParamSets() { return paramslist.size(); }
     int nParams();
     paramslist_t::iterator begin() { return paramslist.begin(); }
@@ -298,22 +304,27 @@ struct OptimizationAlgorithm
     OptimizationAlgorithm() : op("?") {;}
     virtual ~OptimizationAlgorithm() {;}
     virtual void fit(CGraph *cgraph, mat_t &X, mat_t &Y) = 0;
-    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate) = 0;
+    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, 
+        int n_steps, double rate) = 0;
     std::string op;
 };
 
 struct OptAdaGrad : public OptimizationAlgorithm
 {
-    OptAdaGrad() { op = "adagrad"; }
+    OptAdaGrad() { op = "adagrad"; frictions = NULL; }
+    ~OptAdaGrad();
     void fit(CGraph *cgraph, mat_t &X, mat_t &Y);
-    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate);
+    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, 
+        int n_steps, double rate);
+    CGraphParams *frictions;
 };
 
 struct OptSteep : public OptimizationAlgorithm
 {
     OptSteep() { op = "steep"; }
     void fit(CGraph *cgraph, mat_t &X, mat_t &Y);
-    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate);
+    virtual void step(CGraph *cgraph, mat_t &X, mat_t &Y, 
+        int n_steps, double rate);
 };
 
 struct Optimizer
