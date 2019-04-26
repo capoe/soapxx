@@ -288,6 +288,50 @@ def test_mse_grad():
             assert_equal(g4[i][0]-g4i_num, 0.0, 1e-7)
             log << log.endl
 
+def test_input_grads():
+    log << log.mg << "%-17s" % "<test_input_grads>" << log.endl
+    X = np.random.uniform(size=(15,3))
+    Y = np.random.uniform(size=(15,1))
+    for operator in ["exp", "log", "mod", "pow", "mult", "div"]:
+        cgraph = soap.CGraph()
+        c1 = cgraph.addInput()
+        c2 = cgraph.addInput()
+        c3 = cgraph.addInput()
+        if operator in {"mult","div"}:
+            deps = [c2,c3]
+        elif operator in {"log","pow"}:
+            deps = [c1]
+        else:
+            deps = [c3]
+        cu = cgraph.addNode(operator, deps)
+        c4 = cgraph.addNode("linear", [c1,c2,c3])
+        c5 = cgraph.addNode("sigmoid", [c1,c2,c3,cu])
+        c6 = cgraph.addNode("mult", [c4,c5])
+        for node in cgraph.nodes():
+            node.params().set(
+                np.random.uniform(size=(node.params().size,)), 
+                "float64")
+        h = 1e-8
+        for cgrad in [ c4, c5, c6 ]:
+            # Analytical
+            cgraph.evaluateInputGrads(X, str(X.dtype))
+            x = cgrad.vals("float64")
+            g = np.concatenate(
+                [ cgrad.input_grads().vals(j+1, "float64") for j in range(len(cgraph.inputs())) ],
+                axis=0).T # n_samples x n_inputs
+            for j in range(X.shape[1]):
+                # Numerical
+                Xh = np.copy(X)
+                Xh[:,j] = Xh[:,j] + h
+                cgraph.evaluate(Xh, str(Xh.dtype))
+                xh = cgrad.vals("float64")
+                g_num = (xh-x)/h
+                mean_rel_abserr = np.average(np.abs((g_num-g[:,j])/g_num))
+                log << "  %-7s MRAE = %+1.4e" % (cgrad.op, mean_rel_abserr) << log.flush
+                for i in range(X.shape[0]):
+                    assert_equal(g[i,j]-g_num[i], 0.0, 1e-6)
+                log << log.endl
+
 if __name__ == "__main__":
     test_linear()
     test_sigmoid()
@@ -298,5 +342,6 @@ if __name__ == "__main__":
     test_mse_grad()
     test_xent_grad()
     test_operators_grad()
+    test_input_grads()
     log << "All passed." << log.endl
 

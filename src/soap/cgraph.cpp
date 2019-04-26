@@ -16,7 +16,7 @@
 
 namespace soap { namespace cgraph {
 
-CGraph::CGraph() {
+CGraph::CGraph() : id_counter(0) {
     ;
 }
 
@@ -42,8 +42,15 @@ void CGraph::clear() {
     derived.clear();
 }
 
+CNode *CGraph::createBlank(std::string op) {
+    id_counter += 1;
+    CNode *new_node = CNodeCreator().create(op);
+    new_node->setId(id_counter);
+    return new_node;
+}
+
 CNode *CGraph::addInput() {
-    CNode *new_node = CNodeCreator().create("input");
+    CNode *new_node = createBlank("input");
     allocateParamsFor(new_node);
     inputs.push_back(new_node);
     nodes.push_back(new_node);
@@ -51,7 +58,7 @@ CNode *CGraph::addInput() {
 }
 
 CNode *CGraph::addTarget() {
-    CNode *new_node = CNodeCreator().create("input");
+    CNode *new_node = createBlank("input");
     allocateParamsFor(new_node);
     targets.push_back(new_node);
     return new_node;
@@ -67,7 +74,7 @@ CNode *CGraph::addNodePython(std::string op, boost::python::list &py_nodelist) {
 }
 
 CNode *CGraph::addNode(std::string op, CGraph::nodelist_t &nodelist) {
-    CNode *new_node = CNodeCreator().create(op);
+    CNode *new_node = createBlank(op);
     new_node->link(nodelist);
     allocateParamsFor(new_node);
     nodes.push_back(new_node);
@@ -85,7 +92,7 @@ CNode *CGraph::addOutputPython(std::string op, boost::python::list &py_nodelist)
 }
 
 CNode *CGraph::addOutput(std::string op, CGraph::nodelist_t &nodelist) {
-    CNode *new_node = CNodeCreator().create(op);
+    CNode *new_node = createBlank(op);
     new_node->link(nodelist);
     allocateParamsFor(new_node);
     nodes.push_back(new_node);
@@ -104,7 +111,7 @@ CNode *CGraph::addObjectivePython(std::string op, boost::python::list &py_nodeli
 }
 
 CNode *CGraph::addObjective(std::string op, CGraph::nodelist_t &nodelist) {
-    CNode *new_node = CNodeCreator().create(op);
+    CNode *new_node = createBlank(op);
     new_node->link(nodelist);
     allocateParamsFor(new_node);
     objectives.push_back(new_node);
@@ -130,18 +137,27 @@ void CGraph::evaluateNumpy(bpy::object &np_X, std::string np_dtype_X) {
     mat_t X;
     soap::linalg::numpy_converter npc_X(np_dtype_X.c_str());
     npc_X.numpy_to_ublas<dtype_t>(np_X, X);
-    this->evaluate(X);
+    bool with_input_grads = false;
+    this->evaluate(X, with_input_grads);
 }
 
-void CGraph::evaluate(mat_t &X) {
+void CGraph::evaluateInputGradsNumpy(bpy::object &np_X, std::string np_dtype_X) {
+    mat_t X;
+    soap::linalg::numpy_converter npc_X(np_dtype_X.c_str());
+    npc_X.numpy_to_ublas<dtype_t>(np_X, X);
+    bool with_input_grads = true;
+    this->evaluate(X, with_input_grads);
+}
+
+void CGraph::evaluate(mat_t &X, bool with_input_grads) {
     assert(X.size2() == inputs.size());
     for (int i=0; i<inputs.size(); ++i) {
-        inputs[i]->feed(X, i);
+        inputs[i]->feed(X, i, with_input_grads);
     }
     int i = 0;
     for (auto it=beginDerived(); it!=endDerived(); ++it, ++i) {
         GLOG() << "\rEvaluating derived node " << i << std::flush;
-        (*it)->evaluate();
+        (*it)->evaluate(with_input_grads);
     }
     GLOG() << std::endl;
 }
@@ -154,33 +170,34 @@ void CGraph::feedNumpy(bpy::object &np_X, bpy::object &np_Y,
     mat_t Y;
     soap::linalg::numpy_converter npc_Y(np_dtype_Y.c_str());
     npc_Y.numpy_to_ublas<dtype_t>(np_Y, Y);
-    this->feed(X, Y);
+    bool with_input_grads = false;
+    this->feed(X, Y, with_input_grads);
 }
 
-void CGraph::feed(mat_t &X, mat_t &Y) {
+void CGraph::feed(mat_t &X, mat_t &Y, bool with_input_grads) {
     GLOG() << "Feeding CGraph with X:[" << X.size1() << "x" << X.size2() << "], Y:[" 
         << Y.size1() << "x" << Y.size2() << "]" << std::endl;
     assert(X.size2() == inputs.size());
     assert(Y.size2() == targets.size());
     // Initialize root (input) nodes
     for (int i=0; i<inputs.size(); ++i) {
-        inputs[i]->feed(X, i);
+        inputs[i]->feed(X, i, with_input_grads);
     }
     for (int i=0; i<targets.size(); ++i) {
-        targets[i]->feed(Y, i);
+        targets[i]->feed(Y, i, false);
     }
     // Evaluate derived nodes
     int i = 0;
     for (auto it=beginDerived(); it!=endDerived(); ++it, ++i) {
         GLOG() << "\rEvaluating derived node " << i << std::flush;
-        (*it)->evaluate();
+        (*it)->evaluate(with_input_grads);
     }
     GLOG() << std::endl;
     // Evaluate objectives
     int j = 0;
     for (auto it=beginObjectives(); it!=endObjectives(); ++it, ++j) {
         GLOG() << "\rEvaluating objective node " << j << std::flush;
-        (*it)->evaluate();
+        (*it)->evaluate(with_input_grads);
     }
     GLOG() << std::endl;
 }
@@ -218,6 +235,7 @@ void CGraph::registerPython() {
         .def("allocateParams", &CGraph::allocateParams)
         .def("allocateParamsFor", &CGraph::allocateParamsFor)
         .def("evaluate", &CGraph::evaluateNumpy)
+        .def("evaluateInputGrads", &CGraph::evaluateInputGradsNumpy)
         .def("feed", &CGraph::feedNumpy)
         .def("addInput", &CGraph::addInput, 
             return_value_policy<reference_existing_object>())
@@ -430,6 +448,12 @@ void CGraphParams::add(
 // CNODE
 // =====
 
+CNode::CNode()
+    : tag(""), id(-1), op("?"), active(true), 
+      params(NULL), params_constant(false) {
+    ;
+}
+
 CNode::~CNode() {
     ;
 }
@@ -459,10 +483,17 @@ void CNode::resetAndResize() {
     this->zero();
 }
 
-void CNode::feed(mat_t &X, int colidx) {
+void CNode::feed(mat_t &X, int colidx, bool with_input_grads) {
     if (vals.size() != X.size1()) this->resize(X.size1());
     for (int i=0; i<X.size1(); ++i) {
         vals(i) = X(i,colidx);
+    }
+    if (with_input_grads) {
+        input_grads.clear();
+        mat_t &igrads = *(input_grads.allocate(id, X.size1(), 1));
+        for (int i=0; i<X.size1(); ++i) {
+            igrads(0,i) = 1.;
+        }
     }
 }
 
@@ -471,7 +502,7 @@ bpy::object CNode::valsNumpy(std::string np_dtype) {
     return npc.ublas_to_numpy<dtype_t>(vals);
 }
 
-void CNode::evaluate() {
+void CNode::evaluate(bool with_input_grads) {
     assert(false);
 }
 
@@ -509,6 +540,8 @@ void CNode::registerPython() {
         .def("vals", &CNode::valsNumpy)
         .def("grads", &CNode::getGrads, 
             return_value_policy<reference_existing_object>())
+        .def("input_grads", &CNode::getInputGrads, 
+            return_value_policy<reference_existing_object>())
         .def("params", &CNode::getParams, 
             return_value_policy<reference_existing_object>())
         .def("setParamsConstant", &CNode::setParamsConstant)
@@ -516,6 +549,7 @@ void CNode::registerPython() {
         .def("link", &CNode::linkPython)
         .def("setBranchActive", &CNode::setBranchActive)
         .def("evaluate", &CNode::evaluate)
+        .add_property("tag", &CNode::getTag, &CNode::setTag)
         .add_property("active", &CNode::isActive, &CNode::setActive)
         .add_property("size", &CNode::inputSize)
         .add_property("op", &CNode::getOp);
@@ -529,14 +563,14 @@ void CNode::registerPython() {
         .def("fit", &Optimizer::fitNumpy);
 }
 
-void CNodeInput::evaluate() {
+void CNodeInput::evaluate(bool with_input_grads) {
     if (active) ;
     else {
         this->zero();
     }
 }
 
-void CNodeSigmoid::evaluate() {
+void CNodeSigmoid::evaluate(bool with_input_grads) {
     this->resetAndResize();
     if (!active) return;
     // Evaluate output
@@ -575,9 +609,16 @@ void CNodeSigmoid::evaluate() {
         vec_t grad_slot_scale = p(i)*slot_scale;
         grads.add(inputs[i]->grads, grad_slot_scale);
     }
+    if (with_input_grads) {
+        input_grads.clear();
+        for (int i=0; i<n_inputs; ++i) {
+            vec_t grad_slot_scale = p(i)*slot_scale;
+            input_grads.add(inputs[i]->input_grads, grad_slot_scale);
+        }
+    }
 }
 
-void CNodeExp::evaluate() {
+void CNodeExp::evaluate(bool with_input_grads) {
     this->resetAndResize();
     if (!active) return;
     vec_t &p = params->params;
@@ -593,9 +634,13 @@ void CNodeExp::evaluate() {
     }
     vec_t grad_slot_scale = p(0)*vals;
     grads.add(inputs[0]->grads, grad_slot_scale);
+    if (with_input_grads) {
+        input_grads.clear();
+        input_grads.add(inputs[0]->input_grads, grad_slot_scale);
+    }
 }
 
-void CNodeLog::evaluate() {
+void CNodeLog::evaluate(bool with_input_grads) {
     this->resetAndResize();
     if (!active) return;
     vec_t &x = inputs[0]->vals;
@@ -605,9 +650,13 @@ void CNodeLog::evaluate() {
         grad_slot_scale(a) = 1./x(a);
     }
     grads.add(inputs[0]->grads, grad_slot_scale);
+    if (with_input_grads) {
+        input_grads.clear();
+        input_grads.add(inputs[0]->input_grads, grad_slot_scale);
+    }
 }
 
-void CNodeMod::evaluate() {
+void CNodeMod::evaluate(bool with_input_grads) {
     this->resetAndResize();
     if (!active) return;
     vec_t &x = inputs[0]->vals;
@@ -617,9 +666,13 @@ void CNodeMod::evaluate() {
         grad_slot_scale(a) = (x(a) >= 0.) ? 1. : -1.;
     }
     grads.add(inputs[0]->grads, grad_slot_scale);
+    if (with_input_grads) {
+        input_grads.clear();
+        input_grads.add(inputs[0]->input_grads, grad_slot_scale);
+    }
 }
 
-void CNodePow::evaluate() {
+void CNodePow::evaluate(bool with_input_grads) {
     this->resetAndResize();
     if (!active) return;
     vec_t &p = params->params;
@@ -638,9 +691,13 @@ void CNodePow::evaluate() {
         }
     }
     grads.add(inputs[0]->grads, grad_slot_scale);
+    if (with_input_grads) {
+        input_grads.clear();
+        input_grads.add(inputs[0]->input_grads, grad_slot_scale);
+    }
 }
 
-void CNodeMult::evaluate() {
+void CNodeMult::evaluate(bool with_input_grads) {
     this->resetAndResize();
     if (!active) return;
     vec_t &u = inputs[0]->vals;
@@ -650,9 +707,14 @@ void CNodeMult::evaluate() {
     }
     grads.add(inputs[0]->grads, v);
     grads.add(inputs[1]->grads, u);
+    if (with_input_grads) {
+        input_grads.clear();
+        input_grads.add(inputs[0]->input_grads, v);
+        input_grads.add(inputs[1]->input_grads, u);
+    }
 }
 
-void CNodeDiv::evaluate() {
+void CNodeDiv::evaluate(bool with_input_grads) {
     this->resetAndResize();
     if (!active) return;
     vec_t &u = inputs[0]->vals;
@@ -666,9 +728,14 @@ void CNodeDiv::evaluate() {
     }
     grads.add(inputs[0]->grads, su);
     grads.add(inputs[1]->grads, sv);
+    if (with_input_grads) {
+        input_grads.clear();
+        input_grads.add(inputs[0]->input_grads, su);
+        input_grads.add(inputs[1]->input_grads, sv);
+    }
 }
 
-void CNodeLinear::evaluate() {
+void CNodeLinear::evaluate(bool with_input_grads) {
     this->resetAndResize();
     if (!active) return;
     // Evaluate output
@@ -702,9 +769,16 @@ void CNodeLinear::evaluate() {
         dtype_t grad_scale = p(i);
         grads.add(inputs[i]->grads, grad_scale);
     }
+    if (with_input_grads) {
+        input_grads.clear();
+        for (int i=0; i<n_inputs; ++i) {
+            dtype_t grad_scale = p(i);
+            input_grads.add(inputs[i]->input_grads, grad_scale);
+        }
+    }
 }
 
-void CNodeXENT::evaluate() {
+void CNodeXENT::evaluate(bool with_input_grads) {
     int n_inputs = inputs.size();
     assert(n_inputs == 2 && "XENT node only allows two inputs = [output,target]");
     int n_slots = inputs[0]->vals.size();
@@ -728,7 +802,7 @@ void CNodeXENT::evaluate() {
     grads.sumSlots();
 }
 
-void CNodeMSE::evaluate() {
+void CNodeMSE::evaluate(bool with_input_grads) {
     int n_inputs = inputs.size();
     assert(n_inputs == 2 && "MSE node only allows two inputs = [output,target]");
     int n_slots = inputs[0]->vals.size();
@@ -980,7 +1054,7 @@ void OptAdaGrad::step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double ra
     bool silent = GLOG.isSilent();
     if (!silent) GLOG.toggleSilence();
     for (int n=0; n<n_steps; ++n) {
-        cgraph->feed(X, Y);
+        cgraph->feed(X, Y, false);
         CGraphParams &params = cgraph->getParams();
         for (auto it=cgraph->beginObjectives(); it!=cgraph->endObjectives(); ++it) {
             CNode *eps = *it;
@@ -1006,7 +1080,7 @@ void OptSteep::step(CGraph *cgraph, mat_t &X, mat_t &Y, int n_steps, double rate
     bool silent = GLOG.isSilent();
     if (!silent) GLOG.toggleSilence();
     for (int n=0; n<n_steps; ++n) {
-        cgraph->feed(X, Y);
+        cgraph->feed(X, Y, false);
         CGraphParams &params = cgraph->getParams();
         for (auto it=cgraph->beginObjectives(); it!=cgraph->endObjectives(); ++it) {
             CNode *eps = *it;

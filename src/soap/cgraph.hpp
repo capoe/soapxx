@@ -90,8 +90,9 @@ class CNodeGrads
     sparse_grad_t sparse_grads;
 };
 
-struct CGraph
+class CGraph
 {
+  public:
     typedef std::vector<CNode*> nodelist_t;
     CGraph();
     ~CGraph();
@@ -128,12 +129,16 @@ struct CGraph
     void allocateParams();
     void allocateParamsFor(CNode *node);
     void evaluateNumpy(bpy::object &npy_X, std::string np_dtype);
-    void evaluate(mat_t &X);
+    void evaluateInputGradsNumpy(bpy::object &npy_X, std::string np_dtype);
+    void evaluate(mat_t &X, bool with_input_grads);
     void feedNumpy(bpy::object &npy_X, bpy::object &npy_y, 
         std::string np_dtype_X, std::string np_dtype_Y);
-    void feed(mat_t &X, mat_t &Y);
+    void feed(mat_t &X, mat_t &Y, bool with_input_grads);
     static void registerPython();
+  private:
+    CNode *createBlank(std::string op);
     // DATA
+    int id_counter;
     nodelist_t inputs;
     nodelist_t outputs;
     nodelist_t derived;
@@ -159,7 +164,7 @@ struct CNodeDropout
 
 struct CNode
 {
-    CNode() : op("?"), active(true), params(NULL), params_constant(false) {;}
+    CNode();
     virtual ~CNode();
     virtual void linkPython(bpy::list &py_nodelist);
     virtual void link(CGraph::nodelist_t &nodelist);
@@ -167,20 +172,26 @@ struct CNode
     virtual int nParams() { return 0; }
     bpy::object valsNumpy(std::string np_dtype);
     CNodeGrads &getGrads() { return grads; }
+    CNodeGrads &getInputGrads() { return input_grads; }
     CNodeParams *getParams() { return params; }
     bpy::list getInputsPython();
+    void setId(int arg_id) { id = arg_id; }
+    void setTag(std::string arg_tag) { tag = arg_tag; }
+    std::string getTag() { return tag; }
     void setParamsConstant(bool set_constant);
     void setBranchActive(bool set_active);
     bool isActive() { return active; }
     void setActive(bool set_active) { active = set_active; }
     virtual void zero();
     virtual void resetAndResize();
-    virtual void feed(mat_t &X, int colidx);
-    virtual void evaluate();
+    virtual void feed(mat_t &X, int colidx, bool with_input_grads);
+    virtual void evaluate(bool with_input_grads);
     std::string getOp() { return op; }
     int inputSize() { return inputs.size(); }
     static void registerPython();
     // DATA
+    int id;
+    std::string tag;
     std::string op;
     bool active;
     CNodeParams *params;
@@ -188,69 +199,70 @@ struct CNode
     CGraph::nodelist_t inputs;
     vec_t vals;
     CNodeGrads grads;
+    CNodeGrads input_grads;
 };
 
 struct CNodeInput : public CNode
 {
     CNodeInput() { op = "input"; }
     int nParams() { return 0; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodeSigmoid : public CNode
 {   
     CNodeSigmoid() { op = "sigmoid"; }
     int nParams() { return inputs.size()+1; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodeLinear : public CNode
 {   
     CNodeLinear() { op = "linear"; }
     int nParams() { return inputs.size()+1; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodeExp : public CNode
 {
     CNodeExp() { op = "exp"; }
     int nParams() { return 1; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodeLog : public CNode
 {
     CNodeLog() { op = "log"; }
     int nParams() { return 0; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodeMod : public CNode
 {
     CNodeMod() { op = "mod"; }
     int nParams() { return 0; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodePow : public CNode
 {
     CNodePow() { op = "pow"; }
     int nParams() { return 1; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodeMult : public CNode
 {
     CNodeMult() { op = "mult"; }
     int nParams() { return 0; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodeDiv : public CNode
 {
     CNodeDiv() { op = "div"; }
     int nParams() { return 0; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodePearson : public CNode 
@@ -263,14 +275,14 @@ struct CNodeMSE : public CNode
 {
     CNodeMSE() { op = "mse"; }
     int nParams() { return 0; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 struct CNodeXENT : public CNode 
 {
     CNodeXENT() { op = "xent"; }
     int nParams() { return 0; }
-    void evaluate();
+    void evaluate(bool with_input_grads);
 };
 
 class CNodeFactory : public soap::base::ObjectFactory<std::string, CNode>
