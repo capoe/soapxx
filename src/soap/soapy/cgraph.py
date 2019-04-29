@@ -18,18 +18,29 @@ def configure_default():
 
 class CGraphRegressor(object):
     def __init__(self, fgraph, options, 
-            dropout_seed=712341, mask=lambda f: f.q >= 0.99, p0=None, p1=None):
+            dropout_seed=712341, mask=lambda f: f.q >= 0.99, 
+            p0=None, p1=None, n_out_active=None):
         self.options = options
         self.fgraph = fgraph
         self.cgraph, self.node_map = translate_fgraph(fgraph)
         self.cnodes_q, self.probs_active = filter_graph(
-            self.fgraph, self.cgraph, self.node_map, mask=mask, p0=p0, p1=p1)
+            self.fgraph, self.cgraph, self.node_map, mask=mask, p0=p0, p1=p1, n_out_active=n_out_active)
         self.dropout = soap.CNodeDropout(dropout_seed)
         self.dropout.affect(self.cnodes_q, self.probs_active, 
             str(self.probs_active.dtype))
+        self.params_constant = None
     def check(self, X):
         check_translation(self.fgraph, self.cgraph, self.node_map, X)
-    def fit(self, X, Y, opt=None, method="steep"):
+    def lockParams(self):
+        self.params_constant = []
+        for n in self.cgraph.nodes():
+            self.params_constant.append(n.isParamsConstant())
+            n.setParamsConstant(True)
+    def unlockParams(self):
+        assert len(self.params_constant) == len(self.cgraph.nodes())
+        for idx, n in enumerate(self.cgraph.nodes()):
+            n.setParamsConstant(self.params_constant[idx])
+    def fit(self, X, Y, opt=None, method="adagrad"):
         if len(Y.shape) < 2:
             Y = Y.reshape((-1,1))
         if opt is None:
@@ -44,15 +55,15 @@ class CGraphRegressor(object):
             n_steps_batch=self.options.n_steps_batch,
             rate=self.options.rate,
             node_map=self.node_map)
-        for n in self.cgraph.nodes():
-            n.setParamsConstant(True)
         return
     def predict(self, X):
+        if X.shape[0] < 1: return np.array([])
         silent = soap.is_silent()
         if not silent: soap.toggle_logger()
         outputs = self.cgraph.outputs()
         assert len(outputs) == 1
         yp_ens = []
+        self.lockParams()
         t0 = time.time()
         for i in range(self.options.n_estimators):
             if self.options.dropout: self.dropout.sample()
@@ -60,6 +71,7 @@ class CGraphRegressor(object):
             yp = outputs[0].vals(dtype)
             yp_ens.append(yp)
         t1 = time.time()
+        self.unlockParams()
         yp_ens = np.array(yp_ens)
         yp = np.average(yp_ens, axis=0)
         yp_avgstd = np.average(np.std(yp_ens, axis=0))
@@ -169,7 +181,7 @@ def check_translation(fgraph, cgraph, node_map, X, verbose=False):
             assert(False)
     log << "- OK" << log.endl
 
-def filter_graph(fgraph, cgraph, node_map, mask=lambda f: f.q >= 0.99, p0=None, p1=None):
+def filter_graph(fgraph, cgraph, node_map, mask=lambda f: f.q >= 0.99, p0=None, p1=None, n_out_active=None):
     fnodes_q = filter(mask, fgraph.nodes())
     cnodes_q = [ node_map[f.expr] for f in fnodes_q ]
     probs_active = np.array([ np.abs(fnode.cov*fnode.q) for fnode in fnodes_q ])
@@ -177,6 +189,13 @@ def filter_graph(fgraph, cgraph, node_map, mask=lambda f: f.q >= 0.99, p0=None, 
         min_p = np.min(probs_active)
         max_p = np.max(probs_active)
         probs_active = p0 + (p1-p0)*(probs_active-min_p)/(max_p-min_p)
+    if n_out_active is not None:
+        n_expect = np.sum(probs_active)
+        log << "Expect %d active nodes" % n_expect << log.endl
+        log << "Desire %d active nodes" % n_out_active << log.endl
+        s = float(n_out_active)/n_expect
+        log << "=> Scale probs by" << s << log.endl
+        probs_active = s*probs_active
     for node in cgraph.nodes(): node.active = False
     for node in cnodes_q: node.setBranchActive(True)
     cgraph.bypassInactiveNodes()
@@ -219,18 +238,22 @@ def optimize(cgraph, X, Y,
         else:
             subsel = np.arange(X.shape[0])
         if dropout is not None: dropout.sample()
+        # >>> assert len(cgraph.outputs()) == 1
+        # >>> nodes = cgraph.outputs()[0].inputs()
+        # >>> print len(nodes), len(filter(lambda n: n.active, nodes))
         opt.step(cgraph, X[subsel], Y[subsel], str(X.dtype), str(Y.dtype), n_steps_batch, rate)
-        #if node_map is not None:
-        #    for k,n in node_map.iteritems():
-        #        if n.active:
-        #            nans = len(np.where(np.isnan(n.vals("float64")))[0])
-        #            if nans > 0:
-        #                print n.vals("float64")
-        #                print "%50s %15s" % (k, n.op), nans
+        # >>> if node_map is not None:
+        # >>>     for k,n in node_map.iteritems():
+        # >>>         if n.active:
+        # >>>             nans = len(np.where(np.isnan(n.vals("float64")))[0])
+        # >>>             if nans > 0:
+        # >>>                 print n.vals("float64")
+        # >>>                 print "%50s %15s" % (k, n.op), nans
     t1 = time.time()
     log << "Time taken for optimization: %+1.4fs" % (t1-t0) << log.endl
 
 def predict(cgraph, dropout, X, n_estimators):
+    if X.shape[0] < 1: return np.array([])
     outputs = cgraph.outputs()
     assert len(outputs) == 1
     yp_ens = []

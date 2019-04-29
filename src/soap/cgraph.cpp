@@ -545,6 +545,7 @@ void CNode::registerPython() {
         .def("params", &CNode::getParams, 
             return_value_policy<reference_existing_object>())
         .def("setParamsConstant", &CNode::setParamsConstant)
+        .def("isParamsConstant", &CNode::isParamsConstant)
         .def("inputs", &CNode::getInputsPython)
         .def("link", &CNode::linkPython)
         .def("setBranchActive", &CNode::setBranchActive)
@@ -558,6 +559,7 @@ void CNode::registerPython() {
         .def("vals", &CNodeGrads::valsNumpy)
         .def("listParamSets", &CNodeGrads::listParamSets);
     class_<Optimizer, Optimizer*>("CGraphOptimizer", init<Options*>()) 
+        .def(init<std::string>())
         .def(init<>())
         .def("step", &Optimizer::stepNumpy)
         .def("fit", &Optimizer::fitNumpy);
@@ -1004,7 +1006,11 @@ bpy::object CNodeGrads::valsNumpy(int pid, std::string np_dtype) {
 // ============
 
 Optimizer::Optimizer() : options(NULL) {
-    optalg = OptimizerCreator().create("steep");
+    optalg = OptimizerCreator().create("adagrad");
+}
+
+Optimizer::Optimizer(std::string method) : options(NULL) {
+    optalg = OptimizerCreator().create(method);
 }
 
 Optimizer::Optimizer(Options *arg_options) : options(arg_options) {

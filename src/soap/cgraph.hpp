@@ -179,6 +179,7 @@ struct CNode
     void setTag(std::string arg_tag) { tag = arg_tag; }
     std::string getTag() { return tag; }
     void setParamsConstant(bool set_constant);
+    bool isParamsConstant() { return params_constant; }
     void setBranchActive(bool set_active);
     bool isActive() { return active; }
     void setActive(bool set_active) { active = set_active; }
@@ -342,6 +343,7 @@ struct OptSteep : public OptimizationAlgorithm
 struct Optimizer
 {
     Optimizer();
+    Optimizer(std::string method);
     Optimizer(Options *arg_options);
     ~Optimizer();
     void fitNumpy(CGraph *cgraph, bpy::object &np_X, bpy::object &np_Y,

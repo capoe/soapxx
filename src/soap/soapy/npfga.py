@@ -1130,6 +1130,63 @@ cv_iterator = {
   "custom": CVCustom
 }
 
+def metric_rmse(yp,yt):
+    return (np.sum((yp-yt)**2)**0.5/yp.shape[0])**0.5
+
+def metric_rhop(yp,yt):
+    return scipy.stats.pearsonr(yp, yt)[0]
+
+def metric_rhor(yp,yt):
+    return scipy.stats.spearmanr(yp, yt).correlation
+
+class CVEval(object):
+    eval_map = { 
+        "rmse": metric_rmse, 
+        "rhop": metric_rhop
+    }
+    def __init__(self, jsonfile=None):
+        self.yp_map = {}
+        self.yt_map = {}
+        if jsonfile is not None: self.load(jsonfile)
+        return
+    def append(self, channel, yp, yt):
+        if not channel in self.yp_map:
+            self.yp_map[channel] = []
+            self.yt_map[channel] = []
+        self.yp_map[channel] = self.yp_map[channel] + list(yp)
+        self.yt_map[channel] = self.yt_map[channel] + list(yt)
+        return
+    def evaluate(self, channel, metric):
+        if len(self.yp_map[channel]) < 1: return np.nan
+        return CVEval.eval_map[metric](
+            np.array(self.yp_map[channel]), 
+            np.array(self.yt_map[channel]))
+    def evaluateAll(self, metrics, log=None):
+        res = {}
+        for channel in sorted(self.yp_map):
+            res[channel] = {}
+            vs = []
+            for metric in metrics:
+                v = self.evaluate(channel, metric)
+                res[channel][metric] = v
+                vs.append(v)
+            if log:
+                log << "%-9s : " % (channel) << log.flush
+                for v, metric in zip(vs, metrics):
+                    log << "%s=%+1.4e" % (
+                        metric, v) << log.flush
+                log << log.endl
+        return res
+    def save(self, jsonfile):
+        json.dump({ "yp_map": self.yp_map, "yt_map": self.yt_map },
+            open(jsonfile, "w"), indent=1, sort_keys=True)
+        return
+    def load(self, jsonfile):
+        data = json.load(open(jsonfile))
+        self.yp_map = data["yp_map"]
+        self.yt_map = data["yt_map"]
+        return
+
 class LSE(object):
     """Bootstrapper operating on user-specified prediction model
 
