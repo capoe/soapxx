@@ -43,14 +43,14 @@ double TopKernelRematch::evaluate(DMapMatrix::matrix_t &K) {
     double err = 0.0;
     // TODO Add convergence flag and send to user
     while (true) {
+        // Update u
         soap::linalg::linalg_matrix_vector_dot(Kg, v, u, false, 1.0, 0.0);
-        for (int i=0; i<nx; ++i) u(i)= omega*ax/u(i) + (1-omega)*u_in(i);
+        err = 0.0;
+        for (int i=0; i<nx; ++i) err += std::pow(ax-u(i)*u_in(i),2);
+        for (int i=0; i<nx; ++i) u(i) = omega*ax/u(i) + (1-omega)*u_in(i);
+        // Update v
         soap::linalg::linalg_matrix_vector_dot(Kg, u, v, true, 1.0, 0.0);
-        for (int i=0; i<ny; ++i) v(i)= omega*ay/v(i) + (1-omega)*v_in(i);
-        // Check convergence
-        du = u-u_in;
-        soap::linalg::linalg_dot(du, du, err);
-        err = std::sqrt(err/nx);
+        for (int i=0; i<ny; ++i) v(i) = omega*ay/v(i) + (1-omega)*v_in(i);
         if (err < eps) break;
         // Step
         u_in = u;
@@ -70,7 +70,48 @@ double TopKernelRematch::evaluate(DMapMatrix::matrix_t &K) {
 
 void TopKernelRematch::attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off) {
-    throw soap::base::NotImplemented("rematch::attributeLeft");
+    int nx = K.size1();
+    int ny = K.size2();
+    DMapMatrix::vec_t u(nx, 1.0);
+    DMapMatrix::vec_t u_in(nx, 1.0);
+    DMapMatrix::vec_t du(nx);
+    DMapMatrix::vec_t v(ny, 1.0);
+    DMapMatrix::vec_t v_in(ny, 1.0);
+    double ax = 1./nx;
+    double ay = 1./ny;
+    double lambda = 1./gamma;
+    DMapMatrix::matrix_t Kg(nx,ny);
+    for (int i=0; i<nx; ++i)
+        for (int j=0; j<ny; ++j)
+            Kg(i,j) = std::exp(-(1-K(i,j))*lambda);
+    int i_iter = 0;
+    double err = 0.0;
+    // TODO Add convergence flag and send to user
+    while (true) {
+        // Update u
+        soap::linalg::linalg_matrix_vector_dot(Kg, v, u, false, 1.0, 0.0);
+        err = 0.0;
+        for (int i=0; i<nx; ++i) err += std::pow(ax-u(i)*u_in(i),2);
+        for (int i=0; i<nx; ++i) u(i) = omega*ax/u(i) + (1-omega)*u_in(i);
+        // Update v
+        soap::linalg::linalg_matrix_vector_dot(Kg, u, v, true, 1.0, 0.0);
+        for (int i=0; i<ny; ++i) v(i) = omega*ay/v(i) + (1-omega)*v_in(i);
+        if (err < eps) break;
+        // Step
+        u_in = u;
+        v_in = v;
+        i_iter += 1;
+    }
+    double k = 0.0;
+    ub::matrix<double> Pij(nx, ny, 0.0);
+    for (int i=0; i<nx; ++i) {
+        double ki = 0.0;
+        for (int j=0; j<ny; ++j) {
+            Pij(i,j) = u(i)*Kg(i,j)*v(j);
+            ki += Pij(i,j)*K(i,j);
+        }
+        K_out(i_off+i, j_off) = ki;
+    }
 }
 
 TopKernelCanonical::TopKernelCanonical() : beta(0.5) {
