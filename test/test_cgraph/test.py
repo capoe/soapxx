@@ -1,4 +1,3 @@
-import librmt as rmt
 import soap
 import sys
 import numpy as np

@@ -175,7 +175,7 @@ def generate_graph(
     fgraph_options.set("rank_coeff", rank_coeff) # used if correlation_measure == 'mixed'
     fgraph = soap.FGraph(fgraph_options)
     for f in features_with_props:
-        fgraph.addRootNode(f[0], f[1], f[2], f[3], f[4])
+        fgraph.addRootNode(str(f[0]), str(f[1]), str(f[2]), f[3], str(f[4]))
     for lidx in range(len(uop_list)):
         fgraph.addLayer(uop_list[lidx], bop_list[lidx])
     fgraph.generate()
@@ -326,6 +326,18 @@ def resample_IX_Y(IX, Y, n):
         yield i, IX[idcs], Y[idcs]
     return
 
+def mode_resample_IX_Y(IX, Y, n, threshold):
+    idcs0 = np.where(Y < threshold)[0]
+    idcs1 = np.where(Y >= threshold)[0]
+    n0 = len(idcs0)
+    n1 = len(idcs1)
+    for i in range(n):
+        re_idcs0 = idcs0[np.random.randint(0, n0, size=(n0,))]
+        re_idcs1 = idcs1[np.random.randint(0, n1, size=(n1,))]
+        idcs = list(re_idcs0) + list(re_idcs1)
+        yield i, IX[idcs], Y[idcs]
+    return
+
 def resample_range(start, end, n):
     for i in range(n):
         idcs = np.random.randint(start, end, size=(end-start,))
@@ -462,7 +474,12 @@ def run_npfga(fgraph, IX, Y, rand_IX_list, rand_Y, options, log):
         log=log)
     # TODO <<< -> store
     # Bootstrap
-    data_iterator = resample_IX_Y(IX, Y, options.bootstrap) if options.bootstrap > 0 else zip([0], [IX], [Y])
+    if options.bootstrap == 0:
+        data_iterator = zip([0], [IX], [Y])
+    elif options.bootstrap_by_mode:
+        data_iterator = mode_resample_IX_Y(IX, Y, options.bootstrap, options.bootstrap_mode_threshold)
+    else:
+        data_iterator = resample_IX_Y(IX, Y, options.bootstrap)
     n_resamples = options.bootstrap if options.bootstrap > 0 else 1
     cov_samples    = np.zeros((len(fgraph),n_resamples), dtype=IX.dtype)
     exs_samples    = np.zeros((len(fgraph),n_resamples), dtype=IX.dtype)
@@ -1122,6 +1139,9 @@ class CVNone(object):
     def isDone(self):
         return self.step >= self.n_reps
 
+def CVIter(tags, options):
+    return cv_iterator[options.cv_mode](tags, options)
+
 cv_iterator = {
   "loo": CVLOO,
   "mc": CVMC,
@@ -1139,10 +1159,15 @@ def metric_rhop(yp,yt):
 def metric_rhor(yp,yt):
     return scipy.stats.spearmanr(yp, yt).correlation
 
+def metric_auc(yp,yt):
+    import sklearn.metrics
+    return sklearn.metrics.roc_auc_score(yt,yp)
+
 class CVEval(object):
     eval_map = { 
         "rmse": metric_rmse, 
-        "rhop": metric_rhop
+        "rhop": metric_rhop,
+        "auc":  metric_auc
     }
     def __init__(self, jsonfile=None):
         self.yp_map = {}
@@ -1161,6 +1186,17 @@ class CVEval(object):
         return CVEval.eval_map[metric](
             np.array(self.yp_map[channel]), 
             np.array(self.yt_map[channel]))
+    def evaluateNull(self, channel, metric, n_samples):
+        if len(self.yp_map[channel]) < 1: return np.nan
+        z = []
+        for i in range(n_samples):
+            yp_null = np.array(self.yp_map[channel])
+            yt_null = np.array(self.yt_map[channel])
+            np.random.shuffle(yp_null)
+            z.append(CVEval.eval_map[metric](
+                yp_null, yt_null))
+        z = np.sort(np.array(z))
+        return z
     def evaluateAll(self, metrics, log=None):
         res = {}
         for channel in sorted(self.yp_map):
