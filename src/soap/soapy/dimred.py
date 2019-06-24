@@ -20,7 +20,7 @@ def compute_dist_matrix_3d(X, Y, Z):
     dZ = np.subtract.outer(Z, Z)
     return dX, dY, (dX*dX + dY*dY + dZ*dZ)**0.5
 
-def project_harm_net(K, D, checkfile=None, load_check=False, init='kernelpca', log=None):
+def project_harm_net(K, D, R0=None, checkfile=None, load_check=False, init='kernelpca', log=None, gtol=0.1):
     N = D.shape[0]
     # Harmonic
     with_gaussian = False
@@ -67,7 +67,9 @@ def project_harm_net(K, D, checkfile=None, load_check=False, init='kernelpca', l
     if checkfile is not None and load_check:
         XY0 = np.loadtxt(checkfile)
     else:
-        if init == 'kernelpca':
+        if R0 is not None:
+            pass
+        elif init == 'kernelpca':
             R0 = dimred_matrix('kernelpca', kmat=K, distmat=D, outfile="")
         elif init == 'uniform':
             R0 = np.max(D)*(np.random.uniform(size=(D.shape[0],3))-0.5)
@@ -92,7 +94,7 @@ def project_harm_net(K, D, checkfile=None, load_check=False, init='kernelpca', l
         x0=XY0, 
         method='CG', 
         jac=gradient, 
-        options={'gtol': 0.1})
+        options={'gtol': gtol})
     XY_out = opt_out.x
     return np.array([ XY_out[0:N], XY_out[N:] ]).T
 
