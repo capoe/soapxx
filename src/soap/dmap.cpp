@@ -524,6 +524,12 @@ DMapMatrix *DMapMatrix::getView(std::string filter) {
     return it->second;
 }
 
+void DMapMatrix::append(DMap *dmap_arg) {
+    DMap *new_dmap = new DMap(dmap_arg->filter);
+    new_dmap->dmap = dmap_arg->dmap;
+    dmm.push_back(new_dmap);
+}
+
 void DMapMatrix::append(Spectrum *spectrum) {
     for (auto it=spectrum->beginAtomic(); it!=spectrum->endAtomic(); ++it) {
         DMap *new_dmap = new DMap();
@@ -639,6 +645,10 @@ void DMapMatrix::load(std::string archfile) {
 
 void DMapMatrix::registerPython() {
     using namespace boost::python;
+    void (DMapMatrix::*appendDMap)(DMap*)
+        = &DMapMatrix::append;
+    void (DMapMatrix::*appendSpectrum)(Spectrum*)
+        = &DMapMatrix::append;
     class_<DMapMatrix, DMapMatrix*>("DMapMatrix", init<>())
         .def(init<std::string>())
         .add_property("rows", &DMapMatrix::rows)
@@ -646,7 +656,8 @@ void DMapMatrix::registerPython() {
         .def("__getitem__", &DMapMatrix::getRow, return_value_policy<reference_existing_object>())
         .def("addView", &DMapMatrix::addView)
         .def("getView", &DMapMatrix::getView, return_value_policy<reference_existing_object>())
-        .def("append", &DMapMatrix::append)
+        .def("append", appendDMap)
+        .def("append", appendSpectrum)
         .def("appendCoherent", &DMapMatrix::appendCoherent)
         .def("sum", &DMapMatrix::sum)
         .def("normalize", &DMapMatrix::normalize)

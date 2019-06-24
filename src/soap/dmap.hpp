@@ -27,7 +27,7 @@ class TypeEncoder
     TypeEncoder();
     ~TypeEncoder();
     void clear();
-    int size() { return encoder.size(); }
+    int size() { return order.size(); }
     encoder_t::iterator begin() { return encoder.begin(); }
     encoder_t::iterator end() { return encoder.end(); }
     void list();
@@ -168,6 +168,7 @@ class DMapMatrix
     void dotFilter(DMapMatrix *other, matrix_t &output);
     bpy::object dotNumpy(DMapMatrix *other, std::string np_dtype);
     bpy::object dotFilterNumpy(DMapMatrix *other, std::string np_dtype);
+    void append(DMap *dmap);
     void append(Spectrum *spectrum);
     void appendCoherent(Spectrum *spectrum);
     void save(std::string archfile);
