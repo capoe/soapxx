@@ -51,6 +51,9 @@ class Kernel
         DMapMatrixSet *dset2,
         bool symmetric,
         DMapMatrix::matrix_t &output);
+    double evaluate(
+        DMapMatrix *dmap1,
+        DMapMatrix *dmap2);
     void evaluateAll(
         DMapMatrixSet *dset1,
         DMapMatrixSet *dset2,

@@ -249,6 +249,12 @@ void Kernel::evaluate(DMapMatrixSet *dset1, DMapMatrixSet *dset2,
     GLOG() << std::endl;
 }
 
+double Kernel::evaluate(DMapMatrix *dmap1, DMapMatrix *dmap2) {
+    DMapMatrix::matrix_t Kij(dmap1->rows(), dmap2->rows());
+    basekernel->evaluate(dmap1, dmap2, Kij);
+    return topkernels[0]->evaluate(Kij);
+}
+
 boost::python::object Kernel::getOutput(int slot, std::string np_dtype) {
     if (slot > kernelmats_out.size()) 
         throw soap::base::OutOfRange("Output slot "+lexical_cast<std::string>(slot, ""));
@@ -325,6 +331,10 @@ void Kernel::attributeLeft(DMapMatrix *dmap1, DMapMatrixSet *dset2,
 
 void Kernel::registerPython() {
     using namespace boost::python;
+    bpy::object (Kernel::*evaluatePythonDset)(DMapMatrixSet*, DMapMatrixSet*, bool, std::string)
+        = &Kernel::evaluatePython;
+    double (Kernel::*evaluatePythonDmap)(DMapMatrix*, DMapMatrix*)
+        = &Kernel::evaluate;
     class_<Kernel, Kernel*>("Kernel", init<Options&>())
         .def("addTopkernel", &Kernel::addTopkernel)
         .def("evaluateTop", &Kernel::evaluateTopkernel)
@@ -332,7 +342,8 @@ void Kernel::registerPython() {
         .add_property("n_output", &Kernel::outputSlots)
         .def("getOutput", &Kernel::getOutput)
         .def("attributeLeft", &Kernel::attributeLeftPython)
-        .def("evaluate", &Kernel::evaluatePython)
+        .def("evaluate", evaluatePythonDset)
+        .def("evaluate", evaluatePythonDmap)
         .def("evaluateAll", &Kernel::evaluateAll);
 }
 
