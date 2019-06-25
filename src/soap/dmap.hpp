@@ -71,6 +71,7 @@ struct DMap
     typedef double dtype_t;
     //typedef float dtype_t;
     typedef ub::vector<dtype_t> vec_t;
+    typedef ub::matrix<dtype_t> matrix_t;
     //typedef Eigen::VectorXf vec_t;
     typedef std::pair<TypeEncoder::code_t, vec_t*> channel_t;
     typedef std::vector<channel_t> dmap_t;
@@ -83,6 +84,7 @@ struct DMap
     pid_gradmap_t::iterator beginGradients() { return pid_gradmap.begin(); }
     pid_gradmap_t::iterator endGradients() { return pid_gradmap.end(); }
     int size() { return dmap.size(); }
+    bpy::object val(int chidx, std::string np_dtype);
     dtype_t val() { return (*(dmap[0].second))(0); }
     void sort();
     void sortGradients();
@@ -90,8 +92,11 @@ struct DMap
     boost::python::list listChannels();
     void add(DMap *other);
     void add(DMap *other, double c);
+    void slice(std::vector<int> &idcs);
     void addIgnoreGradients(DMap *other, double c);
     void addGradients(DMap *other, double c);
+    bpy::object dotOuterNumpy(DMap *other, std::string np_dtype);
+    void dotOuter(DMap *other, matrix_t &output);
     double dot(DMap *other);
     double dotFilter(DMap *other);
     DMap *dotGradLeft(DMap *other, double coeff, double power, DMap *res);
@@ -168,6 +173,8 @@ class DMapMatrix
     void dotFilter(DMapMatrix *other, matrix_t &output);
     bpy::object dotNumpy(DMapMatrix *other, std::string np_dtype);
     bpy::object dotFilterNumpy(DMapMatrix *other, std::string np_dtype);
+    void slicePython(bpy::list &py_idcs);
+    void slice(std::vector<int> &idcs);
     void append(DMap *dmap);
     void append(Spectrum *spectrum);
     void appendCoherent(Spectrum *spectrum);
@@ -213,6 +220,8 @@ class DMapMatrixSet
     dset_t::iterator end() { return dset.end(); }
     int size() { return dset.size(); }
     void clear();
+    void slicePython(bpy::list &py_idcs);
+    void slice(std::vector<int> &idcs);
     DMapMatrix *get(int idx) { return dset[idx]; }
     DMapMatrixSet *getView(boost::python::list idcs);
     void append(DMapMatrix *dmm);

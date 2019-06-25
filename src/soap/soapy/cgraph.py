@@ -44,9 +44,7 @@ class CGraphRegressor(object):
         if len(Y.shape) < 2:
             Y = Y.reshape((-1,1))
         if opt is None:
-            options = soap.Options()
-            options.set("opt.type", method)
-            opt = soap.CGraphOptimizer(options)
+            opt = soap.CGraphOptimizer(method)
         optimize(self.cgraph, X, Y,
             opt=opt,
             dropout=self.dropout if self.options.dropout else None,

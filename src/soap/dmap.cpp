@@ -30,6 +30,42 @@ DMap::~DMap() {
     dmap.clear();
 }
 
+bpy::object DMap::val(int chidx, std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    return npc.ublas_to_numpy<dtype_t>(*dmap[chidx].second);
+}
+
+void DMap::slice(std::vector<int> &idcs) {
+    for (auto it=begin(); it!=end(); ++it) {
+        vec_t *new_v = new vec_t(idcs.size(), 0.); 
+        for (int ii=0; ii<idcs.size(); ++ii) {
+            (*new_v)[ii] = (*(it->second))[idcs[ii]];
+        }
+        delete (*it).second;
+        (*it).second = new_v;
+    }
+}
+
+bpy::object DMap::dotOuterNumpy(DMap *other, std::string np_dtype) {
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    DMapMatrix::matrix_t output(this->size(), other->size(), 0.0);
+    this->dotOuter(other, output);
+    return npc.ublas_to_numpy<double>(output);
+}
+
+void DMap::dotOuter(DMap *other, matrix_t &output) {
+    int i = 0;
+    int j = 0;
+    for (auto it=begin(); it!=end(); ++it, ++i) {
+        j = 0;
+        for (auto jt=other->begin(); jt!=other->end(); ++jt, ++j) {
+            dtype_t r12 = 0.0;
+            soap::linalg::linalg_dot(*(it->second), *(jt->second), r12);
+            output(i,j) = r12;
+        }
+    }
+}
+
 double DMap::dot(DMap *other) {
     if (other->size() < this->size()) return other->dot(this);
     dtype_t res = 0.0;
@@ -340,7 +376,10 @@ DMap *DMap::dotGradLeft(DMap *other, double coeff, double power, DMap *res) {
 
 void DMap::registerPython() {
     using namespace boost::python;
-
+    dtype_t (DMap::*val_scalar)()
+        = &DMap::val;
+    bpy::object (DMap::*val_vector)(int, std::string)
+        = &DMap::val;
     void (DMap::*onlyAdd)(DMap*)
         = &DMap::add;
     void (DMap::*scaleAdd)(DMap*,double)
@@ -354,9 +393,11 @@ void DMap::registerPython() {
         .def("normalize", &DMap::normalize)
         .def("dot", &DMap::dot)
         .def("dotGradLeft", &DMap::dotGradLeft, return_value_policy<reference_existing_object>())
+        .def("dotOuter", &DMap::dotOuterNumpy)
         .def("add", onlyAdd)
         .def("add", scaleAdd)
-        .def("val", &DMap::val)
+        .def("val", val_scalar)
+        .def("val", val_vector)
         .def("multiply", &DMap::multiply)
         .def("convolve", &DMap::convolve)
         .def("dotFilter", &DMap::dotFilter);
@@ -568,6 +609,20 @@ void DMapMatrix::convolve(int N, int L) {
     }
 }
 
+void DMapMatrix::slicePython(bpy::list &py_idcs) {
+    std::vector<int> idcs;
+    for (int i=0; i<bpy::len(py_idcs); ++i) {
+        idcs.push_back(bpy::extract<int>(py_idcs[i]));
+    }
+    this->slice(idcs);
+}
+
+void DMapMatrix::slice(std::vector<int> &idcs) {
+    for (auto it=begin(); it!=end(); ++it) {
+        (*it)->slice(idcs);
+    }
+}
+
 void DMapMatrix::dot(DMapMatrix *other, matrix_t &output) {
     assert(output.size1() == this->rows() && output.size2() == other->rows() &&
         "Output matrix dimensions incompatible with input"); 
@@ -660,6 +715,7 @@ void DMapMatrix::registerPython() {
         .def("append", appendSpectrum)
         .def("appendCoherent", &DMapMatrix::appendCoherent)
         .def("sum", &DMapMatrix::sum)
+        .def("slice", &DMapMatrix::slicePython)
         .def("normalize", &DMapMatrix::normalize)
         .def("convolve", &DMapMatrix::convolve)
         .def("dot", &DMapMatrix::dotNumpy)
@@ -736,6 +792,20 @@ void DMapMatrixSet::load(std::string archfile) {
 	return;
 }
 
+void DMapMatrixSet::slicePython(bpy::list &py_idcs) {
+    std::vector<int> idcs;
+    for (int i=0; i<bpy::len(py_idcs); ++i) {
+        idcs.push_back(bpy::extract<int>(py_idcs[i]));
+    }
+    this->slice(idcs);
+}
+
+void DMapMatrixSet::slice(std::vector<int> &idcs) {
+    for (auto it=begin(); it!=end(); ++it) {
+        (*it)->slice(idcs);
+    }
+}
+
 void DMapMatrixSet::registerPython() {
     using namespace boost::python;
     class_<DMapMatrixSet, DMapMatrixSet*>("DMapMatrixSet", init<>())
@@ -746,6 +816,7 @@ void DMapMatrixSet::registerPython() {
         .add_property("size", &DMapMatrixSet::size)
         .def("save", &DMapMatrixSet::save)
         .def("load", &DMapMatrixSet::load)
+        .def("slice", &DMapMatrixSet::slicePython)
         .def("clear", &DMapMatrixSet::clear)
         .def("append", &DMapMatrixSet::append)
         .def("extend", &DMapMatrixSet::extend);
