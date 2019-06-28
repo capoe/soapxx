@@ -25,6 +25,8 @@ class TopKernel
     virtual void configure(Options &options) {;}
     double evaluateNumpy(boost::python::object &np_K, std::string np_dtype);
     virtual double evaluate(DMapMatrix::matrix_t &K) = 0;
+    virtual void attributeGetReductionMatrix(
+        DMapMatrix::matrix_t &K, DMapMatrix::matrix_t &P) = 0;
     virtual void attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off) = 0;
 };
@@ -61,6 +63,9 @@ class Kernel
     double evaluateTopkernel(
         boost::python::object &np_K, 
         std::string np_dtype);
+    boost::python::object attributeTopkernelGetReductionMatrix(
+        boost::python::object &np_K,
+        std::string np_dtype);
     boost::python::object attributeLeftPython(
         DMapMatrix *dmap1,
         DMapMatrixSet *dset2,
@@ -95,6 +100,8 @@ class TopKernelRematch : public TopKernel
     TopKernelRematch();
     void configure(Options &options);
     double evaluate(DMapMatrix::matrix_t &K);
+    void attributeGetReductionMatrix(
+        DMapMatrix::matrix_t &K, DMapMatrix::matrix_t &P);
     void attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off);
   private:
@@ -109,6 +116,8 @@ class TopKernelCanonical : public TopKernel
     TopKernelCanonical();
     void configure(Options &options);
     double evaluate(DMapMatrix::matrix_t &K);
+    void attributeGetReductionMatrix(
+        DMapMatrix::matrix_t &K, DMapMatrix::matrix_t &P);
     void attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off);
   private:
@@ -121,6 +130,8 @@ class TopKernelAverage : public TopKernel
     TopKernelAverage();
     void configure(Options &options);
     double evaluate(DMapMatrix::matrix_t &K);
+    void attributeGetReductionMatrix(
+        DMapMatrix::matrix_t &K, DMapMatrix::matrix_t &P);
     void attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off);
   private:

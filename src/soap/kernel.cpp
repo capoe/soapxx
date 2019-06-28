@@ -68,6 +68,48 @@ double TopKernelRematch::evaluate(DMapMatrix::matrix_t &K) {
     return k;
 }
 
+void TopKernelRematch::attributeGetReductionMatrix(
+    DMapMatrix::matrix_t &K, DMapMatrix::matrix_t &P) {
+    int nx = K.size1();
+    int ny = K.size2();
+    DMapMatrix::vec_t u(nx, 1.0);
+    DMapMatrix::vec_t u_in(nx, 1.0);
+    DMapMatrix::vec_t du(nx);
+    DMapMatrix::vec_t v(ny, 1.0);
+    DMapMatrix::vec_t v_in(ny, 1.0);
+    double ax = 1./nx;
+    double ay = 1./ny;
+    double lambda = 1./gamma;
+    DMapMatrix::matrix_t Kg(nx,ny);
+    for (int i=0; i<nx; ++i)
+        for (int j=0; j<ny; ++j)
+            Kg(i,j) = std::exp(-(1-K(i,j))*lambda);
+    int i_iter = 0;
+    double err = 0.0;
+    // TODO Add convergence flag and send to user
+    while (true) {
+        // Update u
+        soap::linalg::linalg_matrix_vector_dot(Kg, v, u, false, 1.0, 0.0);
+        err = 0.0;
+        for (int i=0; i<nx; ++i) err += std::pow(ax-u(i)*u_in(i),2);
+        for (int i=0; i<nx; ++i) u(i) = omega*ax/u(i) + (1-omega)*u_in(i);
+        // Update v
+        soap::linalg::linalg_matrix_vector_dot(Kg, u, v, true, 1.0, 0.0);
+        for (int i=0; i<ny; ++i) v(i) = omega*ay/v(i) + (1-omega)*v_in(i);
+        if (err < eps) break;
+        // Step
+        u_in = u;
+        v_in = v;
+        i_iter += 1;
+    }
+    for (int i=0; i<nx; ++i) {
+        double ki = 0.0;
+        for (int j=0; j<ny; ++j) {
+            P(i,j) = u(i)*Kg(i,j)*v(j);
+        }
+    }
+}
+
 void TopKernelRematch::attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off) {
     int nx = K.size1();
@@ -147,6 +189,11 @@ double TopKernelCanonical::evaluate(DMapMatrix::matrix_t &K) {
     return k;
 }
 
+void TopKernelCanonical::attributeGetReductionMatrix(
+    DMapMatrix::matrix_t &K, DMapMatrix::matrix_t &P) {
+    throw soap::base::NotImplemented("canonical::attributeGetReductionMatrix");
+}
+
 void TopKernelCanonical::attributeLeft(DMapMatrix::matrix_t &K, 
         DMapMatrix::matrix_t &K_out, int i_off, int j_off) {
     throw soap::base::NotImplemented("canonical::attributeLeft");
@@ -164,6 +211,16 @@ double TopKernelAverage::evaluate(DMapMatrix::matrix_t &K) {
         for (int j=0; j<K.size2(); ++j)
             k += K(i,j);
     return k;
+}
+
+void TopKernelAverage::attributeGetReductionMatrix(
+    DMapMatrix::matrix_t &K, DMapMatrix::matrix_t &P) {
+    for (int i=0; i<K.size1(); ++i) {
+        double ki = 0.0;
+        for (int j=0; j<K.size2(); ++j) {
+            P(i,j) = 1.;
+        }
+    }
 }
 
 void TopKernelAverage::attributeLeft(DMapMatrix::matrix_t &K, 
@@ -303,6 +360,16 @@ double Kernel::evaluateTopkernel(boost::python::object &np_K, std::string np_dty
     return topkernels[0]->evaluateNumpy(np_K, np_dtype);
 }
 
+boost::python::object Kernel::attributeTopkernelGetReductionMatrix(
+    boost::python::object &np_K, std::string np_dtype) {
+    DMapMatrix::matrix_t K;
+    soap::linalg::numpy_converter npc(np_dtype.c_str());
+    npc.numpy_to_ublas<DMapMatrix::dtype_t>(np_K, K);
+    DMapMatrix::matrix_t output(K.size1(), K.size2(), 0.0);
+    topkernels[0]->attributeGetReductionMatrix(K, output);
+    return npc.ublas_to_numpy<DMapMatrix::dtype_t>(output);
+}
+
 boost::python::object Kernel::attributeLeftPython(DMapMatrix *dmap1, DMapMatrixSet *dset2, 
         std::string np_dtype) {
     soap::linalg::numpy_converter npc(np_dtype.c_str());
@@ -338,6 +405,7 @@ void Kernel::registerPython() {
     class_<Kernel, Kernel*>("Kernel", init<Options&>())
         .def("addTopkernel", &Kernel::addTopkernel)
         .def("evaluateTop", &Kernel::evaluateTopkernel)
+        .def("attributeTopGetReductionMatrix", &Kernel::attributeTopkernelGetReductionMatrix)
         .def("getMetadata", &Kernel::getMetadata, return_value_policy<reference_existing_object>())
         .add_property("n_output", &Kernel::outputSlots)
         .def("getOutput", &Kernel::getOutput)

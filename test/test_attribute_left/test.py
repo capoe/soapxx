@@ -59,6 +59,41 @@ def test_attribution_rematch(dset, options):
             assert_equal(KK_sum[j]-K[i,j], 0.0, 1e-6)
     log << log.endl
 
+def test_reduction_matrix_average(options):
+    log << log.mg << "<test_reduction_matrix_average>" << log.flush
+    kernel_options = soap.Options()
+    kernel_options.set("basekernel_type", "dot")
+    kernel_options.set("base_exponent", 3.)
+    kernel_options.set("base_filter", False)
+    kernel_options.set("topkernel_type", "average")
+    kernel = soap.Kernel(kernel_options)
+    for i in range(9):
+        K_base = np.random.uniform(size=(i+1,((i+2) % 4)+1))
+        k = kernel.evaluateTop(K_base, "float64")
+        P = kernel.attributeTopGetReductionMatrix(K_base, "float64")
+        k_red = np.sum(K_base*P)
+        assert_equal(k-k_red, 0.0, 1e-6)
+    log << log.endl
+
+def test_reduction_matrix_rematch(options):
+    log << log.mg << "<test_reduction_matrix_rematch>" << log.flush
+    kernel_options = soap.Options()
+    kernel_options.set("basekernel_type", "dot")
+    kernel_options.set("base_exponent", 3.)
+    kernel_options.set("base_filter", False)
+    kernel_options.set("topkernel_type", "rematch")
+    kernel_options.set("rematch_gamma", 0.01)
+    kernel_options.set("rematch_eps", 1e-6)
+    kernel_options.set("rematch_omega", 1.0)
+    kernel = soap.Kernel(kernel_options)
+    for i in range(9):
+        K_base = np.random.uniform(size=(i+1,((i+2) % 4)+1))
+        k = kernel.evaluateTop(K_base, "float64")
+        P = kernel.attributeTopGetReductionMatrix(K_base, "float64")
+        k_red = np.sum(K_base*P)
+        assert_equal(k-k_red, 0.0, 1e-6)
+    log << log.endl
+
 if __name__ == "__main__":
     configs = soap.tools.io.read('structures.xyz')
     options = soap.soapy.configure_default()
@@ -66,6 +101,8 @@ if __name__ == "__main__":
     dset = evaluate_soap(configs, options)
     test_attribution_average(dset, options)
     test_attribution_rematch(dset, options)
+    test_reduction_matrix_average(options)
+    test_reduction_matrix_rematch(options)
     log << "All passed." << log.endl
 
 
