@@ -31,6 +31,8 @@ class PyNodeParams(object):
     def incrementFrictions(self):
         if self.friction is None: self.zeroFrictions()
         self.friction = self.friction + self.grad**2
+    def nParams(self):
+        return self.C.size
 
 class PyNode(object):
     def __init__(self, idx, parents, props):
@@ -86,21 +88,40 @@ class PyNodeInput(PyNode):
         self.grad = self.grad + g_back
         return
 
-class PyNodeMSE(PyNode):
+class PyNodeScalar(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
-        self.op = "mse"
+        self.op = "scalar"
+    def calcParamsShape(self):
+        dim = sum([ p.dim for p in self.parents ])
+        return (dim,)
     def evaluate(self):
-        assert len(self.parents) == 2
-        self.X_out = np.sum((self.parents[0].X_out - self.parents[1].X_out)**2) \
-            /self.parents[0].X_out.shape[0]
-    def backpropagate(self, g_back=1., level=0, log=None):
-        if log:
-            log << "  "*level << log.flush
-            self.printDim()
-        g_X = 2./self.parents[0].X_out.shape[0]*(self.parents[0].X_out - self.parents[1].X_out)
-        self.parents[0].backpropagate(+1.*g_X*g_back, level=level+1, log=log)
-        self.parents[1].backpropagate(-1.*g_X*g_back, level=level+1, log=log)
+        self.X_in = np.concatenate([ node.X_out for node in self.parents ], axis=1)
+        self.X_out = self.X_in*self.params.C
+    def backpropagate(self, g_back, level=0, log=None):
+        g_C = np.sum(g_back*self.X_in, axis=0)
+        g_X = g_back*self.params.C
+        self.params.addGrad(g_C)
+        off = 0
+        for p in self.parents:
+            p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
+            off += p.dim
+
+class PyNodeExp(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "exp"
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_in = np.concatenate([ node.X_out for node in self.parents ], axis=1)
+        self.X_out = np.exp(self.X_in)
+    def backpropagate(self, g_back, level=0, log=None):
+        g_X = g_back*self.X_out
+        off = 0
+        for p in self.parents:
+            p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
+            off += p.dim
 
 class PyNodeLinear(PyNode):
     def __init__(self, idx, parents, props):
@@ -148,7 +169,6 @@ class PyNodeSoftmax(PyNode):
         for p in self.parents:
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
             off += p.dim
-        return
 
 class PyNodeSigmoid(PyNode):
     def __init__(self, idx, parents, props):
@@ -175,12 +195,64 @@ class PyNodeSigmoid(PyNode):
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
             off += p.dim
 
+class PyNodeDot(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.dim = 1
+        self.op = "dot"
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_out = np.sum(self.parents[0].X_out*self.parents[1].X_out, axis=1).reshape((-1,1))
+    def backpropagate(self, g_back, level=0, log=None):
+        g0 = g_back*self.parents[1].X_out
+        g1 = g_back*self.parents[0].X_out
+        self.parents[0].backpropagate(g0, level=level+1, log=log)
+        self.parents[1].backpropagate(g1, level=level+1, log=log)
+
+class PyNodeMSE(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "mse"
+    def evaluate(self):
+        assert len(self.parents) == 2
+        self.X_out = np.sum((self.parents[0].X_out - self.parents[1].X_out)**2) \
+            /self.parents[0].X_out.shape[0]
+    def backpropagate(self, g_back=1., level=0, log=None):
+        if log:
+            log << "  "*level << log.flush
+            self.printDim()
+        g_X = 2./self.parents[0].X_out.shape[0]*(self.parents[0].X_out - self.parents[1].X_out)
+        self.parents[0].backpropagate(+1.*g_X*g_back, level=level+1, log=log)
+        self.parents[1].backpropagate(-1.*g_X*g_back, level=level+1, log=log)
+
+class PyNodeXENT(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "xent"
+    def evaluate(self):
+        assert len(self.parents) == 2
+        yp = self.parents[0].X_out
+        yt = self.parents[1].X_out
+        self.X_out = -1./yt.shape[0]*np.sum(yt*np.log(yp) + (1.-yt)*np.log(1.-yp))
+    def backpropagate(self, g_back=1., level=0, log=None):
+        yp = self.parents[0].X_out
+        yt = self.parents[1].X_out
+        gp = -1./yt.shape[0]*(yt/yp - (1.-yt)/(1.-yp))
+        gt = -1./yt.shape[0]*(np.log(yp) - np.log(1.-yp))
+        self.parents[0].backpropagate(gp*g_back, level=level+1, log=log)
+        self.parents[1].backpropagate(gt*g_back, level=level+1, log=log)
+
 PyNode.prototypes = {
     "input": PyNodeInput,
+    "scalar": PyNodeScalar,
+    "exp": PyNodeExp,
     "linear": PyNodeLinear,
     "sigmoid": PyNodeSigmoid,
     "softmax": PyNodeSoftmax,
-    "mse": PyNodeMSE
+    "dot": PyNodeDot,
+    "mse": PyNodeMSE,
+    "xent": PyNodeXENT
 }
 
 class PyGraph(object):
@@ -208,14 +280,18 @@ class PyGraph(object):
         else:
             new_params = PyNodeParams(params_shape)
             self.params.append(new_params)
-        assert new_params.shape[0] == params_shape[0] and \
-            new_params.shape[1] == params_shape[1]
+        assert len(new_params.shape) == len(params_shape)
+        for i in range(len(new_params.shape)):
+            assert new_params.shape[i] == params_shape[i]
         new_node.params = new_params
         self.params_map[params_tag] = new_params
         return new_node
+    def __getitem__(self, node_tag):
+        return self.node_map[node_tag]
     def printInfo(self):
-        log << "Graph with %d nodes and %d parameter sets" % (
-            len(self.nodes), len(self.params_map)) << log.endl
+        n_params = sum([ p.nParams() for p in self.params ])
+        log << "Graph with %d nodes and %d parameter sets with %d parameters" % (
+            len(self.nodes), len(self.params_map), n_params) << log.endl
         for node in self.nodes:
             node.printInfo()
     def evaluate(self, node, feed):
