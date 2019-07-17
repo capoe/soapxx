@@ -130,7 +130,8 @@ def test_xent_grad():
     Y1 = graph.addNode(op="input", props={ "dim": 1, "tag": "Y1" })
     L1 = graph.addNode(op="linear", parents=[X1,X2],    props={ "dim": 5, "params": "C12" })
     L2 = graph.addNode(op="sigmoid", parents=[X1,X1,X1], props={ "dim": 5, "params": "C12" })
-    L3 = graph.addNode(op="sigmoid", parents=[L1,L2],    props={ "dim": 1 })
+    L4 = graph.addNode(op="mult", parents=[L1,L2])
+    L3 = graph.addNode(op="sigmoid", parents=[L1,L4],    props={ "dim": 1 })
     xent = graph.addNode(op="xent", parents=[L3,Y1])
     graph.printInfo()
     # INITIALIZE & FEED

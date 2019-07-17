@@ -1,6 +1,7 @@
 import numpy as np
 import soap
 import momo
+import pickle
 log = momo.osio
 np_dtype = "float64"
 
@@ -19,7 +20,7 @@ class PyNodeParams(object):
         self.friction = None
         self.shape = self.C.shape
     def randomize(self):
-        self.C = np.random.uniform(-1., 1., size=self.shape) 
+        self.C = np.random.uniform(-1., 1., size=self.shape).astype(np_dtype)
     def set(self, C):
         self.C = np.copy(C)
     def zeroGrad(self):
@@ -33,6 +34,9 @@ class PyNodeParams(object):
         self.friction = self.friction + self.grad**2
     def nParams(self):
         return self.C.size
+    def purge(self):
+        self.grad = None
+        self.friction = None
 
 class PyNode(object):
     def __init__(self, idx, parents, props):
@@ -70,23 +74,38 @@ class PyNode(object):
         raise NotImplementedError("Missing function overload in ::backpropagate")
         return
     def printInfo(self, log=log):
-        log << "Have node: %3d %-10s %4s <- depends on %s" % (
-            self.idx, self.op, self.tag, str(sorted(self.deps.keys()))) << log.endl
+        dep_str = str(sorted(self.deps.keys()))
+        if len(dep_str) > 17: dep_str = "(%d nodes)" % (len(self.deps.keys()))
+        log << "Have node: %3d %-10s %-20s <- depends on %s" % (
+            self.idx, self.op, self.tag, dep_str) << log.endl
     def printDim(self, log=log):
         log << "Node %d '%s': %s => %s" % (
             self.idx, self.op, self.X_in.shape, self.X_out.shape) << log.endl
+    def purge(self):
+        self.X_in = np.array([])
+        self.X_out = None
+        self.grad = None
 
 class PyNodeInput(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
         self.op = "input"
-        return
-    def backpropagate(self, g_back, level=0, log=None):
-        if log:
-            log << "  "*level << log.flush
-            self.printDim()
+    def backpropagate(self, g_back=1., level=0, log=None):
         self.grad = self.grad + g_back
-        return
+
+class PyNodeSlice(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.slice = require(props, "slice")
+        self.dim = self.slice[1]-self.slice[0]
+        self.op = "slice"
+        assert len(parents) == 1
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_out = self.parents[0].X_out[:,self.slice[0]:self.slice[1]]
+    def backpropagate(self, g_back, level=0, log=None):
+        pass
 
 class PyNodeScalar(PyNode):
     def __init__(self, idx, parents, props):
@@ -106,6 +125,23 @@ class PyNodeScalar(PyNode):
         for p in self.parents:
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
             off += p.dim
+
+class PyNodeMult(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "mult"
+        self.dim = parents[0].dim
+        assert len(parents) == 2
+        assert parents[0].dim == parents[1].dim
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_out = self.parents[0].X_out*self.parents[1].X_out
+    def backpropagate(self, g_back, level=0, log=None):
+        g0 = g_back*self.parents[1].X_out
+        g1 = g_back*self.parents[0].X_out
+        self.parents[0].backpropagate(g0, level=level+1, log=log)
+        self.parents[1].backpropagate(g1, level=level+1, log=log)
 
 class PyNodeExp(PyNode):
     def __init__(self, idx, parents, props):
@@ -139,9 +175,6 @@ class PyNodeLinear(PyNode):
         g_C = x0.T.dot(g_back) # (dim_in+1) x dim_out
         self.params.addGrad(g_C)
         g_X = g_back.dot(self.params.C[0:-1,:].T) # n x dim_in
-        if log:
-            log << "  "*level << log.flush
-            self.printDim(log)
         off = 0
         for p in self.parents:
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
@@ -162,9 +195,6 @@ class PyNodeSoftmax(PyNode):
         g0 = g_back*self.X_out
         g1 = - (self.X_out.T*np.sum(g_back*self.X_out, axis=1)).T
         g_X = g0+g1
-        if log:
-            log << "  "*level << log.flush
-            self.printDim(log)
         off = 0
         for p in self.parents:
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
@@ -187,9 +217,6 @@ class PyNodeSigmoid(PyNode):
         g_C = x0.T.dot(g) # (dim_in+1) x dim_out
         self.params.addGrad(g_C)
         g_X = g.dot(self.params.C[0:-1,:].T) # n x dim_in
-        if log:
-            log << "  "*level << log.flush
-            self.printDim(log)
         off = 0
         for p in self.parents:
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
@@ -210,18 +237,19 @@ class PyNodeDot(PyNode):
         self.parents[0].backpropagate(g0, level=level+1, log=log)
         self.parents[1].backpropagate(g1, level=level+1, log=log)
 
+class PyNodeOuter(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+
 class PyNodeMSE(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
         self.op = "mse"
-    def evaluate(self):
         assert len(self.parents) == 2
+    def evaluate(self):
         self.X_out = np.sum((self.parents[0].X_out - self.parents[1].X_out)**2) \
             /self.parents[0].X_out.shape[0]
     def backpropagate(self, g_back=1., level=0, log=None):
-        if log:
-            log << "  "*level << log.flush
-            self.printDim()
         g_X = 2./self.parents[0].X_out.shape[0]*(self.parents[0].X_out - self.parents[1].X_out)
         self.parents[0].backpropagate(+1.*g_X*g_back, level=level+1, log=log)
         self.parents[1].backpropagate(-1.*g_X*g_back, level=level+1, log=log)
@@ -230,8 +258,8 @@ class PyNodeXENT(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
         self.op = "xent"
-    def evaluate(self):
         assert len(self.parents) == 2
+    def evaluate(self):
         yp = self.parents[0].X_out
         yt = self.parents[1].X_out
         self.X_out = -1./yt.shape[0]*np.sum(yt*np.log(yp) + (1.-yt)*np.log(1.-yp))
@@ -244,15 +272,17 @@ class PyNodeXENT(PyNode):
         self.parents[1].backpropagate(gt*g_back, level=level+1, log=log)
 
 PyNode.prototypes = {
-    "input": PyNodeInput,
-    "scalar": PyNodeScalar,
-    "exp": PyNodeExp,
-    "linear": PyNodeLinear,
-    "sigmoid": PyNodeSigmoid,
-    "softmax": PyNodeSoftmax,
-    "dot": PyNodeDot,
-    "mse": PyNodeMSE,
-    "xent": PyNodeXENT
+    "input":    PyNodeInput,
+    "slice":    PyNodeSlice,
+    "scalar":   PyNodeScalar,
+    "mult":     PyNodeMult,
+    "exp":      PyNodeExp,
+    "linear":   PyNodeLinear,
+    "sigmoid":  PyNodeSigmoid,
+    "softmax":  PyNodeSoftmax,
+    "dot":      PyNodeDot,
+    "mse":      PyNodeMSE,
+    "xent":     PyNodeXENT
 }
 
 class PyGraph(object):
@@ -316,25 +346,100 @@ class PyGraph(object):
         for node in self.nodes: node.zeroGrad()
         if node is None: node = self.nodes[-1]
         node.backpropagate(log=log)
+    def purge(self):
+        for node in self.nodes: node.purge()
+        for par in self.params: par.purge()
+    def save(self, archfile):
+        with open(archfile, 'w') as f:
+            f.write(pickle.dumps(self))
+    def load(self, archfile):
+        self = pickle.load(open(archfile, 'rb')) 
+        return self 
 
 class PyNodeDropout(object):
     def __init__(self):
         return
 
+class Subsampler(object):
+    def __init__(self, feed, idx_map={}):
+        self.feed = feed
+        self.idx_map = idx_map
+        self.max = self.findMaxRange(feed, idx_map)
+        self.lambdas = self.setupLambdas(feed, idx_map)
+        self.type = "none"
+    def sample(self, n_sub):
+        raise NotImplementedError("Missing ::sample implementation for '%s'" % self.type)
+    def setupLambdas(self, feed, idx_map):
+        lambdas = {}
+        for addr in feed:
+            if addr in idx_map:
+                lambdas[addr] = lambda addr, idcs, X: X[self.idx_map[addr][idcs]]
+            else:
+                lambdas[addr] = lambda addr, idcs, X: X[idcs]
+        return lambdas
+    def findMaxRange(self, feed, idx_map):
+        test_key = self.feed.keys()[0]
+        if test_key in idx_map: return idx_map[test_key].shape[0]
+        else: return self.feed[test_key].shape[0]
+
+class RandReSubsampler(Subsampler):
+    def __init__(self, feed, idx_map={}):
+        Subsampler.__init__(self, feed, idx_map)
+        self.type = "randre"
+    def sample(self, n_sub):
+        select = np.random.randint(0, self.max, n_sub)
+        subfeed = { addr: self.lambdas[addr](addr, select, x) \
+            for addr, x in self.feed.iteritems() }
+        return subfeed
+
 class PyGraphOptimizer(object):
     def __init__(self):
-        return
+        self.type = "none"
     def step(self, graph, feed, n_steps):
+        raise NotImplementedError(
+            "Missing ::step implementation for '%s'" % self.type)
+    def stepNodeParams(self, params):
+        raise NotImplementedError(
+            "Missing ::stepNodeParams implementation for '%s'" % self.type)
+    def initialize(self, graph):
         return
-    def optimize(self, graph):
-        return
+    def fit(self, graph, n_iters, n_batch, n_steps, feed=None,
+            idx_map={}, report_every=-1,
+            subsampler=None, log=None, verbose=False):
+        if subsampler is None: 
+            assert feed is not None
+            subsampler = RandReSubsampler(feed, idx_map=idx_map)
+            log << "Using random resampler over %d samples from data feed" % (
+                subsampler.max) << log.endl
+        report_on = graph["loss"] if "loss" in graph.node_map else graph.nodes[-1]
+        for it in range(n_iters):
+            subfeed = subsampler.sample(n_batch)
+            if log: 
+                log << "Batch %-d/%d:" % (it+1, n_iters) << log.flush
+                for key in sorted(subfeed):
+                    log << "(%s)=%s" % (key, subfeed[key].shape) << log.flush
+                log << log.endl
+            self.step(graph=graph, n_steps=n_steps, 
+                report_every=report_every,
+                obj=report_on,
+                feed=subfeed,
+                log=log if verbose else None)
+            if log: log << " => %s%s=%+1.4f" % (
+                report_on.op, report_on.tag, report_on.val()) << log.endl
+    def save(self, archfile):
+        with open(archfile, 'w') as f:
+            f.write(pickle.dumps(self))
+    def load(self, archfile):
+        self = pickle.load(open(archfile, 'rb')) 
+        return self 
 
 class OptAdaGrad(PyGraphOptimizer):
-    def __init__(self, props):
+    def __init__(self, props={}):
         PyGraphOptimizer.__init__(self)
         self.type = "adagrad"
-        self.rate = require(props, "rate")
+        self.rate = require(props, "rate", 0.01)
         self.eps = require(props, "eps", 1e-10)
+        self.datalog = {"loss":[]}
     def initialize(self, graph):
         for p in graph.params: p.zeroFrictions()
     def step(self, graph, feed, n_steps, obj, log=None, report_every=10):
@@ -343,13 +448,12 @@ class OptAdaGrad(PyGraphOptimizer):
             graph.backpropagate(log=None)
             for par in graph.params:
                 self.stepNodeParams(par)
+            self.datalog["loss"].append([n, obj.val()])
             if log and (n % report_every == 0 or n == n_steps-1):
-                log << "Step %3d: %s%s = %+1.4e" % (
+                log << "  Step %3d: %s%s = %+1.4e" % (
                     n, obj.op, obj.tag, obj.val()) << log.endl
         return
     def stepNodeParams(self, params):
         params.incrementFrictions()
         params.C = params.C - 1.*self.rate*params.grad/(np.sqrt(params.friction)+self.eps)
-    def optimize(self, graph, feed, n_steps):
-        return
 
