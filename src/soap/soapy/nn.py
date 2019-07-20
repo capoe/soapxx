@@ -2,6 +2,7 @@ import numpy as np
 import soap
 import momo
 import pickle
+import copy
 log = momo.osio
 np_dtype = "float64"
 
@@ -34,9 +35,9 @@ class PyNodeParams(object):
         self.friction = self.friction + self.grad**2
     def nParams(self):
         return self.C.size
-    def purge(self):
+    def purge(self, purge_frictions=True):
         self.grad = None
-        self.friction = None
+        if purge_frictions: self.friction = None
 
 class PyNode(object):
     def __init__(self, idx, parents, props):
@@ -292,6 +293,8 @@ class PyGraph(object):
         self.dependency_map = {}
         self.params = []
         self.params_map = {}
+        self.meta = {}
+        self.chks = []
     def addNode(self, op, parents=[], props={}):
         idx = len(self.nodes)
         # Create node
@@ -346,9 +349,20 @@ class PyGraph(object):
         for node in self.nodes: node.zeroGrad()
         if node is None: node = self.nodes[-1]
         node.backpropagate(log=log)
-    def purge(self):
+    def purge(self, purge_frictions=True):
         for node in self.nodes: node.purge()
-        for par in self.params: par.purge()
+        for par in self.params: par.purge(purge_frictions=purge_frictions)
+    def checkpoint(self, chkfile=None, info={}, log=None):
+        if log: log << log.mb << "Checkpoint #%d ..." % len(self.chks) << log.flush
+        self.purge(purge_frictions=False)
+        cpy = copy.deepcopy(self)
+        cpy.chks = []
+        cpy.meta.update(info)
+        self.chks.append(cpy)
+        if chkfile is not None: 
+            if log: log << log.mb << "writing '%s' ..." % chkfile << log.flush
+            cpy.save(chkfile)
+        if log: log << log.mb << "done" << log.endl
     def save(self, archfile):
         with open(archfile, 'w') as f:
             f.write(pickle.dumps(self))
@@ -405,7 +419,8 @@ class PyGraphOptimizer(object):
         return
     def fit(self, graph, n_iters, n_batch, n_steps, feed=None,
             idx_map={}, report_every=-1,
-            subsampler=None, log=None, verbose=False):
+            subsampler=None, log=None, verbose=False, chk_every=-1, chkfile=None):
+        if chk_every > 0: assert chkfile != None
         if subsampler is None: 
             assert feed is not None
             subsampler = RandReSubsampler(feed, idx_map=idx_map)
@@ -424,8 +439,11 @@ class PyGraphOptimizer(object):
                 obj=report_on,
                 feed=subfeed,
                 log=log if verbose else None)
-            if log: log << " => %s%s=%+1.4f" % (
+            if log: log << " => %s%s = %+1.4f" % (
                 report_on.op, report_on.tag, report_on.val()) << log.endl
+            if chk_every > 0 and it > 0 and (it % chk_every == 0):
+                print "ITERATION", it
+                graph.checkpoint(info={"iter":it}, chkfile=chkfile, log=log)
     def save(self, archfile):
         with open(archfile, 'w') as f:
             f.write(pickle.dumps(self))
