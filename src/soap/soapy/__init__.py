@@ -17,6 +17,7 @@ import cgraph
 import fgraph
 import dmap
 import nn
+import tuples
 
 from wrap import configure_default, configure_default_2d, StructureConverter, PowerSpectrum
 XSpace = ExtendableNamespace

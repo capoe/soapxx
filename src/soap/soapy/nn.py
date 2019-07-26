@@ -20,6 +20,7 @@ class PyNodeParams(object):
         self.grad = None
         self.friction = None
         self.shape = self.C.shape
+        self.constant = False
     def randomize(self):
         self.C = np.random.uniform(-1., 1., size=self.shape).astype(np_dtype)
     def set(self, C):
@@ -77,8 +78,8 @@ class PyNode(object):
     def printInfo(self, log=log):
         dep_str = str(sorted(self.deps.keys()))
         if len(dep_str) > 17: dep_str = "(%d nodes)" % (len(self.deps.keys()))
-        log << "Have node: %3d %-10s %-20s <- depends on %s" % (
-            self.idx, self.op, self.tag, dep_str) << log.endl
+        log << "Have node: %3d %-10s %-20s  dim=%-4d <- depends on %s" % (
+            self.idx, self.op, self.tag, self.dim, dep_str) << log.endl
     def printDim(self, log=log):
         log << "Node %d '%s': %s => %s" % (
             self.idx, self.op, self.X_in.shape, self.X_out.shape) << log.endl
@@ -215,8 +216,9 @@ class PyNodeSigmoid(PyNode):
     def backpropagate(self, g_back, level=0, log=None):
         x0 = np.concatenate([self.X_in, np.ones((self.X_in.shape[0],1))], axis=1)
         g = g_back*self.X_out*(self.X_out-1.) # N x dim_out
-        g_C = x0.T.dot(g) # (dim_in+1) x dim_out
-        self.params.addGrad(g_C)
+        if not self.params.constant:
+            g_C = x0.T.dot(g) # (dim_in+1) x dim_out
+            self.params.addGrad(g_C)
         g_X = g.dot(self.params.C[0:-1,:].T) # n x dim_in
         off = 0
         for p in self.parents:
