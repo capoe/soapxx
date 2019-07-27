@@ -253,8 +253,9 @@ class PyNodeMSE(PyNode):
         self.op = "mse"
         assert len(self.parents) == 2
     def evaluate(self):
-        self.X_out = np.sum((self.parents[0].X_out - self.parents[1].X_out)**2) \
-            /self.parents[0].X_out.shape[0]
+        N = self.parents[0].X_out.shape[0]
+        if len(self.parents[0].X_out.shape) > 1: N *= self.parents[0].X_out.shape[1]
+        self.X_out = np.sum((self.parents[0].X_out - self.parents[1].X_out)**2)/N
     def backpropagate(self, g_back=1., level=0, log=None):
         N = self.parents[0].X_out.shape[0]
         if len(self.parents[0].X_out.shape) > 1: N *= self.parents[0].X_out.shape[1]
