@@ -15,7 +15,8 @@ def require(props, key, default=None, log=log):
     return props[key]
 
 class PyNodeParams(object):
-    def __init__(self, shape):
+    def __init__(self, tag, shape):
+        self.tag = tag
         self.C = np.zeros(shape, np_dtype)
         self.grad = None
         self.friction = None
@@ -120,9 +121,10 @@ class PyNodeScalar(PyNode):
         self.X_in = np.concatenate([ node.X_out for node in self.parents ], axis=1)
         self.X_out = self.X_in*self.params.C
     def backpropagate(self, g_back, level=0, log=None):
-        g_C = np.sum(g_back*self.X_in, axis=0)
         g_X = g_back*self.params.C
-        self.params.addGrad(g_C)
+        if not self.params.constant:
+            g_C = np.sum(g_back*self.X_in, axis=0)
+            self.params.addGrad(g_C)
         off = 0
         for p in self.parents:
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
@@ -174,8 +176,9 @@ class PyNodeLinear(PyNode):
         self.X_out = self.X_in.dot(self.params.C[0:-1,:])+self.params.C[-1,:]
     def backpropagate(self, g_back, level=0, log=None):
         x0 = np.concatenate([self.X_in, np.ones((self.X_in.shape[0],1))], axis=1)
-        g_C = x0.T.dot(g_back) # (dim_in+1) x dim_out
-        self.params.addGrad(g_C)
+        if not self.params.constant:
+            g_C = x0.T.dot(g_back) # (dim_in+1) x dim_out
+            self.params.addGrad(g_C)
         g_X = g_back.dot(self.params.C[0:-1,:].T) # n x dim_in
         off = 0
         for p in self.parents:
@@ -253,7 +256,9 @@ class PyNodeMSE(PyNode):
         self.X_out = np.sum((self.parents[0].X_out - self.parents[1].X_out)**2) \
             /self.parents[0].X_out.shape[0]
     def backpropagate(self, g_back=1., level=0, log=None):
-        g_X = 2./self.parents[0].X_out.shape[0]*(self.parents[0].X_out - self.parents[1].X_out)
+        N = self.parents[0].X_out.shape[0]
+        if len(self.parents[0].X_out.shape) > 1: N *= self.parents[0].X_out.shape[1]
+        g_X = 2./N*(self.parents[0].X_out - self.parents[1].X_out)
         self.parents[0].backpropagate(+1.*g_X*g_back, level=level+1, log=log)
         self.parents[1].backpropagate(-1.*g_X*g_back, level=level+1, log=log)
 
@@ -313,7 +318,7 @@ class PyGraph(object):
         if params_tag in self.params_map:
             new_params = self.params_map[params_tag]
         else:
-            new_params = PyNodeParams(params_shape)
+            new_params = PyNodeParams(tag=params_tag, shape=params_shape)
             self.params.append(new_params)
         assert len(new_params.shape) == len(params_shape)
         for i in range(len(new_params.shape)):
@@ -474,6 +479,7 @@ class OptAdaGrad(PyGraphOptimizer):
                     n, obj.op, obj.tag, obj.val()) << log.endl
         return
     def stepNodeParams(self, params):
+        if params.constant: raise RuntimeError()
         params.incrementFrictions()
         params.C = params.C - 1.*self.rate*params.grad/(np.sqrt(params.friction)+self.eps)
 
