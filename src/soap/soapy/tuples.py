@@ -108,46 +108,49 @@ class Basis(object):
         w[transition_idcs] = np.cos(0.5*(dR[transition_idcs]-self.r_cut+self.r_cut_width)/(self.r_cut_width)*np.pi)
         return w
     def expandPairs(self, pair_types, pairs):
-        assert pairs.shape[1] == 2
-        G = np.exp(
-            -(pairs[:,0].reshape((-1,1)) - self.centres[0])**2/(2.*self.sigmas[0]**2)
-        )
-        W = pairs[:,1]
-        G = (G.T*W).T
-        block_size = G[0].shape[0]
-        X = np.zeros((self.type_basis.N*block_size,))
-        for i in range(len(pair_types)):
-            c = self.type_basis.encodeType(pair_types[i])
-            X[c*block_size:(c+1)*block_size] = X[c*block_size:(c+1)*block_size] + G[i]
+        X = np.zeros((self.type_basis.N*self.pair_dim,))
+        if len(pairs) > 0:
+            assert pairs.shape[1] == 2
+            G = np.exp(
+                -(pairs[:,0].reshape((-1,1)) - self.centres[0])**2/(2.*self.sigmas[0]**2)
+            )
+            W = pairs[:,1]
+            G = (G.T*W).T
+            block_size = self.pair_dim
+            assert G[0].shape[0] == self.pair_dim
+            for i in range(len(pair_types)):
+                c = self.type_basis.encodeType(pair_types[i])
+                X[c*block_size:(c+1)*block_size] = X[c*block_size:(c+1)*block_size] + G[i]
         return X
     def expandTriplets(self, trip_types, trips):
-        assert trips.shape[1] == 4
-        G = []
-        for i in range(3):
-            Ci = self.centres[i+1]
-            Si = self.sigmas[i+1]
-            Gi = np.exp(
-                -(trips[:,i].reshape((-1,1)) - Ci)**2/(2.*Si**2)
-            )
-            G.append(Gi)
-        
-        GG = []
-        for t in range(len(trips)):
-            GGt = np.outer(
-                np.outer(G[0][t], G[1][t]).flatten(), G[2][t]
-            ).flatten()
-            GG.append(GGt)
-        GG = np.array(GG)
-        W = trips[:,3]
-        GG = (GG.T*W).T
-        block_size = GG[0].shape[0]
-        X = np.zeros((self.type_basis.NN*block_size,))
-        for i in range(len(trip_types)):
-            c = self.type_basis.encodePair(*tuple(trip_types[i]))
-            if c is None:
-                log << "Skip" << trip_types[i] << log.endl
-                continue
-            X[c*block_size:(c+1)*block_size] = X[c*block_size:(c+1)*block_size] + GG[i]
+        X = np.zeros((self.type_basis.NN*self.triplet_dim,))
+        if len(trips) > 0:
+            assert trips.shape[1] == 4
+            G = []
+            for i in range(3):
+                Ci = self.centres[i+1]
+                Si = self.sigmas[i+1]
+                Gi = np.exp(
+                    -(trips[:,i].reshape((-1,1)) - Ci)**2/(2.*Si**2)
+                )
+                G.append(Gi)
+            GG = []
+            for t in range(len(trips)):
+                GGt = np.outer(
+                    np.outer(G[0][t], G[1][t]).flatten(), G[2][t]
+                ).flatten()
+                GG.append(GGt)
+            GG = np.array(GG)
+            W = trips[:,3]
+            GG = (GG.T*W).T
+            assert GG[0].shape[0] == self.triplet_dim
+            block_size = self.triplet_dim
+            for i in range(len(trip_types)):
+                c = self.type_basis.encodePair(*tuple(trip_types[i]))
+                if c is None:
+                    log << "Skip" << trip_types[i] << log.endl
+                    continue
+                X[c*block_size:(c+1)*block_size] = X[c*block_size:(c+1)*block_size] + GG[i]
         return X
     def save(self, jarfile):
         open(jarfile, 'w').write(pickle.dumps(self))
@@ -179,8 +182,9 @@ def get_pairs_triplets(rc, T, R, D, basis, eps=1e-10):
             triplet_types.append(sorted([T[i],T[j]]))
             triplets.append([ri+rj, np.abs(ri-rj), rij, basis.sigma**4/(ri*rj)**2, ri, rj])
     triplets = np.array(triplets)
-    triplets[:,3] = triplets[:,3]*basis.calcWeights(triplets[:,4])*basis.calcWeights(triplets[:,5])
-    triplets = triplets[:,0:4]
+    if len(triplets) > 0:
+        triplets[:,3] = triplets[:,3]*basis.calcWeights(triplets[:,4])*basis.calcWeights(triplets[:,5])
+        triplets = triplets[:,0:4]
     return pair_types, pairs, triplet_types, triplets
 
 def expand_structure(config, basis, centres=None, log=None):
@@ -196,9 +200,11 @@ def expand_structure(config, basis, centres=None, log=None):
         pair_types, pairs, triplet_types, triplets = \
             get_pairs_triplets(rc, T[nbs], R[nbs], D[nbs][:,nbs], basis=basis)
         X_pairs = basis.expandPairs(pair_types, pairs)
-        X_pairs = X_pairs/np.dot(X_pairs, X_pairs)**0.5
+        if len(pair_types) > 0:
+            X_pairs = X_pairs/np.dot(X_pairs, X_pairs)**0.5
         X_trips = basis.expandTriplets(triplet_types, triplets)
-        X_trips = X_trips/np.dot(X_trips, X_trips)**0.5
+        if len(triplet_types) > 0:
+            X_trips = X_trips/np.dot(X_trips, X_trips)**0.5
         IX_pairs.append(X_pairs)
         IX_trips.append(X_trips)
     return np.array(IX_pairs), np.array(IX_trips)
