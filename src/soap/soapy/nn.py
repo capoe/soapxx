@@ -271,12 +271,16 @@ class PyNodeXENT(PyNode):
     def evaluate(self):
         yp = self.parents[0].X_out
         yt = self.parents[1].X_out
-        self.X_out = -1./yt.shape[0]*np.sum(yt*np.log(yp) + (1.-yt)*np.log(1.-yp))
+        N = yt.shape[0]
+        if len(yt.shape) > 1: N *= yt.shape[1]
+        self.X_out = -1./N*np.sum(yt*np.log(yp) + (1.-yt)*np.log(1.-yp))
     def backpropagate(self, g_back=1., level=0, log=None):
         yp = self.parents[0].X_out
         yt = self.parents[1].X_out
-        gp = -1./yt.shape[0]*(yt/yp - (1.-yt)/(1.-yp))
-        gt = -1./yt.shape[0]*(np.log(yp) - np.log(1.-yp))
+        N = yt.shape[0]
+        if len(yt.shape) > 1: N *= yt.shape[1]
+        gp = -1./N*(yt/yp - (1.-yt)/(1.-yp))
+        gt = -1./N*(np.log(yp) - np.log(1.-yp))
         self.parents[0].backpropagate(gp*g_back, level=level+1, log=log)
         self.parents[1].backpropagate(gt*g_back, level=level+1, log=log)
 
@@ -447,7 +451,7 @@ class PyGraphOptimizer(object):
                 obj=report_on,
                 feed=subfeed,
                 log=log if verbose else None)
-            if log: log << " => %s%s = %+1.4f" % (
+            if log: log << " => %s%s = %+1.4e" % (
                 report_on.op, report_on.tag, report_on.val()) << log.endl
             if chk_every > 0 and it > 0 and (it % chk_every == 0):
                 print "ITERATION", it

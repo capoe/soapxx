@@ -52,6 +52,98 @@ class TypeBasis(object):
         if not p_str in self.encoder_pairs: return None
         return self.encoder_pairs[p_str]
 
+class BasisRThetaPhi(object):
+    def __init__(self, r_excl=None, r_cut=None, r_cut_width=None, sigma=None, sigma_ang=None):
+        self.r_excl = r_excl
+        self.r_cut = r_cut
+        self.r_cut_width = r_cut_width
+        self.sigma = sigma
+        self.sigma_ang = sigma_ang
+        self.r_theta_phi = None
+        self.dr_dtheta_dphi = None
+        self.r_centres = []
+        if r_excl != None: self.setup()
+    def setup(self, eps=1e-10):
+        r_span = self.r_cut - self.r_excl
+        r_n_fcts = int(r_span/self.sigma+2)
+        r_spacing = r_span/(r_n_fcts-1)
+        self.r_centres = [ self.r_excl + j*r_spacing for j in range(r_n_fcts) ]
+        self.r_theta_phi = []
+        self.dr_dtheta_dphi = []
+        dr = self.sigma
+        dr_ang = self.sigma_ang
+        for r_c in self.r_centres:
+            dtheta = dr_ang/r_c
+            theta_span = np.pi
+            theta_n_fcts = int(theta_span/dtheta+1)
+            theta_spacing = theta_span/(theta_n_fcts-1)
+            theta_centres = [ j*theta_spacing for j in range(theta_n_fcts) ]
+            for theta_c in theta_centres:
+                if theta_c < eps or theta_c > np.pi-eps:
+                    phi_centres = [ 0. ]
+                    dphi = dtheta
+                else:
+                    dphi = dtheta/np.sin(theta_c)
+                    phi_span = 2*np.pi
+                    phi_n_fcts = int(phi_span/dphi)
+                    phi_spacing = phi_span/phi_n_fcts
+                    phi_centres = [ j*phi_spacing for j in range(phi_n_fcts) ]
+                for phi_c in phi_centres:
+                    self.r_theta_phi.append([r_c, theta_c, phi_c])
+                    self.dr_dtheta_dphi.append([dr, dtheta, dphi])
+        self.r_theta_phi = np.array(self.r_theta_phi)
+        self.dr_dtheta_dphi = np.array(self.dr_dtheta_dphi)
+        log << "Basis: %d fcts" % len(self.r_theta_phi) << log.endl
+        log << "  R centres @" << self.r_centres << log.endl
+    def asXyz(self, outfile='basis.xyz', weights=None, R=[], translate=None):
+        if translate is None: translate = np.zeros((3,))
+        ofs = open(outfile, 'w')
+        ofs.write('%d\n\n' % (len(self.r_theta_phi)+len(R)))
+        for i in range(len(self.r_theta_phi)):
+            r = self.r_theta_phi[i]
+            x = r[0]*np.sin(r[1])*np.cos(r[2]) + translate[0]
+            y = r[0]*np.sin(r[1])*np.sin(r[2]) + translate[1]
+            z = r[0]*np.cos(r[1]) + translate[2]
+            ofs.write('X %+1.4f %+1.4f %+1.4f %+1.4e\n' % (x, y, z, 0.0 if weights is None else weights[i]))
+        R = R + translate
+        for j in range(len(R)):
+            ofs.write('Y %+1.4f %+1.4f %+1.4f %+1.4e\n' % (R[j,0], R[j,1], R[j,2], 10.))
+        ofs.close()
+    def calcWeights(self, dR):
+        w = np.heaviside(-dR+self.r_cut, 0.0)
+        transition_idcs = np.where(w*dR > self.r_cut-self.r_cut_width)[0]
+        w[transition_idcs] = np.cos(0.5*(dR[transition_idcs]-self.r_cut+self.r_cut_width)/(self.r_cut_width)*np.pi)
+        return w
+    def expandVectors(self, R):
+        G = np.zeros((self.r_theta_phi.shape[0],))
+        if len(R) > 0:
+            r = np.sum(R*R, axis=1)**0.5
+            t = np.arccos(R[:,2]/r)
+            p = np.arctan2(R[:,1], R[:,0])
+            rtp = np.concatenate([ r, t, p ]).reshape((3,-1)).T
+            weights = self.calcWeights(r)
+            # >>> X_re = rtp[:,0]*np.sin(rtp[:,1])*np.cos(rtp[:,2])
+            # >>> Y_re = rtp[:,0]*np.sin(rtp[:,1])*np.sin(rtp[:,2])
+            # >>> Z_re = rtp[:,0]*np.cos(rtp[:,1])
+            # >>> R[:,0] = R[:,0] - X_re
+            # >>> R[:,1] = R[:,1] - Y_re
+            # >>> R[:,2] = R[:,2] - Z_re
+            # >>> assert np.max(np.abs(R)) < 1e-10
+            for i in range(R.shape[0]):
+                Gi = (self.r_theta_phi-rtp[i])
+                Gi[:,2] = Gi[:,2] - np.round(Gi[:,2]/(2*np.pi))*2*np.pi # wrap phi
+                Gi = np.exp(-Gi**2/(2*self.dr_dtheta_dphi**2))
+                Gi = Gi[:,0]*Gi[:,1]*Gi[:,2]
+                G = G + weights[i]*Gi
+            #self.asXyz(weights=G, R=R)
+            #raw_input('...')
+        return G
+    def save(self, jarfile):
+        open(jarfile, 'w').write(pickle.dumps(self))
+    def load(self, jarfile):
+        self = pickle.load(open(jarfile, 'rb'))
+        return self
+         
 class Basis(object):
     def __init__(self, r_excl=None, r_cut=None, r_cut_width=None, 
             sigma=None, type_basis=None, log=log):
@@ -158,20 +250,22 @@ class Basis(object):
         self = pickle.load(open(jarfile, 'rb'))
         return self
 
-def get_pairs_triplets(rc, T, R, D, basis, eps=1e-10):
+def get_pairs_triplets(rc, T, R, D, basis, eps=1e-10, with_triplets=True):
     R = R-rc
     dR = np.sum(R**2, axis=1)**0.5
-    # Pairs
     pair_types = []
     pairs = []
+    triplet_types = []
+    triplets = []
+    # Pairs
     for i in range(len(T)):
         pair_types.append(T[i])
         pairs.append([ dR[i], basis.sigma**2/dR[i]**2 if dR[i] > eps else 1. ])
     pairs = np.array(pairs)
     pairs[:,1] = pairs[:,1]*basis.calcWeights(pairs[:,0])
+    if not with_triplets:
+        return pair_types, pairs, triplet_types, trips
     # Triplets
-    triplet_types = []
-    triplets = []
     for i in range(len(T)):
         ri = dR[i]
         if ri < eps: continue
@@ -208,4 +302,59 @@ def expand_structure(config, basis, centres=None, log=None):
         IX_pairs.append(X_pairs)
         IX_trips.append(X_trips)
     return np.array(IX_pairs), np.array(IX_trips)
+
+def expand_structure_frame(config, basis, centres=None, log=None):
+    def calc_Q_tensor(r, dr):
+        Q = 3*np.outer(r,r) - dr**2*np.identity(3)
+        return Q
+    T = np.array(config.symbols)
+    R = config.positions
+    D = soap.tools.partition.calculate_distance_mat(R, R)
+    if centres is None: centres = range(len(T))
+    IX = []
+    for i in centres:
+        # Nb positions
+        nbs = np.where(D[i] <= basis.r_cut)[0]
+        rc = R[i]
+        types_nbs = T[nbs]
+        R_nbs = np.copy(R[nbs])
+        R_nbs = R_nbs-rc
+        dR_nbs = np.sum(R_nbs*R_nbs, axis=1)**0.5
+        weights_nbs = basis.calcWeights(dR_nbs)
+        # Frame
+        dim_1 = basis.type_basis.N*3
+        dim_2 = basis.type_basis.N*6
+        X1 = np.zeros((dim_1,))
+        X2 = np.zeros((dim_2,))
+        triu = np.triu_indices(3,0)
+        for nb in range(len(nbs)):
+            w_nb = weights_nbs[nb]
+            if dR_nbs[nb] > 1e-10: w_nb *= 1./dR_nbs[nb]**2
+            t = basis.type_basis.encodeType(types_nbs[nb])
+            x1 = w_nb*R_nbs[nb]
+            x2 = w_nb*calc_Q_tensor(R_nbs[nb], dR_nbs[nb])[triu]
+            X1[t*3:t*3+3] = X1[t*3:t*3+3] + x1
+            X2[t*6:t*6+6] = X2[t*6:t*6+6] + x2
+        X12 = np.concatenate([X1,X2])
+        IX.append(X12)
+    return np.array(IX)
+
+def expand_structure_ipoints(config, centres, config_ipoints, centres_ipoints, basis):
+    R = config.positions[centres]
+    R_ipoints = config_ipoints.positions[centres_ipoints]
+    D = soap.tools.partition.calculate_distance_mat(R, R_ipoints)
+    IX = []
+    IR = []
+    for ii in range(len(centres)):
+        rc = R[ii]
+        nbs = np.where(D[ii] <= basis.r_cut)[0]
+        R_nbs = np.copy(R_ipoints[nbs])
+        R_nbs = R_nbs - rc
+        X = basis.expandVectors(R_nbs)
+        #if len(nbs):
+        #    basis.asXyz(outfile='basis.xyz', weights=X, R=R_nbs, translate=rc)
+        #    raw_input('...xyz...')
+        IX.append(X)
+        IR.append(R_nbs)
+    return np.array(IX), np.array(IR)
 
