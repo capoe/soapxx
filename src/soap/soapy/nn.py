@@ -107,8 +107,11 @@ class PyNodeSlice(PyNode):
         return [0,0]
     def evaluate(self):
         self.X_out = self.parents[0].X_out[:,self.slice[0]:self.slice[1]]
-    def backpropagate(self, g_back, level=0, log=None):
-        pass
+    def backpropagate(self, g_back=1., level=0, log=None):
+        g = np.zeros((self.parents[0].X_out.shape[1],))
+        g[self.slice[0]:self.slice[1]] = g_back
+        self.parents[0].backpropagate(g, level=level+1, log=log)
+        return
 
 class PyNodeScalar(PyNode):
     def __init__(self, idx, parents, props):
