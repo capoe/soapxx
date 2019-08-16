@@ -402,9 +402,9 @@ def expand_structure_ipoints(config, centres, config_ipoints, centres_ipoints, b
         R_nbs = np.copy(R_ipoints[nbs])
         R_nbs = R_nbs - rc
         X = basis.expandVectors(R_nbs)
-        #if len(nbs):
-        #    basis.asXyz(outfile='basis.xyz', weights=X, R=R_nbs, translate=rc)
-        #    raw_input('...xyz...')
+        # >>> if len(nbs):
+        # >>>     basis.asXyz(outfile='basis.xyz', weights=X, R=R_nbs, translate=rc)
+        # >>>     raw_input('...xyz...')
         IX.append(X)
         IR.append(R_nbs)
     return np.array(IX), np.array(IR)

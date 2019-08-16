@@ -133,6 +133,19 @@ class PyNodeScalar(PyNode):
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
             off += p.dim
 
+class PyNodeAdd(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "add"
+        self.dim = parents[0].dim
+        for p in parents: assert p.dim == parents[0].dim
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_out = np.sum([ p.X_out for p in self.parents ], axis=0)
+    def backpropagate(self, g_back, level=0, log=None):
+        for p in self.parents: p.backpropagate(g_back, level=level+1, log=log)
+
 class PyNodeMult(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
@@ -291,6 +304,7 @@ PyNode.prototypes = {
     "input":    PyNodeInput,
     "slice":    PyNodeSlice,
     "scalar":   PyNodeScalar,
+    "add":      PyNodeAdd,
     "mult":     PyNodeMult,
     "exp":      PyNodeExp,
     "linear":   PyNodeLinear,

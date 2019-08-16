@@ -131,7 +131,8 @@ def test_xent_grad():
     L1 = graph.addNode(op="linear", parents=[X1,X2],    props={ "dim": 5, "params": "C12" })
     L2 = graph.addNode(op="sigmoid", parents=[X1,X1,X1], props={ "dim": 5, "params": "C12" })
     L4 = graph.addNode(op="mult", parents=[L1,L2])
-    L3 = graph.addNode(op="sigmoid", parents=[L1,L4],    props={ "dim": 1 })
+    L5 = graph.addNode(op="add", parents=[L1,L2,L2])
+    L3 = graph.addNode(op="sigmoid", parents=[L1,L4,L5],    props={ "dim": 1 })
     xent = graph.addNode(op="xent", parents=[L3,Y1])
     graph.printInfo()
     # INITIALIZE & FEED
@@ -142,6 +143,13 @@ def test_xent_grad():
     Y1_in = np.random.uniform(size=(10,1))
     graph.propagate(feed={"X1": X1_in, "X2": X2_in, "Y1": Y1_in})
     graph.backpropagate(log=log)
+    # CHECK ADD
+    log << "[Check add ]" << log.flush
+    assert_equal(np.max(np.abs(L5.val() - L1.val() - 2*L2.val())), 0., 1e-6)
+    log << log.endl
+    log << "[Check mult]" << log.flush
+    assert_equal(np.max(np.abs(L4.val() - L1.val()*L2.val())), 0., 1e-6)
+    log << log.endl
     # CHECK GRADIENTS: PARAMETERS
     h = 1e-7
     for node in [L3,L2,L1]:
