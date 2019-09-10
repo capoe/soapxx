@@ -39,6 +39,7 @@ def get_types_pairs_cnosh():
 
 def get_types_pairs(elements):
     types = elements[:]
+    pairs = []
     for i in range(len(types)):
         for j in range(i, len(types)):
             pairs.append("%s:%s" % (types[i], types[j]))
@@ -73,17 +74,20 @@ class BasisRThetaPhi(object):
         if r_excl != None: self.setup()
     def setup(self, eps=1e-10):
         r_span = self.r_cut - self.r_excl
-        r_n_fcts = int(r_span/self.sigma+2)
+        r_n_fcts = int(r_span/self.sigma+1)
         r_spacing = r_span/(r_n_fcts-1)
         self.r_centres = [ self.r_excl + j*r_spacing for j in range(r_n_fcts) ]
         self.r_theta_phi = []
         self.dr_dtheta_dphi = []
         dr = self.sigma
         dr_ang = self.sigma_ang
+        log << "Basis: %d fcts" % len(self.r_theta_phi) << log.endl
+        log << "  R centres @" << self.r_centres << log.endl
         for r_c in self.r_centres:
             dtheta = dr_ang/r_c
             theta_span = np.pi
             theta_n_fcts = int(theta_span/dtheta+1)
+            log << "  r = %1.4f => %d theta fcts" % (r_c, theta_n_fcts) << log.endl
             theta_spacing = theta_span/(theta_n_fcts-1)
             theta_centres = [ j*theta_spacing for j in range(theta_n_fcts) ]
             for theta_c in theta_centres:
@@ -101,8 +105,6 @@ class BasisRThetaPhi(object):
                     self.dr_dtheta_dphi.append([dr, dtheta, dphi])
         self.r_theta_phi = np.array(self.r_theta_phi)
         self.dr_dtheta_dphi = np.array(self.dr_dtheta_dphi)
-        log << "Basis: %d fcts" % len(self.r_theta_phi) << log.endl
-        log << "  R centres @" << self.r_centres << log.endl
     def asXyz(self, outfile='basis.xyz', weights=None, R=[], translate=None):
         if translate is None: translate = np.zeros((3,))
         ofs = open(outfile, 'w')
@@ -118,6 +120,11 @@ class BasisRThetaPhi(object):
         for j in range(len(R)):
             ofs.write('Y %+1.4f %+1.4f %+1.4f %+1.4e\n' % (R[j,0], R[j,1], R[j,2], 10.))
         ofs.close()
+    def getXyz(self):
+        return np.concatenate([
+            self.r_theta_phi[:,0]*np.sin(self.r_theta_phi[:,1])*np.cos(self.r_theta_phi[:,2]),
+            self.r_theta_phi[:,0]*np.sin(self.r_theta_phi[:,1])*np.sin(self.r_theta_phi[:,2]),
+            self.r_theta_phi[:,0]*np.cos(self.r_theta_phi[:,1])]).reshape((3,-1)).T
     def calcWeights(self, dR):
         w = np.heaviside(-dR+self.r_cut, 0.0)
         transition_idcs = np.where(w*dR > self.r_cut-self.r_cut_width)[0]
@@ -144,9 +151,9 @@ class BasisRThetaPhi(object):
                 Gi[:,2] = Gi[:,2] - np.round(Gi[:,2]/(2*np.pi))*2*np.pi # wrap phi
                 Gi = np.exp(-Gi**2/(2*self.dr_dtheta_dphi**2))
                 Gi = Gi[:,0]*Gi[:,1]*Gi[:,2]
+                Gi = Gi/np.sum(Gi)
                 G = G + weights[i]*Gi
-            #self.asXyz(weights=G, R=R)
-            #raw_input('...')
+            # >>> self.asXyz(weights=G, R=R)
         return G
     def save(self, jarfile):
         open(jarfile, 'w').write(pickle.dumps(self))
@@ -204,7 +211,9 @@ class Basis(object):
             self.pair_dim, self.triplet_dim) << log.endl
         for i in range(len(self.centres)):
             log << "  G%d: %2d fcts  sigma=%1.2f" % (
-                i, len(self.centres[i]), self.sigmas[i]) << log.endl
+                i, len(self.centres[i]), self.sigmas[i]) << log.flush
+            log << " r0=%1.4f, r1=%1.4f, ... rn=%1.4f" % (
+                self.centres[i][0], self.centres[i][1], self.centres[i][-1]) << log.endl
     def calcWeights(self, dR):
         w = np.heaviside(-dR+self.r_cut, 0.0)
         transition_idcs = np.where(w*dR > self.r_cut-self.r_cut_width)[0]
@@ -371,7 +380,7 @@ def expand_structure_frame(config, basis, centres=None, log=None):
         R_nbs = np.copy(R[nbs])
         R_nbs = R_nbs-rc
         dR_nbs = np.sum(R_nbs*R_nbs, axis=1)**0.5
-        weights_nbs = basis.calcWeights(dR_nbs)
+        weights_nbs, dweights_nbs = basis.calcWeights(dR_nbs)
         # Frame
         dim_1 = basis.type_basis.N*3
         dim_2 = basis.type_basis.N*6

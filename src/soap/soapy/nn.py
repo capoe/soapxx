@@ -27,7 +27,8 @@ class PyNodeParams(object):
     def set(self, C):
         self.C = np.copy(C)
     def zeroGrad(self):
-        self.grad = np.zeros(self.C.shape, np_dtype)
+        if not self.constant:
+            self.grad = np.zeros(self.C.shape, np_dtype)
     def addGrad(self, g):
         self.grad = self.grad + g
     def zeroFrictions(self):
@@ -375,8 +376,9 @@ class PyGraph(object):
         if log: log << log.endl
     def backpropagate(self, node=None, log=None):
         for param in self.params: param.zeroGrad()
-        for node in self.nodes: node.zeroGrad()
         if node is None: node = self.nodes[-1]
+        for node_idx, dep in node.deps.iteritems():
+            dep.zeroGrad()
         node.backpropagate(log=log)
     def purge(self, purge_frictions=True):
         for node in self.nodes: node.purge()
