@@ -81,8 +81,6 @@ class BasisRThetaPhi(object):
         self.dr_dtheta_dphi = []
         dr = self.sigma
         dr_ang = self.sigma_ang
-        log << "Basis: %d fcts" % len(self.r_theta_phi) << log.endl
-        log << "  R centres @" << self.r_centres << log.endl
         for r_c in self.r_centres:
             dtheta = dr_ang/r_c
             theta_span = np.pi
@@ -105,6 +103,8 @@ class BasisRThetaPhi(object):
                     self.dr_dtheta_dphi.append([dr, dtheta, dphi])
         self.r_theta_phi = np.array(self.r_theta_phi)
         self.dr_dtheta_dphi = np.array(self.dr_dtheta_dphi)
+        log << "Basis: %d fcts" % len(self.r_theta_phi) << log.endl
+        log << "  R centres @" << self.r_centres << log.endl
     def asXyz(self, outfile='basis.xyz', weights=None, R=[], translate=None):
         if translate is None: translate = np.zeros((3,))
         ofs = open(outfile, 'w')
@@ -221,7 +221,7 @@ class Basis(object):
             self.r_cut_width)*np.pi))
         dw2_w2 = np.zeros_like(w)
         dw2_w2[transition_idcs] = (1. - (2*w[transition_idcs] - 1.)**2)/w[transition_idcs]**2 * (
-            np.pi*self.r_err/self.r_cut_width)**2
+            np.pi*self.r_err/(self.r_cut_width+1e-10))**2
         return w, dw2_w2
     def expandPairs(self, pair_types, pairs):
         X = np.zeros((self.type_basis.N*self.pair_dim,))
@@ -333,7 +333,7 @@ def get_pairs_triplets(rc, T, R, D, basis, eps=1e-10, with_triplets=True):
         triplets = triplets[:,0:5]
     return pair_types, pairs, triplet_types, triplets
 
-def expand_structure(config, basis, centres=None, log=None):
+def expand_structure(config, basis, centres=None, log=None, norm=True):
     T = np.array(config.symbols)
     R = config.positions
     D = soap.tools.partition.calculate_distance_mat(R, R)
@@ -348,12 +348,12 @@ def expand_structure(config, basis, centres=None, log=None):
         pair_types, pairs, triplet_types, triplets = \
             get_pairs_triplets(rc, T[nbs], R[nbs], D[nbs][:,nbs], basis=basis)
         X_pairs, dX_pairs = basis.expandPairs(pair_types, pairs)
-        if len(pair_types) > 0:
+        if norm and len(pair_types) > 0:
             norm = np.dot(X_pairs, X_pairs)**0.5
             X_pairs = X_pairs/norm
             dX_pairs = dX_pairs/norm
         X_trips, dX_trips = basis.expandTriplets(triplet_types, triplets)
-        if len(triplet_types) > 0:
+        if norm and len(triplet_types) > 0:
             norm = np.dot(X_trips, X_trips)**0.5
             X_trips = X_trips/norm
             dX_trips = dX_trips/norm
