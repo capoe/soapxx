@@ -97,6 +97,21 @@ class PyNodeInput(PyNode):
     def backpropagate(self, g_back=1., level=0, log=None):
         self.grad = self.grad + g_back
 
+class PyNodeJoin(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.dim = sum([ p.dim for p in parents ])
+        self.op = "join"
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_out = np.concatenate([ p.X_out for p in self.parents ], axis=1)
+    def backpropagate(self, g_back=1., level=0, log=None):
+        off = 0
+        for p in self.parents:
+            p.backpropagate(g_back[:,off:off+p.dim], level=level+1, log=log)
+            off += p.dim
+
 class PyNodeSlice(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
@@ -301,19 +316,140 @@ class PyNodeXENT(PyNode):
         self.parents[0].backpropagate(gp*g_back, level=level+1, log=log)
         self.parents[1].backpropagate(gt*g_back, level=level+1, log=log)
 
+class PyNodeStochasticStep(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "sstep"
+        self.dim = sum([ p.dim for p in parents ])
+        #self.sigma = props["sigma"]
+        self.random_state = None
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_in = np.concatenate([ node.X_out for node in self.parents ], axis=1)
+        self.random_state = np.random.uniform(size=self.X_in.shape)
+        self.X_out = np.heaviside(self.random_state - self.X_in, 0.0)
+    def backpropagate(self, g_back, level=0, log=None):
+        g_X = -g_back #+ 0.0000001*np.log(self.X_in/(1.-self.X_in))    #* np.exp(-0.5*(self.random_state-self.X_in)**2/self.sigma**2)
+        off = 0
+        for p in self.parents:
+            p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
+            off += p.dim
+
+class PyNodeStochasticSoftStep(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "ssoftstep"
+        self.dim = sum([ p.dim for p in parents ])
+        self.alpha = 1./props["sigma"]
+        self.rng = props["rng"]
+        self.z0 = self.rng[0]
+        self.dz = self.rng[1] - self.rng[0]
+        self.phi = None
+        self.random_state = None
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_in = np.concatenate([ node.X_out for node in self.parents ], axis=1)
+        self.random_state = np.random.uniform(size=self.X_in.shape)
+        self.phi = 1./(1. + np.exp(-self.alpha*(self.random_state - self.X_in)))
+        self.X_out = self.z0 + self.dz*self.phi
+        #self.X_out = self.z0 + self.dz*np.heaviside(self.random_state - self.X_in, 0.0)
+    def backpropagate(self, g_back, level=0, log=None):
+        #g_X = -g_back*self.dz*self.phi*(1.-self.phi)*self.alpha
+        g_X = -g_back*self.dz*self.phi*(1.-self.phi)*self.alpha #*np.exp(-0.5*self.alpha**2*(self.random_state-self.X_in)**2)
+        off = 0
+        for p in self.parents:
+            p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
+            off += p.dim
+
+class PyNodeStochasticSphericalGaussian(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "ssgaussian"
+        assert parents[0].dim == parents[1].dim
+        self.dim = parents[0].dim
+        self.random_state = None
+        self.kl_weight = props["kl_weight"]
+        assert len(self.parents) == 2 # mu, std
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        shape_out = self.parents[0].X_out.shape
+        self.random_state = np.random.normal(loc=0.0, scale=1.0, size=shape_out)
+        self.X_in = None
+        self.X_out = self.parents[0].X_out + self.random_state*self.parents[1].X_out # mu + std*eps
+    def backpropagate(self, g_back, level=0, log=None):
+        mu = self.parents[0].X_out
+        std = self.parents[1].X_out
+        g_mu = g_back
+        g_std = g_back*self.random_state
+        g_mu = g_mu + self.kl_weight*mu
+        g_std = g_std + self.kl_weight*(std - 1./(std+1e-10))
+        self.parents[0].backpropagate(g_mu, level=level+1, log=log)
+        self.parents[1].backpropagate(g_std, level=level+1, log=log)
+
+class PyNodeConstant(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "constant"
+        self.dim = props["dim"]
+    def calcParamsShape(self):
+        return (self.dim,)
+    def evaluate(self):
+        self.X_out = np.tile(self.params.C, (self.parents[0].X_out.shape[0],1))
+    def backpropagate(self, g_back, level, log):
+        self.params.addGrad(np.sum(g_back, axis=0))
+
+class PyNodeReLu(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "relu"
+        #self.dim = sum([ p.dim for p in parents ])
+    #def evaluate(self):
+    #    self.X_out = np.concatenate([ np.maximum(p.X_out, 0.0) for p in self.parents ], axis=1)
+    #def backpropagate(self, g_back, level, log):
+    #    for p in self.parents:
+    #        p.backpropagate(g_back*np.heaviside(p.X_out, 0.0), level=level+1, log=log)
+    def calcParamsShape(self):
+        dim1 = sum([ p.dim for p in self.parents ]) + 1
+        dim2 = self.dim
+        return [dim1,dim2]
+    def evaluate(self):
+        self.X_in = np.concatenate([ node.X_out for node in self.parents ], axis=1)
+        self.X_out = self.X_in.dot(self.params.C[0:-1,:])+self.params.C[-1,:]
+        self.X_out = np.maximum(self.X_out, 0.0)
+    def backpropagate(self, g_back, level=0, log=None):
+        mask = np.heaviside(self.X_out, 0.0)
+        x0 = np.concatenate([self.X_in, np.ones((self.X_in.shape[0],1))], axis=1)
+        if not self.params.constant:
+            g_C = x0.T.dot(mask*g_back) # (dim_in+1) x dim_out
+            self.params.addGrad(g_C)
+        g_X = (mask*g_back).dot(self.params.C[0:-1,:].T) # n x dim_in
+        off = 0
+        for p in self.parents:
+            p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
+            off += p.dim
+
 PyNode.prototypes = {
-    "input":    PyNodeInput,
-    "slice":    PyNodeSlice,
-    "scalar":   PyNodeScalar,
-    "add":      PyNodeAdd,
-    "mult":     PyNodeMult,
-    "exp":      PyNodeExp,
-    "linear":   PyNodeLinear,
-    "sigmoid":  PyNodeSigmoid,
-    "softmax":  PyNodeSoftmax,
-    "dot":      PyNodeDot,
-    "mse":      PyNodeMSE,
-    "xent":     PyNodeXENT
+    "input":      PyNodeInput,
+    "constant":   PyNodeConstant,
+    "slice":      PyNodeSlice,
+    "join":       PyNodeJoin,
+    "scalar":     PyNodeScalar,
+    "add":        PyNodeAdd,
+    "mult":       PyNodeMult,
+    "exp":        PyNodeExp,
+    "linear":     PyNodeLinear,
+    "relu":       PyNodeReLu,
+    "sigmoid":    PyNodeSigmoid,
+    "softmax":    PyNodeSoftmax,
+    "dot":        PyNodeDot,
+    "mse":        PyNodeMSE,
+    "xent":       PyNodeXENT,
+    "sstep":      PyNodeStochasticStep,
+    "ssoftstep":  PyNodeStochasticSoftStep,
+    "ssgaussian": PyNodeStochasticSphericalGaussian
 }
 
 class PyGraph(object):
