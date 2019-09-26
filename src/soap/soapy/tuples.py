@@ -53,8 +53,21 @@ class TypeBasis(object):
         self.NN = len(self.pairs)
         self.encoder_types = { t: tidx for tidx, t in enumerate(self.types) }
         self.encoder_pairs = { p: pidx for pidx, p in enumerate(self.pairs) }
+        self.decoder_types = { tidx: t for t, tidx in self.encoder_types.iteritems() }
+        self.K_abc = None
+    def setupPairContractionTensor(self, mode):
+        if mode == 'constant':
+            self.K_abc = np.ones((self.N,self.N,1))
+        elif mode == 'linear':
+            self.K_abc = 0.5*(
+                np.einsum('ac,b->abc', np.identity(self.N), np.ones((self.N,))) \
+              + np.einsum('bc,a->abc', np.identity(self.N), np.ones((self.N,))) \
+            )
+        else: raise ValueError("Mode: '%s'" % mode)
     def encodeType(self, t):
         return self.encoder_types[t]
+    def decodeType(self, tidx):
+        return self.decoder_types[tidx]
     def encodePair(self, t1, t2):
         t1, t2 = tuple(sorted([t1, t2], key=lambda t: self.encoder_types[t]))
         p_str = '%s:%s' % (t1, t2)

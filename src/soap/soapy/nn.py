@@ -56,6 +56,7 @@ class PyNode(object):
         self.X_out = None
         self.active = True
         self.grad = None
+        self.friction = None
     def setParams(self, p):
         self.params = p
     def setVals(self, X):
@@ -74,6 +75,11 @@ class PyNode(object):
     def zeroGrad(self):
         self.grad = np.zeros(self.X_out.shape, np_dtype)
         return
+    def zeroFrictions(self):
+        self.friction = np.zeros(self.X_out.shape, np_dtype)
+    def incrementFrictions(self):
+        if self.friction is None: self.zeroFrictions()
+        self.friction = self.friction + self.grad**2
     def backpropagate(self, g_back, level=0, log=None):
         raise NotImplementedError("Missing function overload in ::backpropagate")
         return
@@ -96,6 +102,28 @@ class PyNodeInput(PyNode):
         self.op = "input"
     def backpropagate(self, g_back=1., level=0, log=None):
         self.grad = self.grad + g_back
+
+class PyNodeFlexInput(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "flexinput"
+    def zeroGrad(self):
+        self.grad = []
+        for row in range(self.X_out.shape[0]):
+            self.grad.append(np.zeros_like(self.X_out[row]))
+        self.grad = np.array(self.grad)
+    def zeroFrictions(self):
+        self.friction = []
+        for row in range(self.X_out.shape[0]):
+            self.friction.append(np.zeros_like(self.X_out[row]))
+        self.friction = np.array(self.friction)
+    def incrementFrictions(self):
+        if self.friction is None: self.zeroFrictions()
+        for row in range(self.X_out.shape[0]):
+            self.friction[row] = self.friction[row] + self.grad[row]**2
+    def backpropagate(self, g_back=1., level=0, log=None):
+        for row in range(len(g_back)):
+            self.grad[row] = self.grad[row] + g_back[row]
 
 class PyNodeJoin(PyNode):
     def __init__(self, idx, parents, props):
@@ -433,6 +461,7 @@ class PyNodeReLu(PyNode):
 
 PyNode.prototypes = {
     "input":      PyNodeInput,
+    "flexinput":  PyNodeFlexInput,
     "constant":   PyNodeConstant,
     "slice":      PyNodeSlice,
     "join":       PyNodeJoin,
@@ -584,6 +613,8 @@ class PyGraphOptimizer(object):
             "Missing ::stepNodeParams implementation for '%s'" % self.type)
     def initialize(self, graph):
         return
+    def initializeFitInput(self, inputs):
+        return
     def fit(self, graph, n_iters, n_batch, n_steps, feed=None,
             idx_map={}, report_every=-1,
             subsampler=None, log=None, verbose=False, chk_every=-1, chkfile=None):
@@ -609,8 +640,22 @@ class PyGraphOptimizer(object):
             if log: log << " => %s%s = %+1.4e" % (
                 report_on.op, report_on.tag, report_on.val()) << log.endl
             if chk_every > 0 and it > 0 and (it % chk_every == 0):
-                print "ITERATION", it
                 graph.checkpoint(info={"iter":it}, chkfile=chkfile, log=log)
+    def fitInput(self, graph, feed, n_iters, n_steps, inputs, postprocess=None, obj=None):
+        if obj is None: obj = graph["loss"]
+        graph.propagate(feed=feed)
+        self.initializeFitInput(inputs)
+        for it in range(n_iters):
+            log << "Iteration %d" % it << log.endl
+            for n in range(n_steps):
+                graph.propagate(feed={})
+                graph.backpropagate(log=None)
+                for node in inputs:
+                    self.stepInput(node)
+                if postprocess is not None:
+                    postprocess(graph)
+                log << "  Step %3d: %s%s = %+1.4e" % (
+                    n, obj.op, obj.tag, obj.val()) << log.endl
     def save(self, archfile):
         with open(archfile, 'w') as f:
             f.write(pickle.dumps(self))
@@ -627,6 +672,8 @@ class OptAdaGrad(PyGraphOptimizer):
         self.datalog = {"loss":[]}
     def initialize(self, graph):
         for p in graph.params: p.zeroFrictions()
+    def initializeFitInput(self, inputs):
+        for i in inputs: i.zeroFrictions()
     def step(self, graph, feed, n_steps, obj, log=None, report_every=10):
         for n in range(n_steps):
             graph.propagate(feed=feed)
@@ -642,4 +689,9 @@ class OptAdaGrad(PyGraphOptimizer):
         if params.constant: raise RuntimeError()
         params.incrementFrictions()
         params.C = params.C - 1.*self.rate*params.grad/(np.sqrt(params.friction)+self.eps)
+    def stepInput(self, input_node):
+        input_node.incrementFrictions()
+        for row in range(input_node.X_out.shape[0]):
+            input_node.X_out[row] = input_node.X_out[row] - 1.*self.rate * \
+                input_node.grad[row]/(np.sqrt(input_node.friction[row])+self.eps)
 
