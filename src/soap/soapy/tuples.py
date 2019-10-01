@@ -63,6 +63,16 @@ class TypeBasis(object):
                 np.einsum('ac,b->abc', np.identity(self.N), np.ones((self.N,))) \
               + np.einsum('bc,a->abc', np.identity(self.N), np.ones((self.N,))) \
             )
+        elif mode == 'bilinear':
+            self.K_abc = np.zeros((self.N, self.N, self.NN))
+            for i in range(self.N):
+                ti = self.types[i]
+                for j in range(self.N):
+                    tj = self.types[j]
+                    tij = '%s:%s' % (ti,tj)
+                    if not tij in self.encoder_pairs:
+                        tij = '%s:%s' % (tj,ti)
+                    self.K_abc[i,j,self.encoder_pairs[tij]] = 1.
         else: raise ValueError("Mode: '%s'" % mode)
     def encodeType(self, t):
         return self.encoder_types[t]
@@ -176,12 +186,15 @@ class BasisRThetaPhi(object):
          
 class Basis(object):
     def __init__(self, r_excl=None, r_cut=None, r_cut_width=None, 
-            sigma=None, type_basis=None, r_err=None, log=log):
+            sigma=None, type_basis=None, r_err=None, 
+            weight_decay_length=None, weight_constant=False, log=log):
         self.type_basis = type_basis
         self.r_excl = r_excl
         self.r_cut = r_cut
         self.r_cut_width = r_cut_width
         self.r_err = r_err
+        self.weight_decay_length = weight_decay_length
+        self.weight_constant = weight_constant
         self.sigma = sigma
         self.ranges = None
         self.sigmas = None
@@ -191,19 +204,21 @@ class Basis(object):
         self.pair_ch_dim = None
         self.triplet_ch_dim = None
         if self.r_cut is not None: self.setup(log=log)
-    def setup(self, log=log):
+    def setup(self, log=log, sigmas=None):
         self.ranges = [
             [ 0, self.r_cut ],
             [ 2*self.r_excl, 2*self.r_cut ],
             [ 0, self.r_cut-self.r_excl ],
             [ self.r_excl, 2*self.r_cut ],
         ]
-        self.sigmas = np.array([
-            self.sigma,
-            2**0.5*self.sigma,
-            2**0.5*self.sigma,
-            2**0.5*self.sigma
-        ])
+        self.sigmas = sigmas
+        if self.sigmas is None:
+            self.sigmas = np.array([
+                self.sigma,
+                2**0.5*self.sigma,
+                2**0.5*self.sigma,
+                2**0.5*self.sigma
+            ])
         self.centres = [
         ]
         for i in range(len(self.ranges)):

@@ -14,6 +14,9 @@ def require(props, key, default=None, log=log):
         return default
     return props[key]
 
+def register(node_key, node_type):
+    PyNode.prototypes[node_key] = node_type
+
 class PyNodeParams(object):
     def __init__(self, tag, shape):
         self.tag = tag
@@ -157,6 +160,22 @@ class PyNodeSlice(PyNode):
         self.parents[0].backpropagate(g, level=level+1, log=log)
         return
 
+class PyNodeReshape(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "reshape"
+        assert len(self.parents) == 1
+        self.shape_in = None
+        self.shape_out = props["reshape"]
+    def evaluate(self):
+        self.shape_in = self.parents[0].X_out.shape
+        self.X_out = self.parents[0].X_out.reshape(self.shape_out)
+    def backpropagate(self, g_back, level=0, log=None):
+        self.parents[0].backpropagate(
+            g_back.reshape(self.shape_in),
+            level=level+1,
+            log=log)
+
 class PyNodeScalar(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
@@ -182,13 +201,15 @@ class PyNodeAdd(PyNode):
         PyNode.__init__(self, idx, parents, props)
         self.op = "add"
         self.dim = parents[0].dim
+        self.coeffs = require(props, "coeffs", np.ones((len(parents),)))
         for p in parents: assert p.dim == parents[0].dim
     def calcParamsShape(self):
         return [0,0]
     def evaluate(self):
-        self.X_out = np.sum([ p.X_out for p in self.parents ], axis=0)
-    def backpropagate(self, g_back, level=0, log=None):
-        for p in self.parents: p.backpropagate(g_back, level=level+1, log=log)
+        self.X_out = np.sum([ self.coeffs[pidx]*p.X_out for pidx, p in enumerate(self.parents) ], axis=0)
+    def backpropagate(self, g_back=1., level=0, log=None):
+        for pidx, p in enumerate(self.parents):
+            p.backpropagate(self.coeffs[pidx]*g_back, level=level+1, log=log)
 
 class PyNodeMult(PyNode):
     def __init__(self, idx, parents, props):
@@ -288,6 +309,18 @@ class PyNodeSigmoid(PyNode):
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
             off += p.dim
 
+class PyNodeSigmoidPointwise(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "sigmoidpw"
+        assert len(self.parents) == 1
+    def evaluate(self):
+        self.X_out = 1./(1.+np.exp(self.parents[0].X_out))
+    def backpropagate(self, g_back, level=0, log=None):
+        self.parents[0].backpropagate(
+            g_back*self.X_out*(self.X_out-1.), 
+            level=level+1, log=log)
+
 class PyNodeDot(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
@@ -303,9 +336,25 @@ class PyNodeDot(PyNode):
         self.parents[0].backpropagate(g0, level=level+1, log=log)
         self.parents[1].backpropagate(g1, level=level+1, log=log)
 
-class PyNodeOuter(PyNode):
+class PyNodeBilinearMinor(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
+        self.dim = 1
+        self.op = "biminor"
+        assert len(self.parents) == 2
+    def calcParamsShape(self):
+        return [0,0]
+    def evaluate(self):
+        self.X_out = np.einsum('ia,ja->ija', 
+            self.parents[0].X_out, self.parents[1].X_out, 
+            optimize='greedy')
+    def backpropagate(self, g_back, level=0, log=None):
+        self.parents[0].backpropagate(
+            np.einsum('ija,ja->ia', g_back, self.parents[1].X_out, optimize='greedy'),
+            level=level+1, log=log)
+        self.parents[1].backpropagate(
+            np.einsum('ija,ia->ja', g_back, self.parents[0].X_out, optimize='greedy'),
+            level=level+1, log=log)
 
 class PyNodeMSE(PyNode):
     def __init__(self, idx, parents, props):
@@ -313,12 +362,10 @@ class PyNodeMSE(PyNode):
         self.op = "mse"
         assert len(self.parents) == 2
     def evaluate(self):
-        N = self.parents[0].X_out.shape[0]
-        if len(self.parents[0].X_out.shape) > 1: N *= self.parents[0].X_out.shape[1]
+        N = self.parents[0].X_out.size
         self.X_out = np.sum((self.parents[0].X_out - self.parents[1].X_out)**2)/N
     def backpropagate(self, g_back=1., level=0, log=None):
-        N = self.parents[0].X_out.shape[0]
-        if len(self.parents[0].X_out.shape) > 1: N *= self.parents[0].X_out.shape[1]
+        N = self.parents[0].X_out.size
         g_X = 2./N*(self.parents[0].X_out - self.parents[1].X_out)
         self.parents[0].backpropagate(+1.*g_X*g_back, level=level+1, log=log)
         self.parents[1].backpropagate(-1.*g_X*g_back, level=level+1, log=log)
@@ -331,14 +378,12 @@ class PyNodeXENT(PyNode):
     def evaluate(self):
         yp = self.parents[0].X_out
         yt = self.parents[1].X_out
-        N = yt.shape[0]
-        if len(yt.shape) > 1: N *= yt.shape[1]
+        N = yt.size
         self.X_out = -1./N*np.sum(yt*np.log(yp) + (1.-yt)*np.log(1.-yp))
     def backpropagate(self, g_back=1., level=0, log=None):
         yp = self.parents[0].X_out
         yt = self.parents[1].X_out
-        N = yt.shape[0]
-        if len(yt.shape) > 1: N *= yt.shape[1]
+        N = yt.size
         gp = -1./N*(yt/yp - (1.-yt)/(1.-yp))
         gt = -1./N*(np.log(yp) - np.log(1.-yp))
         self.parents[0].backpropagate(gp*g_back, level=level+1, log=log)
@@ -460,25 +505,28 @@ class PyNodeReLu(PyNode):
             off += p.dim
 
 PyNode.prototypes = {
-    "input":      PyNodeInput,
-    "flexinput":  PyNodeFlexInput,
-    "constant":   PyNodeConstant,
-    "slice":      PyNodeSlice,
-    "join":       PyNodeJoin,
-    "scalar":     PyNodeScalar,
-    "add":        PyNodeAdd,
-    "mult":       PyNodeMult,
-    "exp":        PyNodeExp,
-    "linear":     PyNodeLinear,
-    "relu":       PyNodeReLu,
-    "sigmoid":    PyNodeSigmoid,
-    "softmax":    PyNodeSoftmax,
-    "dot":        PyNodeDot,
-    "mse":        PyNodeMSE,
-    "xent":       PyNodeXENT,
-    "sstep":      PyNodeStochasticStep,
-    "ssoftstep":  PyNodeStochasticSoftStep,
-    "ssgaussian": PyNodeStochasticSphericalGaussian
+    "input":          PyNodeInput,
+    "flexinput":      PyNodeFlexInput,
+    "constant":       PyNodeConstant,
+    "slice":          PyNodeSlice,
+    "join":           PyNodeJoin,
+    "reshape":        PyNodeReshape,
+    "scalar":         PyNodeScalar,
+    "add":            PyNodeAdd,
+    "mult":           PyNodeMult,
+    "exp":            PyNodeExp,
+    "linear":         PyNodeLinear,
+    "biminor":        PyNodeBilinearMinor,
+    "relu":           PyNodeReLu,
+    "sigmoid":        PyNodeSigmoid,
+    "sigmoidpw":      PyNodeSigmoidPointwise,
+    "softmax":        PyNodeSoftmax,
+    "dot":            PyNodeDot,
+    "mse":            PyNodeMSE,
+    "xent":           PyNodeXENT,
+    "sstep":          PyNodeStochasticStep,
+    "ssoftstep":      PyNodeStochasticSoftStep,
+    "ssgaussian":     PyNodeStochasticSphericalGaussian
 }
 
 class PyGraph(object):
