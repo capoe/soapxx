@@ -7,6 +7,7 @@ from . import nn
 import copy
 import scipy.optimize
 import momo
+import multiprocessing as mp
 log = momo.osio
 
 class PyNodeTupleF(nn.PyNode):
@@ -41,15 +42,24 @@ class PyNodeTupleX(nn.PyNode):
     def __init__(self, idx, parents, props):
         nn.PyNode.__init__(self, idx, parents, props)
         self.op = "tuplex"
+        self.dX_dR = None
+        # Basis and dimensions
         self.basis = props["basis"]
         P = len(self.basis.centres[0])           # number of r01 basis fcts
         N = len(self.basis.centres[1])           # number of r1+r2 basis fcts
         K = len(self.basis.centres[2])           # number of r1-r2 basis fcts
         L = len(self.basis.centres[3])           # number of r3 basis fcts
         C = self.basis.type_basis.K_abc.shape[2] # number of pair type channels
-        self.dim = P*self.basis.type_basis.N + N*K*L*C
-        self.dX_dR = None
-        self.w_grad = True
+        self.dim_pairs = P*self.basis.type_basis.N
+        self.dim_pairs_ch = self.basis.type_basis.N
+        self.dim_pairs_geom = self.basis.type_basis.N
+        self.dim_trips = N*K*L*C
+        self.dim_trips_ch = C
+        self.dim_trips_geom = N*K*L
+        self.dim = self.dim_pairs + self.dim_trips
+        # Settings
+        self.w_grad = nn.require(props, "w_grad", False)
+        self.n_procs = nn.require(props, "n_procs", 1)
         assert len(self.parents) == 2
     def evaluate(self):
         T_mat = self.parents[0].X_out
@@ -57,12 +67,23 @@ class PyNodeTupleX(nn.PyNode):
         assert T_mat.shape[0] == R_mat.shape[0]
         self.X_out = np.zeros((T_mat.shape[0], self.dim))
         self.dX_dR = []
-        for env in range(T_mat.shape[0]):
-            X, dX_dR = evaluate_tuplex(T_mat[env], R_mat[env], 
-                basis=self.basis, w_grad=self.w_grad)
-            self.X_out[env] = X
-            self.dX_dR.append(dX_dR)
+        if self.n_procs == 1:
+            for env in range(T_mat.shape[0]):
+                X, dX_dR = evaluate_tuplex(T_mat[env], R_mat[env], 
+                    basis=self.basis, w_grad=self.w_grad)
+                self.X_out[env] = X
+                self.dX_dR.append(dX_dR)
+        else:
+            pool = mp.Pool(processes=self.n_procs)
+            inputs = [ (T_mat[env], R_mat[env], self.basis, self.w_grad) \
+                for env in range(T_mat.shape[0]) ]
+            res = pool.map(evalute_tuplex_mp, inputs)
+            pool.close()
+            for env in range(T_mat.shape[0]):
+                self.X_out[env] = res[env][0]
+                self.dX_dR.append(res[env][1])
     def backpropagate(self, g_back=1., level=0, log=None):
+        if self.w_grad == False: return
         g_R = []
         for env in range(g_back.shape[0]):
             g = self.dX_dR[env].T.dot(g_back[env])
@@ -176,6 +197,12 @@ def evaluate_tuplef(T_nbs, R_nbs, basis,
     if normalize:
         Q, grad_Q = norm_w_grad(Q, grad_Q)
     return Q, grad_Q
+
+def evalute_tuplex_mp(inputs):
+    X, dX = evaluate_tuplex(
+        T_nbs=inputs[0], R_nbs=inputs[1], 
+        basis=inputs[2], w_grad=inputs[3])
+    return (X, dX)
 
 def evaluate_tuplex(T_nbs, R_nbs, basis, 
         normalize=True, 

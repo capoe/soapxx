@@ -5,6 +5,7 @@ import pickle
 import copy
 log = momo.osio
 np_dtype = "float64"
+DEBUG = False
 
 def require(props, key, default=None, log=log):
     if default is None and not key in props:
@@ -88,9 +89,10 @@ class PyNode(object):
         return
     def printInfo(self, log=log):
         dep_str = str(sorted(self.deps.keys()))
+        par_str = str([ p.idx for p in self.parents ])
         if len(dep_str) > 17: dep_str = "(%d nodes)" % (len(self.deps.keys()))
-        log << "Have node: %3d %-10s %-20s  dim=%-4d <- depends on %s" % (
-            self.idx, self.op, self.tag, self.dim, dep_str) << log.endl
+        log << "Have node: %3d %-10s %-20s  dim=%-5d <- depends on %s" % (
+            self.idx, self.op, self.tag, self.dim, par_str) << log.endl
     def printDim(self, log=log):
         log << "Node %d '%s': %s => %s" % (
             self.idx, self.op, self.X_in.shape, self.X_out.shape) << log.endl
@@ -155,8 +157,8 @@ class PyNodeSlice(PyNode):
     def evaluate(self):
         self.X_out = self.parents[0].X_out[:,self.slice[0]:self.slice[1]]
     def backpropagate(self, g_back=1., level=0, log=None):
-        g = np.zeros((self.parents[0].X_out.shape[1],))
-        g[self.slice[0]:self.slice[1]] = g_back
+        g = np.zeros_like(self.parents[0].X_out)
+        g[:,self.slice[0]:self.slice[1]] = g_back
         self.parents[0].backpropagate(g, level=level+1, log=log)
         return
 
@@ -167,6 +169,7 @@ class PyNodeReshape(PyNode):
         assert len(self.parents) == 1
         self.shape_in = None
         self.shape_out = props["reshape"]
+        self.dim = self.shape_out[-1]
     def evaluate(self):
         self.shape_in = self.parents[0].X_out.shape
         self.X_out = self.parents[0].X_out.reshape(self.shape_out)
@@ -403,7 +406,7 @@ class PyNodeStochasticStep(PyNode):
         self.random_state = np.random.uniform(size=self.X_in.shape)
         self.X_out = np.heaviside(self.random_state - self.X_in, 0.0)
     def backpropagate(self, g_back, level=0, log=None):
-        g_X = -g_back #+ 0.0000001*np.log(self.X_in/(1.-self.X_in))    #* np.exp(-0.5*(self.random_state-self.X_in)**2/self.sigma**2)
+        g_X = -g_back
         off = 0
         for p in self.parents:
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
@@ -427,10 +430,9 @@ class PyNodeStochasticSoftStep(PyNode):
         self.random_state = np.random.uniform(size=self.X_in.shape)
         self.phi = 1./(1. + np.exp(-self.alpha*(self.random_state - self.X_in)))
         self.X_out = self.z0 + self.dz*self.phi
-        #self.X_out = self.z0 + self.dz*np.heaviside(self.random_state - self.X_in, 0.0)
     def backpropagate(self, g_back, level=0, log=None):
-        #g_X = -g_back*self.dz*self.phi*(1.-self.phi)*self.alpha
-        g_X = -g_back*self.dz*self.phi*(1.-self.phi)*self.alpha #*np.exp(-0.5*self.alpha**2*(self.random_state-self.X_in)**2)
+        g_X = -g_back*self.dz*self.phi*(1.-self.phi)*self.alpha 
+        # ... *np.exp(-0.5*self.alpha**2*(self.random_state-self.X_in)**2)
         off = 0
         for p in self.parents:
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
@@ -478,12 +480,6 @@ class PyNodeReLu(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
         self.op = "relu"
-        #self.dim = sum([ p.dim for p in parents ])
-    #def evaluate(self):
-    #    self.X_out = np.concatenate([ np.maximum(p.X_out, 0.0) for p in self.parents ], axis=1)
-    #def backpropagate(self, g_back, level, log):
-    #    for p in self.parents:
-    #        p.backpropagate(g_back*np.heaviside(p.X_out, 0.0), level=level+1, log=log)
     def calcParamsShape(self):
         dim1 = sum([ p.dim for p in self.parents ]) + 1
         dim2 = self.dim
@@ -562,6 +558,9 @@ class PyGraph(object):
         new_node.params = new_params
         self.params_map[params_tag] = new_params
         return new_node
+    def updateDependencies(self):
+        for node in self.nodes:
+            node.setDependencies()
     def __getitem__(self, node_tag):
         return self.node_map[node_tag]
     def printInfo(self):
@@ -570,23 +569,34 @@ class PyGraph(object):
             len(self.nodes), len(self.params_map), n_params) << log.endl
         for node in self.nodes:
             node.printInfo()
-    def evaluate(self, node, feed):
+    def evaluate(self, node, feed, lazy_set=set()):
         for node_tag, X in feed.iteritems():
             self.node_map[node_tag].setVals(X)
         path = [ n for nidx, n in node.deps.iteritems() ]
         path = sorted(path, key=lambda d: d.idx)
         for pathnode in path:
-            pathnode.evaluate()
+            if pathnode.tag in lazy_set: pass
+            else:
+                if DEBUG:
+                    log << pathnode.tag << log.endl
+                    for p in pathnode.parents:
+                        log << " <- %-10s  (X_out)=%s" % (\
+                            p.tag, str(p.X_out.shape)) << log.endl
+                pathnode.evaluate()
         node.evaluate()
         return node.X_out
-    def propagate(self, feed, log=None):
-        for node_tag, X in feed.iteritems():
-            self.node_map[node_tag].setVals(X)
-        for node in self.nodes:
-            if log: log << log.back << "Propagate node %d/%d" % (
-                node.idx+1, len(self.nodes)) << log.flush
-            node.evaluate()
-        if log: log << log.endl
+    def propagate(self, feed, node=None, log=None, lazy_set=set()):
+        if node is not None:
+            self.evaluate(node=node, feed=feed, lazy_set=lazy_set)
+        else:
+            for node_tag, X in feed.iteritems():
+                self.node_map[node_tag].setVals(X)
+            for node in self.nodes:
+                if log: log << log.back << "Propagate node %d/%d" % (
+                    node.idx+1, len(self.nodes)) << log.flush
+                if node.tag in lazy_set: pass
+                else: node.evaluate()
+            if log: log << log.endl
     def backpropagate(self, node=None, log=None):
         for param in self.params: param.zeroGrad()
         if node is None: node = self.nodes[-1]
@@ -665,7 +675,8 @@ class PyGraphOptimizer(object):
         return
     def fit(self, graph, n_iters, n_batch, n_steps, feed=None,
             idx_map={}, report_every=-1,
-            subsampler=None, log=None, verbose=False, chk_every=-1, chkfile=None):
+            subsampler=None, log=None, verbose=False, chk_every=-1, chkfile=None,
+            lazy_set=set()):
         if chk_every > 0: assert chkfile != None
         if subsampler is None: 
             assert feed is not None
@@ -684,6 +695,7 @@ class PyGraphOptimizer(object):
                 report_every=report_every,
                 obj=report_on,
                 feed=subfeed,
+                lazy_set=lazy_set,
                 log=log if verbose else None)
             if log: log << " => %s%s = %+1.4e" % (
                 report_on.op, report_on.tag, report_on.val()) << log.endl
@@ -722,10 +734,10 @@ class OptAdaGrad(PyGraphOptimizer):
         for p in graph.params: p.zeroFrictions()
     def initializeFitInput(self, inputs):
         for i in inputs: i.zeroFrictions()
-    def step(self, graph, feed, n_steps, obj, log=None, report_every=10):
+    def step(self, graph, feed, n_steps, obj, log=None, report_every=10, lazy_set=set()):
         for n in range(n_steps):
-            graph.propagate(feed=feed)
-            graph.backpropagate(log=None)
+            graph.propagate(node=obj, feed=feed, lazy_set=lazy_set if n > 0 else set())
+            graph.backpropagate(node=obj, log=None)
             for par in graph.params:
                 self.stepNodeParams(par)
             self.datalog["loss"].append([n, obj.val()])
