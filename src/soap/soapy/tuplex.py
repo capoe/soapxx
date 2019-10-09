@@ -409,3 +409,6 @@ def evaluate_distance_mat_3d_triu(x, w_grad):
     else: grad_D = None
     return D, grad_D
 
+nn.register("tuplex", PyNodeTupleX)
+nn.register("tuplef", PyNodeTupleF)
+

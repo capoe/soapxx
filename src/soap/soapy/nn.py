@@ -26,10 +26,13 @@ class PyNodeParams(object):
         self.friction = None
         self.shape = self.C.shape
         self.constant = False
+        self.initialized = False
     def randomize(self):
         self.C = np.random.uniform(-1., 1., size=self.shape).astype(np_dtype)
+        self.initialized = True
     def set(self, C):
         self.C = np.copy(C)
+        self.initialized = True
     def zeroGrad(self):
         if not self.constant:
             self.grad = np.zeros(self.C.shape, np_dtype)
@@ -558,6 +561,19 @@ class PyGraph(object):
         new_node.params = new_params
         self.params_map[params_tag] = new_params
         return new_node
+    def importParameters(self, other, log=log):
+        for node in other.nodes:
+            if node.tag in self.node_map and node.params.C.size > 0:
+                if node.params.C.shape == self.node_map[node.tag].params.C.shape:
+                    if log: log << "Copy parameters for %s, shape=%s" % (
+                        node.tag, str(node.params.C.shape)) << log.endl
+                    self.node_map[node.tag].params.set(node.params.C)
+                else:
+                    if log: log << log.my << \
+                        "Copy parameters for %s: WARNING Shape mismatch %s != %s" % (
+                            node.tag, 
+                            self.node_map[node.tag].params.C.shape, 
+                            str(node.params.C.shape)) << log.endl
     def updateDependencies(self):
         for node in self.nodes:
             node.setDependencies()
@@ -569,6 +585,10 @@ class PyGraph(object):
             len(self.nodes), len(self.params_map), n_params) << log.endl
         for node in self.nodes:
             node.printInfo()
+        for p in self.params:
+            if p.C.size > 0 and not p.initialized:
+                log << log.mr << "WARNING Parameters '%s' of shape %s not yet initialized" % (
+                    p.tag, str(p.C.shape)) << log.endl
     def evaluate(self, node, feed, lazy_set=set()):
         for node_tag, X in feed.iteritems():
             self.node_map[node_tag].setVals(X)
