@@ -27,8 +27,8 @@ class PyNodeParams(object):
         self.shape = self.C.shape
         self.constant = False
         self.initialized = False
-    def randomize(self):
-        self.C = np.random.uniform(-1., 1., size=self.shape).astype(np_dtype)
+    def randomize(self, cmin=-1., cmax=+1.):
+        self.C = np.random.uniform(cmin, cmax, size=self.shape).astype(np_dtype)
         self.initialized = True
     def set(self, C):
         self.C = np.copy(C)

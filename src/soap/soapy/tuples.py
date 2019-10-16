@@ -94,6 +94,7 @@ class BasisRThetaPhi(object):
         self.r_theta_phi = None
         self.dr_dtheta_dphi = None
         self.r_centres = []
+        self.size = None
         if r_excl != None: self.setup()
     def setup(self, eps=1e-10):
         r_span = self.r_cut - self.r_excl
@@ -126,6 +127,7 @@ class BasisRThetaPhi(object):
                     self.dr_dtheta_dphi.append([dr, dtheta, dphi])
         self.r_theta_phi = np.array(self.r_theta_phi)
         self.dr_dtheta_dphi = np.array(self.dr_dtheta_dphi)
+        self.size = len(self.r_theta_phi)
         log << "Basis: %d fcts" % len(self.r_theta_phi) << log.endl
         log << "  R centres @" << self.r_centres << log.endl
     def asXyz(self, outfile='basis.xyz', weights=None, R=[], translate=None):

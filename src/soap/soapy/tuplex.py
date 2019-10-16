@@ -16,9 +16,14 @@ class PyNodeTupleF(nn.PyNode):
         self.op = "tuplex"
         self.basis = props["basis"]
         C = self.basis.type_basis.K_abc.shape[2] # number of pair type channels
-        self.dim = (3+6)*self.basis.type_basis.N
         self.dX_dR = None
-        self.w_grad = True
+        self.w_grad = nn.require(props, "w_grad", False)
+        self.normalize = nn.require(props, "normalize", True)
+        self.remove_redundant = nn.require(props, "remove_redundant", False)
+        self.dim1 = 3*self.basis.type_basis.N
+        self.dim2 = 9*self.basis.type_basis.N
+        if self.remove_redundant: self.dim2 = 6*self.basis.type_basis.N
+        self.dim = self.dim1 + self.dim2
         assert len(self.parents) == 2
     def evaluate(self):
         T_mat = self.parents[0].X_out
@@ -28,9 +33,24 @@ class PyNodeTupleF(nn.PyNode):
         self.dX_dR = []
         for env in range(T_mat.shape[0]):
             X, dX_dR = evaluate_tuplef(T_mat[env], R_mat[env], 
-                basis=self.basis, w_grad=self.w_grad)
+                basis=self.basis, w_grad=self.w_grad, 
+                normalize=self.normalize,
+                remove_redundant=self.remove_redundant)
             self.X_out[env] = X
             self.dX_dR.append(dX_dR)
+    def rotate(self, rot_mat, Q=None):
+        if Q is None: Q = self.X_out
+        assert self.remove_redundant == False
+        Q1 = Q[:,0:self.dim1]
+        Q2 = Q[:,self.dim1:]
+        Q1 = Q1.reshape((-1,3,self.basis.type_basis.N))
+        Q2 = Q2.reshape((-1,3,3,self.basis.type_basis.N))
+        Q1_rot = np.einsum('cat,ab->cbt', Q1, rot_mat, optimize='greedy')
+        Q2_rot = np.einsum('cabt,ap,bq->cpqt', Q2, rot_mat, rot_mat, optimize='greedy')
+        Q1_rot = Q1_rot.reshape((Q.shape[0],self.dim1))
+        Q2_rot = Q2_rot.reshape((Q.shape[0],self.dim2))
+        Q_rot = np.concatenate([ Q1_rot, Q2_rot ], axis=1)
+        return Q_rot
     def backpropagate(self, g_back=1., level=0, log=None):
         g_R = []
         for env in range(g_back.shape[0]):
@@ -148,6 +168,7 @@ def grad_correct_for_centre(g):
     return g
 
 def evaluate_tuplef(T_nbs, R_nbs, basis, 
+        remove_redundant=False,
         normalize=True, 
         w_grad=True):
     dim_x_in = R_nbs.shape[0]
@@ -171,7 +192,7 @@ def evaluate_tuplef(T_nbs, R_nbs, basis,
     M = np.einsum('i,it,ia->at', wf, T_nbs, R_nbs)
     M = M.flatten()
     Q = np.einsum('i,it,ia,ib->abt', wf, T_nbs, R_nbs, R_nbs)
-    Q = Q[([0,0,0,1,1,2],[0,1,2,1,2,2])] 
+    if remove_redundant: Q = Q[([0,0,0,1,1,2],[0,1,2,1,2,2])] 
     Q = Q.flatten()
     if w_grad:
         grad_M = (
@@ -185,7 +206,7 @@ def evaluate_tuplef(T_nbs, R_nbs, basis,
           + np.einsum('i,it,iad,ib->abtd', wf, T_nbs, grad_R_nbs_xyz, R_nbs)
           + np.einsum('i,it,ia,ibd->abtd', wf, T_nbs, R_nbs, grad_R_nbs_xyz)
         )
-        grad_Q = grad_Q[([0,0,0,1,1,2],[0,1,2,1,2,2])] 
+        if remove_redundant: grad_Q = grad_Q[([0,0,0,1,1,2],[0,1,2,1,2,2])] 
         grad_Q = grad_Q.reshape((-1,dim_x_in))
         grad_Q = grad_correct_for_centre(grad_Q)
     else:

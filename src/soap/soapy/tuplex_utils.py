@@ -1,6 +1,7 @@
 import soap
 import numpy as np
 import time
+import multiprocessing as mp
 from . import nn
 from . import momo
 from . import tuplex
@@ -227,10 +228,12 @@ def evaluate_tuplex_lig_poc(data):
     XA = []
     XB = []
     for i in range(len(data[2])):
-        xa = data[0].evaluate(data[0]["X_out"], feed={"T": data[2][i], "R": data[3][i]})
-        xb = data[1].evaluate(data[1]["X_out"], feed={"T": data[4][i], "R": data[5][i]})
-        XA.append(xa)
-        XB.append(xb)
+        if data[0] is not None:
+            xa = data[0].evaluate(data[0]["X_out"], feed={"T": data[2][i], "R": data[3][i]})
+            XA.append(xa)
+        if data[1] is not None:
+            xb = data[1].evaluate(data[1]["X_out"], feed={"T": data[4][i], "R": data[5][i]})
+            XB.append(xb)
     return [XA, XB]
 
 def build_tuplex_graph(args, basis_x, basis_f):
