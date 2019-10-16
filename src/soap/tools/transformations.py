@@ -343,6 +343,15 @@ def rotation_matrix(angle, direction, point=None):
     return M
 
 
+def get_random_rotation_matrix():
+    ax = numpy.random.normal(size=(3,))
+    ax = ax/numpy.dot(ax,ax)**0.5
+    rot = rotation_matrix(
+        angle=numpy.random.uniform()*2*numpy.pi, 
+        direction=ax)[:3,:3]
+    return rot 
+
+
 def rotation_from_matrix(matrix):
     """Return rotation angle and axis from rotation matrix.
 
