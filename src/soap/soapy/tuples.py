@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 import soap
 import momo
+import geodesic
 log = momo.osio
 
 def get_types_pairs_default(reduced=True):
@@ -84,6 +85,53 @@ class TypeBasis(object):
         if not p_str in self.encoder_pairs: return None
         return self.encoder_pairs[p_str]
 
+class GeodesicBasis(object):
+    def __init__(self, 
+            radii, 
+            repeats,
+            r_cut,
+            r_cut_width,
+            sigma):
+        self.grid = []
+        for i in range(len(radii)):
+            self.grid.append(geodesic.subdivide_sphere(
+                args_radius=radii[i], args_repeats=repeats[i]))
+        self.dims = [ g.shape[0] for g in self.grid ]
+        self.grid = np.concatenate(self.grid, axis=0)
+        self.r_cut = r_cut
+        self.r_cut_width = r_cut_width
+        self.sigma = sigma
+        log << "Have geodesic basis with %d points" % len(self.grid) << log.endl
+    def calcWeights(self, dR):
+        w = np.heaviside(-dR+self.r_cut, 0.0)
+        transition_idcs = np.where(w*dR > self.r_cut-self.r_cut_width)[0]
+        w[transition_idcs] = np.cos(0.5*(dR[transition_idcs]-self.r_cut+self.r_cut_width)/(
+            self.r_cut_width)*np.pi)
+        return w
+    def expandVectors(self, R):
+        G = np.zeros((self.grid.shape[0],))
+        if len(R) > 0:
+            r = np.sum(R*R, axis=1)**0.5
+            weights = self.calcWeights(r)
+            for i in range(R.shape[0]):
+                Gi = self.grid - R[i]
+                Gi = np.exp(-np.sum(Gi**2, axis=1)/(2*self.sigma**2))
+                Gi = Gi/np.sum(Gi)
+                G = G + weights[i]*Gi
+        return G
+    def asXyz(self, outfile='basis.xyz', weights=None, R=[], translate=None):
+        if translate is None: translate = np.zeros((3,))
+        ofs = open(outfile, 'w')
+        ofs.write('%d\n\n' % (len(self.grid)+len(R)))
+        for i in range(len(self.grid)):
+            ofs.write('X %+1.4f %+1.4f %+1.4f %+1.4e\n' % (
+                self.grid[i,0], self.grid[i,1], self.grid[i,2], 
+                0.0 if weights is None else weights[i]))
+        R = R + translate
+        for j in range(len(R)):
+            ofs.write('Y %+1.4f %+1.4f %+1.4f %+1.4e\n' % (R[j,0], R[j,1], R[j,2], 1.0))
+        ofs.close()
+    
 class BasisRThetaPhi(object):
     def __init__(self, r_excl=None, r_cut=None, r_cut_width=None, sigma=None, sigma_ang=None):
         self.r_excl = r_excl
@@ -143,7 +191,7 @@ class BasisRThetaPhi(object):
                 x, y, z, 0.0 if weights is None else weights[i]))
         R = R + translate
         for j in range(len(R)):
-            ofs.write('Y %+1.4f %+1.4f %+1.4f %+1.4e\n' % (R[j,0], R[j,1], R[j,2], 10.))
+            ofs.write('Y %+1.4f %+1.4f %+1.4f %+1.4e\n' % (R[j,0], R[j,1], R[j,2], 1.0))
         ofs.close()
     def getXyz(self):
         return np.concatenate([
