@@ -91,17 +91,22 @@ class GeodesicBasis(object):
             repeats,
             r_cut,
             r_cut_width,
-            sigma):
+            sigma,
+            log=log):
+        if log: log << "Setting up geodesic basis" << log.endl
         self.grid = []
         for i in range(len(radii)):
             self.grid.append(geodesic.subdivide_sphere(
                 args_radius=radii[i], args_repeats=repeats[i]))
+            if log: log << "- Layer %d: dS^0.5 = %1.4f" % (
+                i, (4*np.pi*radii[i]**2/self.grid[-1].shape[0])**0.5) << log.endl
         self.dims = [ g.shape[0] for g in self.grid ]
         self.grid = np.concatenate(self.grid, axis=0)
+        self.size = self.grid.shape[0]
         self.r_cut = r_cut
         self.r_cut_width = r_cut_width
         self.sigma = sigma
-        log << "Have geodesic basis with %d points" % len(self.grid) << log.endl
+        if log: log << "=> Geodesic basis with %d points" % len(self.grid) << log.endl
     def calcWeights(self, dR):
         w = np.heaviside(-dR+self.r_cut, 0.0)
         transition_idcs = np.where(w*dR > self.r_cut-self.r_cut_width)[0]

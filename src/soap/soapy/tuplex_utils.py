@@ -7,26 +7,36 @@ from . import momo
 from . import tuplex
 log = momo.osio
 
-def load_extract_data(configs, basis, max_envs_per_config=-1, log=None):
+def load_extract_data(configs, basis, 
+        with_nb_idcs=False, 
+        max_envs_per_config=-1, 
+        log=None):
     if log: log << log.mg << "Extract structures ..." << log.endl
     T_mat_list = []
     R_mat_list = []
+    I_mat_list = []
     for cidx, config in enumerate(configs):
         if log: log << log.back << "Extracting structure %d" % cidx << log.flush
-        T_mat, R_mat = extract_environments(
+        T_mat, R_mat, I_mat = extract_environments(
             config=config, 
             basis=basis, 
+            with_nb_idcs=with_nb_idcs,
             max_envs_per_config=max_envs_per_config)
         T_mat_list.append(T_mat)
         R_mat_list.append(R_mat)
+        if with_nb_idcs: I_mat_list.append(I_mat)
     if log: log << log.endl
-    return T_mat_list, R_mat_list
+    if with_nb_idcs: return T_mat_list, R_mat_list, I_mat_list
+    else: return T_mat_list, R_mat_list 
 
-def extract_environments(config, basis, max_envs_per_config=-1):
+def extract_environments(config, basis, 
+        with_nb_idcs=False, 
+        max_envs_per_config=-1):
     R = config.positions
     T = np.array(config.symbols)
     R_out = []
     T_out = []
+    I_out = []
     if "centres" in config.info:
         centres = map(int, config.info["centres"].split(','))
     else:
@@ -46,15 +56,18 @@ def extract_environments(config, basis, max_envs_per_config=-1):
         Tc = Tc.flatten()
         R_out.append(Rc)
         T_out.append(Tc)
+        if with_nb_idcs: I_out.append(nbs)
     T_out = np.array(T_out)
     R_out = np.array(R_out)
+    if with_nb_idcs: I_out = np.array(I_out)
     if max_envs_per_config > 0 and len(centres) > max_envs_per_config:
         sel = np.arange(len(centres))
         np.random.shuffle(sel)
         sel = sel[0:max_envs_per_config]
         T_out = T_out[sel]
         R_out = R_out[sel]
-    return T_out, R_out
+        if with_nb_idcs: I_out = I_out[sel]
+    return T_out, R_out, I_out
 
 def build_basis_default(type_contraction, type_set):
     if type_set == "default":

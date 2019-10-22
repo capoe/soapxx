@@ -94,8 +94,9 @@ class PyNode(object):
         dep_str = str(sorted(self.deps.keys()))
         par_str = str([ p.idx for p in self.parents ])
         if len(dep_str) > 17: dep_str = "(%d nodes)" % (len(self.deps.keys()))
-        log << "Have node: %3d %-10s %-20s  dim=%-5d <- depends on %s" % (
-            self.idx, self.op, self.tag, self.dim, par_str) << log.endl
+        log << "Have node: %3d %-10s %-20s  dim=%-5d <- depends on %-20s %s" % (
+            self.idx, self.op, self.tag, self.dim, par_str,
+            "CONSTANT" if self.params.constant else "") << log.endl
     def printDim(self, log=log):
         log << "Node %d '%s': %s => %s" % (
             self.idx, self.op, self.X_in.shape, self.X_out.shape) << log.endl
@@ -581,8 +582,9 @@ class PyGraph(object):
         return self.node_map[node_tag]
     def printInfo(self):
         n_params = sum([ p.nParams() for p in self.params ])
-        log << "Graph with %d nodes and %d parameter sets with %d parameters" % (
-            len(self.nodes), len(self.params_map), n_params) << log.endl
+        n_params_constant = sum([ p.nParams() for p in self.params if p.constant ])
+        log << "Graph with %d nodes and %d parameter sets with %d parameters (of which %d constant)" % (
+            len(self.nodes), len(self.params_map), n_params, n_params_constant) << log.endl
         for node in self.nodes:
             node.printInfo()
         for p in self.params:
@@ -766,7 +768,7 @@ class OptAdaGrad(PyGraphOptimizer):
                     n, obj.op, obj.tag, obj.val()) << log.endl
         return
     def stepNodeParams(self, params):
-        if params.constant: raise RuntimeError()
+        if params.constant: return
         params.incrementFrictions()
         params.C = params.C - 1.*self.rate*params.grad/(np.sqrt(params.friction)+self.eps)
     def stepInput(self, input_node):
