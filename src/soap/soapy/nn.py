@@ -293,6 +293,23 @@ class PyNodeSoftmax(PyNode):
             p.backpropagate(g_X[:,off:off+p.dim], level=level+1, log=log)
             off += p.dim
 
+class PyNodeUnitSphereNorm(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "usphnorm"
+        assert len(self.parents) == 1
+        self.dim = self.parents[0].dim
+        self.Z = None
+    def evaluate(self):
+        self.Z = 1./np.sqrt(np.sum(self.parents[0].X_out**2, axis=1))
+        self.X_out = (self.parents[0].X_out.T*self.Z).T
+    def backpropagate(self, g_back, level, log):
+        g_diag = np.einsum('i,ib->ib', 
+            self.Z, g_back, optimize='greedy')
+        g_off = np.einsum('i,ia,ia,ib->ib', 
+            self.Z, self.X_out, g_back, self.X_out, optimize='greedy')
+        return self.parents[0].backpropagate(g_diag-g_off, level=level+1, log=log)
+
 class PyNodeSigmoid(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
@@ -521,6 +538,7 @@ PyNode.prototypes = {
     "sigmoid":        PyNodeSigmoid,
     "sigmoidpw":      PyNodeSigmoidPointwise,
     "softmax":        PyNodeSoftmax,
+    "usphnorm":       PyNodeUnitSphereNorm,
     "dot":            PyNodeDot,
     "mse":            PyNodeMSE,
     "xent":           PyNodeXENT,
