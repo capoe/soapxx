@@ -134,6 +134,17 @@ class PyNodeFlexInput(PyNode):
         for row in range(len(g_back)):
             self.grad[row] = self.grad[row] + g_back[row]
 
+class PyNodeIdentity(PyNode):
+    def __init__(self, idx, parents, props):
+        PyNode.__init__(self, idx, parents, props)
+        self.op = "identity"
+        assert len(self.parents) == 1
+        self.dim = self.parents[0].dim
+    def evaluate(self):
+        self.X_out = self.parents[0].X_out
+    def backpropagate(self, g_back=1., level=0, log=None):
+        self.parents[0].backpropagate(g_back, level=level+1, log=log)
+
 class PyNodeJoin(PyNode):
     def __init__(self, idx, parents, props):
         PyNode.__init__(self, idx, parents, props)
@@ -300,8 +311,9 @@ class PyNodeUnitSphereNorm(PyNode):
         assert len(self.parents) == 1
         self.dim = self.parents[0].dim
         self.Z = None
+        self.eps = require(props, "eps", 1e-10)
     def evaluate(self):
-        self.Z = 1./np.sqrt(np.sum(self.parents[0].X_out**2, axis=1))
+        self.Z = 1./(np.sqrt(np.sum(self.parents[0].X_out**2, axis=1))+self.eps)
         self.X_out = (self.parents[0].X_out.T*self.Z).T
     def backpropagate(self, g_back, level, log):
         g_diag = np.einsum('i,ib->ib', 
@@ -524,6 +536,7 @@ class PyNodeReLu(PyNode):
 PyNode.prototypes = {
     "input":          PyNodeInput,
     "flexinput":      PyNodeFlexInput,
+    "identity":       PyNodeIdentity,
     "constant":       PyNodeConstant,
     "slice":          PyNodeSlice,
     "join":           PyNodeJoin,
@@ -716,7 +729,7 @@ class PyGraphOptimizer(object):
     def fit(self, graph, n_iters, n_batch, n_steps, feed=None,
             idx_map={}, report_every=-1,
             subsampler=None, log=None, verbose=False, chk_every=-1, chkfile=None,
-            lazy_set=set()):
+            lazy_set=set(), after_step=None):
         if chk_every > 0: assert chkfile != None
         if subsampler is None: 
             assert feed is not None
@@ -737,6 +750,7 @@ class PyGraphOptimizer(object):
                 feed=subfeed,
                 lazy_set=lazy_set,
                 log=log if verbose else None)
+            if after_step: after_step(graph)
             if log: log << " => %s%s = %+1.4e" % (
                 report_on.op, report_on.tag, report_on.val()) << log.endl
             if chk_every > 0 and it > 0 and (it % chk_every == 0):
