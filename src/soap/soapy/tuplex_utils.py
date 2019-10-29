@@ -134,20 +134,21 @@ class ConfigSubsampler(object):
 class TuplexPairSubsampler(object):
     def __init__(self, 
             lig_xyz, poc_xyz, dmats_npy, 
-            lig_tuplex, poc_tuplex, 
-            n_threads, rcut=4.5, rjit=0.1):
+            lig_tuplex=None, poc_tuplex=None, 
+            n_threads=1, rcut=4.5, rjit=0.1):
         self.configs_lig = soap.tools.io.read(lig_xyz)
         self.configs_poc = soap.tools.io.read(poc_xyz)
         # Contacts
         self.rcut = rcut
         self.dmats = np.load(dmats_npy)
         # Tuplexes
-        self.lig_tuplex = lig_tuplex
-        self.lig_tuplex["X"].w_grad = False
-        self.lig_basis = lig_tuplex["X"].basis
-        self.poc_tuplex = poc_tuplex
-        self.poc_tuplex["X"].w_grad = False
-        self.poc_basis = poc_tuplex["X"].basis
+        if lig_tuplex is not None:
+            self.lig_tuplex = lig_tuplex
+            self.lig_tuplex["X"].w_grad = False
+            self.lig_basis = lig_tuplex["X"].basis
+            self.poc_tuplex = poc_tuplex
+            self.poc_tuplex["X"].w_grad = False
+            self.poc_basis = poc_tuplex["X"].basis
         self.n_threads = n_threads
         # Jitter
         self.rjit = rjit

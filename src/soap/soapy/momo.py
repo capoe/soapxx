@@ -540,4 +540,6 @@ flush = OS_LINE_CHAR('')
 back = OS_LINE_CHAR('\r')
 catch = OS_EXE_CATCH()
 devnull = OS_EXE_DEV()
+Mock = ExtendableNamespace
+log = osio
 

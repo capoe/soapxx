@@ -17,6 +17,7 @@ import cgraph
 import fgraph
 import dmap
 import nn
+import tnn
 import tuples
 import tuplex
 import tuplex_utils

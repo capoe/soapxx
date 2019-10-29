@@ -4,6 +4,7 @@ install(FILES
     tuplex.py 
     tuplex_utils.py 
     tuples.py 
+    tnn.py
     nn.py 
     dmap.py 
     cgraph.py 
