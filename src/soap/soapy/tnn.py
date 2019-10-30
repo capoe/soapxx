@@ -32,6 +32,24 @@ class Concatenate(torch.nn.Module):
     def forward(self, *args, **kwargs):
         return torch.cat(*args, **kwargs)
 
+class MovingTarget(torch.nn.Module):
+    def __init__(self, obj_1, obj_2, prob_1):
+        super(MovingTarget, self).__init__()
+        self.obj_1 = obj_1
+        self.obj_2 = obj_2
+        self.prob_1 = prob_1
+        self.current = self.obj_1
+    def forward(self, *args, **kwargs):
+        if np.random.uniform() <= self.prob_1:
+            self.current = self.obj_1
+            return self.obj_1(*args, **kwargs)
+        else:
+            self.current = self.obj_2
+            return self.obj_2(*args, **kwargs)
+    def __repr__(self):
+        return str(self.obj_1)+" : "+str(self.obj_2)+" = %1.1f : %1.1f" % (
+            self.prob_1, 1.-self.prob_1)
+
 identity = Identity()
 concatenate = Concatenate()
 
@@ -50,6 +68,7 @@ class ModuleNode(object):
         self.format_args = format_args
         self.requires_feed = False
         self.kwargs = kwargs
+        self.requires_grad_ = True
     def setDependencies(self):
         self.deps = collections.OrderedDict()
         for p in self.parents:
@@ -57,22 +76,31 @@ class ModuleNode(object):
         for p in self.parents:
             self.deps[p.tag] = p
         return self.deps
-    def feed(self, x):
-        self.x = x
-    def printInfo(self, log=log, indent="  "):
-        log << "%sNode %-3d  %-10s   #pars =" % (indent, self.idx, self.tag) << log.flush
-        for p in self.module.parameters():
-            log << "%7d" % np.prod(p.shape) << log.flush
-        log << log.endl
+    def parameters(self):
+        return self.module.parameters()
+    def requiresGrad(self, requires_grad):
+        for p in self.parameters():
+            p.requires_grad = requires_grad
+        self.requires_grad_ = requires_grad
     def randomizeParameters(self, cmin=-1.0, cmax=+1.0):
         for p in self.parameters():
             torch.nn.init.uniform_(p, a=cmin, b=cmax)
-    def parameters(self):
-        return self.module.parameters()
+    def feed(self, x):
+        self.x = x
     def forward(self, log):
         if len(self.parents) > 0:
             args = self.format_args(self.parents)
             self.x = self.module.forward(*args, **self.kwargs)
+    def printInfo(self, log=log, indent="  "):
+        log << "%sNode %-3d  %-10s   " % (indent, self.idx, self.tag) << log.flush
+        log << "%-75s  " % repr(self.module).replace(
+            "\n","").replace("  "," ").replace("_features","") << log.flush
+        log << "<-"+"%-20s" % (",".join([ p.tag.split(".")[1] for p in self.parents ])) << log.flush
+        log << "<-" << log.flush
+        for p in self.module.parameters():
+            log << "%-7d" % np.prod(p.shape) << log.flush
+        if not self.requires_grad_: log << " [no grad]" << log.flush
+        log << log.endl
 
 class ModuleGraph(ModuleNode):
     def __init__(self, idx=-1, tag="", module=identity, parents=[], 
@@ -137,10 +165,10 @@ class ModuleGraph(ModuleNode):
             if tag in self.node_map:
                 self.node_map[tag].feed(x)
         for sub in self.feed_list: sub.feed(feed=feed)
-    def forward(self, feed={}, node=None, lazy_set=set(), log=None, verbose=False):
+    def forward(self, feed={}, endpoint=None, lazy_set=set(), log=None, verbose=False):
         if len(feed) > 0: self.feed(feed=feed)
-        if node is not None:
-            path = [ n for nidx, n in node.deps.iteritems() ] + [ node ]
+        if endpoint is not None:
+            path = [ n for nidx, n in endpoint.deps.iteritems() ] + [ endpoint ]
         else: path = self.nodes
         if verbose: log << "%s::forward [" % self.tag << log.flush
         for pathnode in path:
