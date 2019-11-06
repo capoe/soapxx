@@ -32,6 +32,27 @@ class Concatenate(torch.nn.Module):
     def forward(self, *args, **kwargs):
         return torch.cat(*args, **kwargs)
 
+class Reshape(torch.nn.Module):
+    def __init__(self):
+        super(Reshape, self).__init__()
+    def forward(self, *args, **kwargs):
+        return torch.reshape(*args, **kwargs)
+
+class Mult(torch.nn.Module):
+    def __init__(self):
+        super(Mult, self).__init__()
+    def forward(self, *args, **kwargs):
+        assert len(args) == 2
+        return args[0]*args[1]
+
+class Add(torch.nn.Module):
+    def __init__(self, coeffs=[1.,1.]):
+        super(Add, self).__init__()
+        self.coeffs = coeffs
+    def forward(self, *args, **kwargs):
+        assert len(args) == 2
+        return self.coeffs[0]*args[0]+self.coeffs[1]*args[1]
+
 class MovingTarget(torch.nn.Module):
     def __init__(self, obj_1, obj_2, prob_1):
         super(MovingTarget, self).__init__()
@@ -52,6 +73,9 @@ class MovingTarget(torch.nn.Module):
 
 identity = Identity()
 concatenate = Concatenate()
+reshape = Reshape()
+mult = Mult()
+add = Add()
 
 class ModuleNode(object):
     def __init__(self, idx=-1, tag="", 
@@ -78,6 +102,8 @@ class ModuleNode(object):
         return self.deps
     def parameters(self):
         return self.module.parameters()
+    def nParamSets(self):
+        return len([ _ for _ in self.parameters() ])
     def requiresGrad(self, requires_grad):
         for p in self.parameters():
             p.requires_grad = requires_grad
@@ -85,6 +111,9 @@ class ModuleNode(object):
     def randomizeParameters(self, cmin=-1.0, cmax=+1.0):
         for p in self.parameters():
             torch.nn.init.uniform_(p, a=cmin, b=cmax)
+    def zeroParameters(self):
+        for p in self.parameters():
+            torch.nn.init.constant_(p, 0.0)
     def feed(self, x):
         self.x = x
     def forward(self, log):
@@ -101,6 +130,12 @@ class ModuleNode(object):
             log << "%-7d" % np.prod(p.shape) << log.flush
         if not self.requires_grad_: log << " [no grad]" << log.flush
         log << log.endl
+    def printRange(self, log=log, indent="  "):
+        log << "%sNode %-3d  %-10s   " % (indent, self.idx, self.tag) << log.endl
+        for p in self.module.parameters():
+            log << "%s  |c|=%-7d   min avg std max = %+1.4e %+1.4e %+1.4e %+1.4e" % (
+                indent, np.prod(p.shape), torch.min(p), torch.mean(p), 
+                torch.std(p), torch.max(p)) << log.endl
 
 class ModuleGraph(ModuleNode):
     def __init__(self, idx=-1, tag="", module=identity, parents=[], 
@@ -119,7 +154,8 @@ class ModuleGraph(ModuleNode):
         self.requires_feed = True
         self.feed_list = []
     def __getitem__(self, node_tag):
-        return self.node_map[self.tag+"."+node_tag]
+        retag = "%s.%s" % (self.tag, node_tag) if not "." in node_tag else node_tag
+        return self.node_map[retag]
     def create(self, tag, parents=[], module=identity, 
             format_args=as_tuple, kwargs={}):
         idx = len(self.nodes)
@@ -147,6 +183,25 @@ class ModuleGraph(ModuleNode):
                 yield p
     def randomizeParameters(self, cmin=-1.0, cmax=1.0):
         for n in self.nodes: n.randomizeParameters(cmin, cmax)
+    def importParameters(self, other, assignment={}):
+        # assignment: { "other.node1": "this.node2", "other.node2": "this.node0", ... }
+        log << "Import parameters" << log.endl
+        if len(assignment) > 0:
+            nodes_other = filter(lambda n: n.tag in assignment, other.nodes)
+        else: nodes_other = other.nodes
+        for node in nodes_other:
+            tag_this = assignment[node.tag] if len(assignment) else node.tag
+            node_this = self.node_map[tag_this]
+            params_this = [ p for p in node_this.parameters() ]
+            params_other = [ p for p in node.parameters() ]
+            assert len(params_this) == len(params_other)
+            log << "  Copying %d parameter sets, node '%s' -> '%s' [" % (
+                len(params_this), node.tag, node_this.tag) << log.flush
+            for i in range(len(params_this)):
+                log << params_this[i].shape << log.flush
+                assert params_this[i].shape == params_other[i].shape
+                params_this[i].data = params_other[i].data
+            log << "]" << log.endl
     def printInfo(self, indent=""):
         n_par = 0
         n_par_const = 0
@@ -160,6 +215,10 @@ class ModuleGraph(ModuleNode):
             indent, self.tag, len(self.nodes), n_par_sets, n_par, n_par_const) << log.endl
         for node in self.nodes:
             node.printInfo(indent=indent+"  ")
+    def printRange(self, indent=""):
+        log << "%sGraph %s: Parameter ranges" % (indent, self.tag) << log.endl
+        for node in self.nodes:
+            node.printRange(indent=indent+"  ")
     def feed(self, feed):
         for tag, x in feed.iteritems():
             if tag in self.node_map:
