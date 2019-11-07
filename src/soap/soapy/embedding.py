@@ -5,7 +5,6 @@ import json
 import os
 import momo
 import copy
-from sklearn.kernel_ridge import KernelRidge
 log = momo.osio
 
 PATH = None
@@ -388,6 +387,7 @@ def parametrize_environment_specific(settings, rerun):
     # MODEL
     regr_options = settings["regression_options"]
     if rerun or not os.path.isfile(paths["weights_file"]):
+        from sklearn.kernel_ridge import KernelRidge
         log << "Make target: %s" % paths["weights_file"] << log.endl
         y_avg = np.average(targets)
         krr = KernelRidge(

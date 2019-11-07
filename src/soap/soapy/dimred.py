@@ -1,7 +1,11 @@
 #! /usr/bin/env python
 import numpy as np
-import sklearn.manifold
-import sklearn.decomposition
+try:
+    import sklearn.manifold
+    import sklearn.decomposition
+    def check_sklearn(): return True
+except ImportError:
+    def check_sklearn(): raise ImportError("Module dimred: failed to import sklearn")
 from . import math
 
 def compute_dist_matrix_2d(X, Y):
@@ -283,14 +287,13 @@ class BondNetwork(object):
         
             
 def dimred_matrix(method, kmat=None, distmat=None, outfile=None, ix=None, symmetrize=False, prj_dimension=2):
+    check_sklearn()
     if symmetrize:
         if type(kmat) != type(None):
             kmat = 0.5*(kmat+kmat.T)
         if type(distmat) != type(None):
             distmat = 0.5*(distmat+distmat.T)
     if method == 'mds':
-        # MDS
-        # http://scikit-learn.org/stable/modules/generated/sklearn.manifold.MDS.html#sklearn.manifold.MDS
         mds = sklearn.manifold.MDS(
             n_components=prj_dimension,
             metric=True,
@@ -353,18 +356,4 @@ def diffusion_map(kmat, n_components, alpha=0.5):
     evecs = evecs.T[order].T
     # Project
     return kmat_norm.dot(evecs[:,1:])
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
