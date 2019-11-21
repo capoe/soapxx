@@ -47,7 +47,7 @@ def get_types_pairs(elements):
     return types, pairs
 
 class TypeBasis(object):
-    def __init__(self, types, pairs):
+    def __init__(self, types, pairs, pair_contraction=None):
         self.types = types
         self.pairs = pairs
         self.N = len(self.types)
@@ -56,6 +56,8 @@ class TypeBasis(object):
         self.encoder_pairs = { p: pidx for pidx, p in enumerate(self.pairs) }
         self.decoder_types = { tidx: t for t, tidx in self.encoder_types.iteritems() }
         self.K_abc = None
+        if pair_contraction is not None:
+            self.setupPairContractionTensor(pair_contraction)
     def setupPairContractionTensor(self, mode):
         if mode == 'constant':
             self.K_abc = np.ones((self.N,self.N,1))

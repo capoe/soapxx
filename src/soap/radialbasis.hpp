@@ -16,10 +16,12 @@ namespace soap {
 namespace ub = boost::numeric::ublas;
 
 // CLASSES IN THIS HEADER
-// RadialBasis
-// RadialBasisGaussian
-// RadialBasisLegendre
-// RadialBasisFactory
+// - RadialBasis
+// - RadialBasisGaussian
+// - RadialBasisDiscrete
+// - RadialBasisGylm
+// - RadialBasisLegendre
+// - RadialBasisFactory
 
 class RadialBasis
 {
@@ -52,14 +54,13 @@ class RadialBasis
     }
 
   protected:
-   std::string _type;
-   int _N;
-   double _Rc;
-   int _integration_steps;
-   std::string _mode; // <- 'equispaced' or 'adaptive'
-   bool _is_ortho;
-
-   static constexpr double RADZERO = 1e-10;
+    std::string _type;
+    int _N;
+    double _Rc;
+    int _integration_steps;
+    std::string _mode; // <- 'equispaced' or 'adaptive'
+    bool _is_ortho;
+    static constexpr double RADZERO = 1e-10;
 };
 
 class RadialBasisDiscrete : public RadialBasis
@@ -83,6 +84,45 @@ class RadialBasisDiscrete : public RadialBasis
     	arch & boost::serialization::base_object<RadialBasis>(*this);
     }
   protected:
+};
+
+class RadialBasisGylm : public RadialBasis
+{
+  public:
+    RadialBasisGylm();
+   ~RadialBasisGylm() {};
+    void configure(Options &options);
+    void computeCoefficients(
+        vec d,
+        double r,
+        double particle_sigma,
+        radcoeff_t &Gnl,
+        radcoeff_t *dGnl_dx,
+        radcoeff_t *dGnl_dy,
+        radcoeff_t *dGnl_dz);
+
+    template<class Archive>
+    void serialize(Archive &arch, const unsigned int version) {
+    	arch & boost::serialization::base_object<RadialBasis>(*this);
+    	arch & _sigma;
+        arch & _rmin & _rmax;
+        arch & _smin & _smax;
+        arch & _ldamp;
+    	arch & _centres;
+    	arch & _sigmas;
+        arch & _alphas;
+    }
+
+  protected:
+    double _sigma;
+    double _rmin, _rmax;
+    double _smin, _smax;
+    double _wscale;
+    double _wcentre;
+    double _ldamp;
+    std::vector<double> _centres;
+    std::vector<double> _sigmas;
+    std::vector<double> _alphas;
 };
 
 class RadialBasisGaussian : public RadialBasis
@@ -177,6 +217,7 @@ inline RadialBasis *RadialBasisFactory::create(const std::string &key) {
 
 BOOST_CLASS_EXPORT_KEY(soap::RadialBasis);
 BOOST_CLASS_EXPORT_KEY(soap::RadialBasisDiscrete);
+BOOST_CLASS_EXPORT_KEY(soap::RadialBasisGylm);
 BOOST_CLASS_EXPORT_KEY(soap::RadialBasisGaussian);
 
 #endif

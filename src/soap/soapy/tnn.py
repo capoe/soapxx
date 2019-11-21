@@ -9,6 +9,8 @@ except ImportError:
     torch = Mock()
     torch.nn = Mock()
     torch.nn.Module = Mock
+    Mock.double = (lambda self: self)
+    Mock.parameters = (lambda self: [])
 
 def as_tuple(parents):
     return (p.x for p in parents)
@@ -18,6 +20,7 @@ def as_list(parents):
 
 def check_torch():
     if torch.nn.Module is Mock:
+        log << log.mr << "WARNING torch not found" << log.endl
         raise ImportError("torch not found")
 
 class Identity(torch.nn.Module):
@@ -223,6 +226,8 @@ class ModuleGraph(ModuleNode):
         for tag, x in feed.iteritems():
             if tag in self.node_map:
                 self.node_map[tag].feed(x)
+            else:
+                log << "WARNING '%s' not found" % tag << log.endl
         for sub in self.feed_list: sub.feed(feed=feed)
     def forward(self, feed={}, endpoint=None, lazy_set=set(), log=None, verbose=False):
         if len(feed) > 0: self.feed(feed=feed)

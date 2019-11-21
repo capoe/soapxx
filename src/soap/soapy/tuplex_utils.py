@@ -250,12 +250,13 @@ def evaluate_tuplex_lig_poc(data):
             XB.append(xb)
     return [XA, XB]
 
-def build_tuplex_graph(args, basis_x, basis_f):
+def build_tuplex_graph(args=None, basis_x=None, basis_f=None):
+    assert basis_x is not None
     g = nn.PyGraph()
     nT = g.addNode("flexinput", props={"tag": "T"}) # types
     nR = g.addNode("flexinput", props={"tag": "R"}) # coords
     nX = g.addNode("tuplex", parents=[nT,nR], props={
-        "tag": "X", "basis": basis_x, "n_procs": args.n_procs})
+        "tag": "X", "basis": basis_x, "n_procs": 1})
     g.printInfo()
     return g
 

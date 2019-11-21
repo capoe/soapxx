@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
+#include <sstream>
 
 #include "soap/dmap.hpp"
 #include "soap/linalg/numpy.hpp"
@@ -698,6 +699,21 @@ void DMapMatrix::load(std::string archfile) {
 	return;
 }
 
+std::string DMapMatrix::dumps() {
+    std::stringstream ss;
+    boost::archive::binary_oarchive arch(ss);
+    arch << (*this);
+    return ss.str();
+}
+
+void DMapMatrix::loads(std::string pstr) {
+    std::stringstream ss;
+    ss << pstr;
+    boost::archive::binary_iarchive arch(ss);
+    arch >> (*this);
+    return;
+}
+
 void DMapMatrix::registerPython() {
     using namespace boost::python;
     void (DMapMatrix::*appendDMap)(DMap*)
@@ -720,6 +736,8 @@ void DMapMatrix::registerPython() {
         .def("convolve", &DMapMatrix::convolve)
         .def("dot", &DMapMatrix::dotNumpy)
         .def("dotFilter", &DMapMatrix::dotFilterNumpy)
+        .def("dumps", &DMapMatrix::dumps)
+        .def("loads", &DMapMatrix::loads)
         .def("load", &DMapMatrix::load)
         .def("save", &DMapMatrix::save);
 }

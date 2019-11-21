@@ -1,5 +1,6 @@
 install(FILES 
     __init__.py 
+    gylm.py
     geodesic.py 
     tuplex.py 
     tuplex_utils.py 

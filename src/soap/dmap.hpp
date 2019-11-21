@@ -180,6 +180,8 @@ class DMapMatrix
     void appendCoherent(Spectrum *spectrum);
     void save(std::string archfile);
     void load(std::string archfile);
+    std::string dumps();
+    void loads(std::string pstr);
     DMap *getRow(int idx) { return dmm[idx]; }
     void addView(std::string filter);
     DMapMatrix *getView(std::string filter);

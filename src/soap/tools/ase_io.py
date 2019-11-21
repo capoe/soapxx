@@ -18,7 +18,7 @@ class ConfigASE(object):
         self.positions = []
         self.symbols = []
     def __len__(self):
-        return len(self.atoms)
+        return len(self.symbols)
     def get_positions(self):
         return self.positions
     def get_chemical_symbols(self):

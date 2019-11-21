@@ -89,6 +89,7 @@ class PyNodeTupleX(nn.PyNode):
         self.dX_dR = []
         if self.n_procs == 1:
             for env in range(T_mat.shape[0]):
+                print env
                 X, dX_dR = evaluate_tuplex(T_mat[env], R_mat[env], 
                     basis=self.basis, w_grad=self.w_grad)
                 self.X_out[env] = X

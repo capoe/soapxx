@@ -7,8 +7,8 @@ import h5py
 import time
 import datetime
 import os
-import momo
-log = momo.osio
+from defaults import convert_json_to_cxx
+from momo import log
 
 def configure_default_2d(laplace_cutoff=6, typemap={}, types=[]):
     # Logging
@@ -68,7 +68,7 @@ def configure_default_2d(laplace_cutoff=6, typemap={}, types=[]):
 def configure_default(typemap={}, types=[]):
     # Logging
     soap.silence()
-    soap.soapy.wrap.PowerSpectrum.verbose = True
+    soap.soapy.wrap.PowerSpectrum.verbose = False
     # Descriptor options
     options_soap = {
         "spectrum.2d": False,
@@ -199,7 +199,7 @@ class PowerSpectrum(object):
             self.structure = converter.convert(self.config)
             self.has_structure = True
             # COMPUTE SPECTRUM
-            options_cxx = self.getCxxOptions(options)
+            options_cxx = convert_json_to_cxx(options)
             self.spectrum = soap.Spectrum(self.structure, options_cxx)
             if self.verbose: self.log << "[cc] Computing density expansion" << self.log.endl
             self.spectrum.compute()
@@ -274,21 +274,6 @@ class PowerSpectrum(object):
                 self.gsdmap = IX
             self.has_pnkl = True
         return
-    def getCxxOptions(self, options):
-        options_cxx = soap.Options()
-        for key, val in options.items():
-            if type(val) == list: continue
-            options_cxx.set(key, val)
-        # Exclusions
-        excl_targ_list = options['exclude_targets']
-        excl_cent_list = options['exclude_centers']
-        options_cxx.excludeCenters(excl_cent_list)
-        options_cxx.excludeTargets(excl_targ_list)
-        excl_targ_id_list = options['exclude_target_ids']
-        excl_cent_id_list = options['exclude_center_ids']
-        options_cxx.excludeCenterIds(excl_cent_id_list)
-        options_cxx.excludeTargetIds(excl_targ_id_list)
-        return options_cxx
     def save(self, hdf5_handle):
         g = hdf5_handle
         # Class settings

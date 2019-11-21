@@ -40,9 +40,9 @@ void RadialBasis::computeCoefficients(
 	return;
 }
 
-// ======================
+// ===================
 // RadialBasisDiscrete
-// ======================
+// ===================
 
 RadialBasisDiscrete::RadialBasisDiscrete() {
     _type = "discrete";
@@ -70,6 +70,83 @@ void RadialBasisDiscrete::computeCoefficients(
             Gnl(k,l) = gk;
     }
     return;
+}
+
+// ===============
+// RadialBasisGylm
+// ===============
+
+RadialBasisGylm::RadialBasisGylm() {
+    _type = "gylm";
+    _is_ortho = false;
+    _sigma = 0.5;
+    _rmin, _rmax = -1.;
+    _smin, _smax = -1.;
+    _wscale = 0.5;
+    _wcentre = 1.;
+    _ldamp = 4.;
+}
+
+void RadialBasisGylm::configure(Options &options) {
+    RadialBasis::configure(options);
+    _sigma = options.get<double>("radialbasis.sigma");
+    _rmin = options.get<double>("radialbasis.rmin");
+    _rmax = options.get<double>("radialbasis.rmax");
+    _smin = options.get<double>("radialbasis.smin");
+    _smax = options.get<double>("radialbasis.smax");
+    _ldamp = options.get<double>("radialbasis.ldamp");
+    _wscale = options.get<double>("radialbasis.wscale");
+    _wcentre = options.get<double>("radialbasis.wcentre");
+    double rng = _rmax - _rmin;
+    double sng = _smax - _smin;
+    double savg = 0.5*(_smax + _smin);
+    int n_fcts = int(sqrt(2.)*rng/savg + 1.);
+    double dr = rng/(n_fcts - 1);
+    double ds = sng/(n_fcts - 1);
+    _centres.clear();
+    _sigmas.clear();
+    _alphas.clear();
+    for (int i=0; i<n_fcts; ++i) {
+        _centres.push_back(_rmin + i*dr);
+        _sigmas.push_back(_smin + i*ds);
+        _alphas.push_back(1./(2.*(_smin+i*ds)*(_smin+i*ds)));
+        GLOG() << "G@ r=" << _centres[i] << "  s=" << _sigmas[i] << std::endl;
+    }
+    _N = _centres.size(); // TODO Add checks that _N is updated if necessary
+}
+
+void RadialBasisGylm::computeCoefficients(
+        vec d,
+        double r,
+        double particle_sigma,
+        radcoeff_t &Gnl,
+        radcoeff_t *dGnl_dx,
+        radcoeff_t *dGnl_dy,
+        radcoeff_t *dGnl_dz) {
+    int lmax = Gnl.size2() - 1;
+    std::vector<double> gn(_centres.size(), 0.);
+    std::vector<double> hl(lmax+1, 0.);
+    double w = 1.;
+    if (r < RadialBasis::RADZERO) {
+        w = _wcentre;
+    } else {
+        double t = exp(-r*r/(_wscale*_wscale));
+        w = (1.-t)*pow(_wscale/r, 2) + t*(_wcentre-1.);
+    }
+    for (int i=0; i<_centres.size(); ++i) {
+        gn[i] = w*exp(-_alphas[i]*std::pow(_centres[i]-r, 2));
+    }
+    for (int l=0; l<lmax+1; ++l) {
+        hl[l] = exp(-
+            sqrt(2*l)*_ldamp*_sigma /
+            (sqrt(4.*M_PI)*r + RadialBasis::RADZERO)
+        );
+    }
+    for (int i=0; i<_centres.size(); ++i) {
+        for (int l=0; l<lmax+1; ++l) {
+            Gnl(i,l) = gn[i]*hl[l];
+        }
+    }
 }
 
 // ======================
@@ -106,38 +183,28 @@ void RadialBasisGaussian::configure(Options &options) {
 		}
     }
     else if (_mode == "adaptive") {
-        //double delta = 0.5;
         int L = options.get<int>("angularbasis.L");
         double r = 0.;
         double sigma = 0.;
         double sigma_0 = _sigma;
         double sigma_stride_factor = 0.5;
-//        while (r < _Rc) {
-//            sigma = sqrt(4./(2*L+1))*(r+delta);
-//            basis_fct_t *new_fct = new basis_fct_t(r, sigma);
-//			_basis.push_back(new_fct);
-//			r = r + sigma;
-//        }
         for (int i = 0; i < _N; ++i) {
-        	//sigma = sqrt(4./(2*L+1))*(r+delta);
         	sigma = sqrt(4./(2*L+1)*r*r + sigma_0*sigma_0);
-        	//std::cout << r << " " << sigma << std::endl;
         	r = r + sigma_stride_factor*sigma;
         }
-        double scale = 1.; //_Rc/(r-sigma);
         r = 0;
         for (int i = 0; i < _N; ++i) {
         	sigma = sqrt(4./(2*L+1)*r*r + sigma_0*sigma_0);
-        	basis_fct_t *new_fct = new basis_fct_t(scale*r, sigma);
+        	basis_fct_t *new_fct = new basis_fct_t(r, sigma);
 			_basis.push_back(new_fct);
-			//std::cout << r << " " << sigma << std::endl;
 			r = r+sigma_stride_factor*sigma;
         }
         _Rc = r - sigma_stride_factor*sigma;
         options.set("radialcutoff.Rc", _Rc);
         options.set("radialcutoff.Rc_heaviside", _Rc+1.5*sigma);
-        GLOG() << "Adjusted radial cutoff to " << _Rc
-        	<< " based on sigma_0 = " << sigma_0 << ", L = " << L << ", stride = " << sigma_stride_factor << std::endl;
+        GLOG() << "Adjusted radial cutoff to " << _Rc << "/" << (_Rc+1.5*sigma)
+        	<< " based on sigma_0 = " << sigma_0 << ", L = " << L 
+            << ", stride = " << sigma_stride_factor << std::endl;
     }
     else if (_mode == "incremental") {
         throw std::runtime_error("Not implemented.");
@@ -145,6 +212,7 @@ void RadialBasisGaussian::configure(Options &options) {
     else {
     	throw std::runtime_error("Not implemented.");
     }
+
     // SUMMARIZE
     GLOG() << "Created " << _N << " radial Gaussians at:" << std::endl;
     for (basis_it_t bit = _basis.begin(); bit != _basis.end(); ++bit) {
@@ -178,7 +246,7 @@ void RadialBasisGaussian::configure(Options &options) {
 			_Sij(i,j) = s;
     	}
     }
-    // REPORT
+
 	GLOG() << "Radial basis overlap matrix" << std::endl;
 	for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
 		for (jt = _basis.begin(), j = 0; jt != _basis.end(); ++jt, ++j) {
@@ -190,7 +258,6 @@ void RadialBasisGaussian::configure(Options &options) {
     // ORTHONORMALIZATION VIA CHOLESKY DECOMPOSITION
     _Uij = _Sij;
     soap::linalg::linalg_cholesky_decompose(_Uij);
-    // REPORT
     GLOG() << "Radial basis Cholesky decomposition" << std::endl;
 	for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
 		for (jt = _basis.begin(), j = 0; jt != _basis.end(); ++jt, ++j) {
@@ -205,7 +272,6 @@ void RadialBasisGaussian::configure(Options &options) {
 			 _Uij(i,j) = 0.0;
     _Tij = _Uij;
     soap::linalg::linalg_invert(_Uij, _Tij);
-    // REPORT
     GLOG() << "Radial basis transformation matrix" << std::endl;
 	for (it = _basis.begin(), i = 0; it != _basis.end(); ++it, ++i) {
 		for (jt = _basis.begin(), j = 0; jt != _basis.end(); ++jt, ++j) {
@@ -214,7 +280,6 @@ void RadialBasisGaussian::configure(Options &options) {
 		GLOG() << std::endl;
 	}
 }
-
 
 // For each l: integral S r^2 dr i_l(2*ai*ri*r) exp(-beta_ik*(r-rho_ik)^2)
 void compute_integrals_il_expik_r2_dr(
@@ -310,7 +375,6 @@ void compute_integrals_il_expik_r2_dr(
             }
         }
     }
-
     return;
 }
 
@@ -330,10 +394,10 @@ void RadialBasisGaussian::computeCoefficients(
     }
 
 	// Delta-type expansion =>
-	// Second (l) dimension of <save_here> and <particle_sigma> ignored here
 	if (particle_sigma < RadialBasis::RADZERO) {
 	    if (gradients) {
-            throw soap::base::NotImplemented("<RadialBasisGaussian::computeCoefficients> Gradients when sigma=0.");
+            throw soap::base::NotImplemented(
+                "<RadialBasisGaussian::computeCoefficients> Gradients for sigma=0.");
         }
 		basis_it_t it;
 		int n = 0;
@@ -349,7 +413,7 @@ void RadialBasisGaussian::computeCoefficients(
 		// Particle properties
 		double ai = 1./(2*particle_sigma*particle_sigma);
 		double ri = r;
-		SphericalGaussian gi_sph(vec(0,0,0), particle_sigma); // <- position should not matter, as only normalization used here
+		SphericalGaussian gi_sph(vec(0,0,0), particle_sigma); // <- only normalization used here
 		double norm_g_dV_sph_i = gi_sph._norm_g_dV;
 
 		int k = 0;
@@ -409,12 +473,13 @@ void RadialBasisGaussian::computeCoefficients(
 			}
 		}
 
-//		for (int k = 0; k < (*dGnl_dx).size1(); ++k) {
-//		    for (int l = 0; l < (*dGnl_dx).size2(); ++l) {
-//		        std::cout << boost::format("%1$+1.7f %2$d %3$d %4$+1.7e %5$+1.7e %6$+1.7e %7$+1.7e")
-//		            % r % k % l % Gnl(k,l) % (*dGnl_dx)(k,l) % (*dGnl_dy)(k,l) % (*dGnl_dz)(k,l) << std::endl;
-//		    }
-//		}
+		// >>> for (int k = 0; k < (*dGnl_dx).size1(); ++k) {
+		// >>>     for (int l = 0; l < (*dGnl_dx).size2(); ++l) {
+		// >>>         std::cout << boost::format("%1$+1.7f %2$d %3$d %4$+1.7e %5$+1.7e %6$+1.7e %7$+1.7e")
+		// >>>             % r % k % l % Gnl(k,l) % (*dGnl_dx)(k,l) 
+        // >>>             % (*dGnl_dy)(k,l) % (*dGnl_dz)(k,l) << std::endl;
+		// >>>     }
+		// >>> }
 
 		Gnl = ub::prod(_Tij, Gnl);
 		if (gradients) {
@@ -426,12 +491,13 @@ void RadialBasisGaussian::computeCoefficients(
     return;
 }
 
-// ======================
+// ==================
 // RadialBasisFactory
-// ======================
+// ==================
 
 void RadialBasisFactory::registerAll(void) {
 	RadialBasisOutlet().Register<RadialBasisGaussian>("gaussian");
+	RadialBasisOutlet().Register<RadialBasisGylm>("gylm");
 	RadialBasisOutlet().Register<RadialBasisLegendre>("legendre");
 	RadialBasisOutlet().Register<RadialBasisDiscrete>("discrete");
 }
@@ -439,6 +505,7 @@ void RadialBasisFactory::registerAll(void) {
 }
 
 BOOST_CLASS_EXPORT_IMPLEMENT(soap::RadialBasisGaussian);
+BOOST_CLASS_EXPORT_IMPLEMENT(soap::RadialBasisGylm);
 BOOST_CLASS_EXPORT_IMPLEMENT(soap::RadialBasisDiscrete);
 
 
