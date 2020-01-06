@@ -10,6 +10,14 @@ import os
 from defaults import convert_json_to_cxx
 from momo import log
 
+def configure(types=[], silent=True, verbose=False):
+    if silent: soap.silence()
+    if verbose: soap.soapy.wrap.PowerSpectrum.verbose = False
+    soap.encoder.clear()
+    if len(types) > 0:
+        for c in types: soap.encoder.add(c)
+    return
+
 def configure_default_2d(laplace_cutoff=6, typemap={}, types=[]):
     # Logging
     soap.silence()
@@ -156,15 +164,17 @@ class PowerSpectrum(object):
     struct_converter = StructureConverter()
     verbose = False
     log = log
-    def __init__(self, config=None, options=None, label="?", converter=None):
+    def __init__(self, config=None, config_target=None, options=None, label="?", converter=None):
         if type(config) != type(None):
             if self.verbose: self.log << self.log.mg << "Initialising power spectrum '%s'" % label << self.log.endl
         self.label = label
         self.config = config
+        self.config_target = config_target
         self.options = options
         # Cxx structure and spectrum
         self.has_structure = False
         self.structure = None
+        self.structure_target = None
         self.has_spectrum = False
         self.spectrum = None
         self.has_spectrum_global = False
@@ -183,26 +193,24 @@ class PowerSpectrum(object):
             if options is None: raise ValueError("No options provided")
             if converter is None:
                 converter = PowerSpectrum.struct_converter
-            self.compute(config=config, options=options, converter=converter)
+            self.compute(config=config, config_target=config_target, options=options, converter=converter)
         return
-    def compute(self, config, options, converter=None):
+    def compute(self, config, options, config_target=None, converter=None):
         if self.has_cnlm: pass
         else:
             # CONVERT ASE ATOMS TO SOAPXX TOPOLOGY
-            #self.config, self.structure, top, frag_bond_mat, atom_bond_mat, frag_labels, atom_labels = \
-            #    soap.tools.structure_from_ase(
-            #        config, 
-            #        do_partition=False, 
-            #        add_fragment_com=False, 
-            #        log=None)
             if converter is None: converter = PowerSpectrum.converter
             self.structure = converter.convert(self.config)
+            if config_target is not None: self.structure_target = converter.convert(self.config_target)
             self.has_structure = True
             # COMPUTE SPECTRUM
             options_cxx = convert_json_to_cxx(options)
             self.spectrum = soap.Spectrum(self.structure, options_cxx)
             if self.verbose: self.log << "[cc] Computing density expansion" << self.log.endl
-            self.spectrum.compute()
+            if self.structure_target is not None: 
+                self.spectrum.compute(self.structure, self.structure_target)
+            else:
+                self.spectrum.compute()
             self.has_spectrum = True
             # EXTRACT CNLM ATOMIC
             if PowerSpectrum.settings["store_cmap"]:
@@ -369,6 +377,8 @@ class PowerSpectrum(object):
             if self.verbose: self.log << "[h5] Loading descriptor matrix" << self.log.endl
             self.sd = g["sd"].value
         return self
+    def exportSparse(self, coherent=False):
+        return self.exportDMapMatrix(coherent=coherent)
     def exportDMapMatrix(self, coherent=False):
         dmap_mat = soap.DMapMatrix()
         if coherent: dmap_mat.appendCoherent(self.spectrum)

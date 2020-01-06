@@ -15,4 +15,5 @@ def mkl_set_num_threads(cores):
 
 # Objects emulating CXX entities
 from soapy.dmap import DMapMatrixSuperSet, SuperKernel
+from soapy import Args
 

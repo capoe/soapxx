@@ -84,6 +84,8 @@ struct DMap
     pid_gradmap_t::iterator beginGradients() { return pid_gradmap.begin(); }
     pid_gradmap_t::iterator endGradients() { return pid_gradmap.end(); }
     int size() { return dmap.size(); }
+    int getSize1() { return size1; }
+    int getSize2() { return size2; }
     bpy::object val(int chidx, std::string np_dtype);
     dtype_t val() { return (*(dmap[0].second))(0); }
     void sort();
@@ -113,12 +115,16 @@ struct DMap
     dmap_t dmap;
     pid_gradmap_t pid_gradmap;
     std::string filter;
+    int size1;
+    int size2;
     static void registerPython();
     template<class Archive>
     void serialize(Archive &arch, const unsigned int version) {
         arch & dmap;
         arch & pid_gradmap;
         arch & filter;
+        arch & size1;
+        arch & size2;
     }
 };
 

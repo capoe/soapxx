@@ -55,6 +55,7 @@ class Spectrum
 	void compute2D();
     void compute(Segment *centers);
 	void compute(Segment *centers, Segment *targets);
+    void compute(Structure *centers, Structure *targets);
 	void compute(Structure::particle_array_t &sources, Structure::particle_array_t &targets);
 	void compute2D(Structure::particle_array_t &sources, Structure::particle_array_t &targets, Structure::laplace_t &L);
 	AtomicSpectrum *computeAtomic(Particle *center);

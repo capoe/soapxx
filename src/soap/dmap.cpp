@@ -12,11 +12,11 @@
 
 namespace soap {
 
-DMap::DMap() {
+DMap::DMap() : size1(-1), size2(-1) {
     ;
 }
 
-DMap::DMap(std::string filter_type) : filter(filter_type) {
+DMap::DMap(std::string filter_type) : filter(filter_type), size1(-1), size2(-1) {
     ;
 }
 
@@ -232,6 +232,7 @@ void DMap::adapt(AtomicSpectrum *atomic) {
 }
 
 void DMap::adapt(AtomicSpectrum::map_xnkl_t &map_xnkl) {
+    size1 = 0;
     for (auto it=map_xnkl.begin(); it!=map_xnkl.end(); ++it) {
         TypeEncoder::code_t e1 = ENCODER.encode(it->first.first);
         TypeEncoder::code_t e2 = ENCODER.encode(it->first.second);
@@ -249,6 +250,8 @@ void DMap::adapt(AtomicSpectrum::map_xnkl_t &map_xnkl) {
         TypeEncoder::code_t e = ENCODER.encode(it->first.first, it->first.second);
         channel_t p(e, v);
         dmap.push_back(p);
+        size1 += 1;
+        if (size2 < 0) size2 = length;
     }
     this->sort();
 }
@@ -282,11 +285,13 @@ void DMap::adaptPidGradients(
 
 void DMap::convolve(int N, int L) {
     dmap_t out;
+    size1 = 0;
     for (auto it=begin(); it!=end(); ++it) {
         for (auto jt=it; jt!=end(); ++jt) {
             vec_t &vi = *(it->second);
             vec_t &vj = *(jt->second);
-            vec_t *vv = new vec_t(N*N*(L+1), 0.0);
+            int length = N*N*(L+1);
+            vec_t *vv = new vec_t(length, 0.0);
             assert(vi.size() == N*(L+1)*(L+1) && "Vector dimension inconsistent with input.");
             for (int n=0; n<N; ++n) {
                 for (int k=0; k<N; ++k) {
@@ -305,6 +310,8 @@ void DMap::convolve(int N, int L) {
             TypeEncoder::code_t e = ENCODER.encode(it->first, jt->first);
             channel_t p(e,vv);
             out.push_back(p);
+            size1 += 1;
+            size2 = length;
         }
     }
     for (auto it=dmap.begin(); it!=dmap.end(); ++it) {
@@ -319,6 +326,7 @@ void DMap::convolve(int N, int L) {
 
 void DMap::adaptCoherent(AtomicSpectrum *atomic) {
     auto spec = atomic->getQnlmMap();
+    size1 = 0;
     for (auto it=spec.begin(); it!=spec.end(); ++it) {
         auto coeff = it->second->getCoefficients();
         int N = coeff.size1();
@@ -346,6 +354,8 @@ void DMap::adaptCoherent(AtomicSpectrum *atomic) {
         TypeEncoder::code_t e = ENCODER.encode(it->first);
         channel_t p(e, v);
         dmap.push_back(p);
+        size1 += 1;
+        size2 = length;
     }
     this->sort();
     filter = atomic->getCenterType();
@@ -388,6 +398,8 @@ void DMap::registerPython() {
 
     class_<DMap, DMap*>("DMap", init<>())
         .add_property("filter", &DMap::getFilter)
+        .add_property("size1", &DMap::getSize1)
+        .add_property("size2", &DMap::getSize2)
 	    .add_property("gradients", range<return_value_policy<reference_existing_object> >(
             &DMap::beginGradients, &DMap::endGradients))
         .def("listChannels", &DMap::listChannels)

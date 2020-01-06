@@ -67,6 +67,10 @@ void Spectrum::compute(Segment *center, Segment *target) {
     this->compute(center->particles(), target->particles());
 }
 
+void Spectrum::compute(Structure *centers, Structure *targets) {
+    this->compute(centers->particles(), targets->particles());
+}
+
 void Spectrum::compute(
         Structure::particle_array_t &centers, 
         Structure::particle_array_t &targets) {
@@ -427,6 +431,8 @@ void Spectrum::registerPython() {
     void (Spectrum::*computeSegPair)(Segment*, Segment*) = &Spectrum::compute;
     void (Spectrum::*computeCentersTargets)(Structure::particle_array_t&, 
         Structure::particle_array_t&) = &Spectrum::compute;
+    void (Spectrum::*computeStructCentersTargets)(Structure*, Structure*) 
+        = &Spectrum::compute;
 
     class_<Spectrum>("Spectrum", init<Structure &, Options &>())
     	.def(init<Structure &, Options &, Basis &>())
@@ -440,6 +446,7 @@ void Spectrum::registerPython() {
         .def("compute", computeSeg)
 	    .def("compute", computeSegPair)
 	    .def("compute", computeCentersTargets)
+        .def("compute", computeStructCentersTargets)
 		.def("computePower", &Spectrum::computePower)
 		.def("computePowerGradients", &Spectrum::computePowerGradients)
         .def("deleteGlobal", &Spectrum::deleteGlobal)
