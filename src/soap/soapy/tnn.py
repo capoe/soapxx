@@ -56,6 +56,21 @@ class Add(torch.nn.Module):
         assert len(args) == 2
         return self.coeffs[0]*args[0]+self.coeffs[1]*args[1]
 
+class Normalize(torch.nn.Module):
+    def __init__(self):
+        super(Normalize, self).__init__()
+    def forward(self, *args, **kwargs):
+        return torch.nn.functional.normalize(*args, **kwargs)
+
+class InnerProductMMT(torch.nn.Module):
+    def __init__(self, a=1., b=0.):
+        super(InnerProductMMT, self).__init__()
+        self.a = a
+        self.b = b
+    def forward(self, *args, **kwargs):
+        k = self.a*torch.mm(args[0], args[0].T)+self.b
+        return k
+
 class MovingTarget(torch.nn.Module):
     def __init__(self, obj_1, obj_2, prob_1):
         super(MovingTarget, self).__init__()
@@ -71,8 +86,8 @@ class MovingTarget(torch.nn.Module):
             self.current = self.obj_2
             return self.obj_2(*args, **kwargs)
     def __repr__(self):
-        return str(self.obj_1)+" : "+str(self.obj_2)+" = %1.1f : %1.1f" % (
-            self.prob_1, 1.-self.prob_1)
+        return str(self.obj_1.__name__)+" : "+str(self.obj_2.__name__)\
+            +" = %1.1f : %1.1f" % (self.prob_1, 1.-self.prob_1)
 
 identity = Identity()
 concatenate = Concatenate()
@@ -85,10 +100,12 @@ class ModuleNode(object):
             module=identity, 
             parents=[],
             format_args=as_tuple,
+            shares_module=False,
             kwargs={}):
         self.idx = idx
         self.tag = tag
         self.module = module.double()
+        self.shares_module = shares_module
         self.parents = parents
         self.x = None
         self.deps = collections.OrderedDict()
@@ -117,6 +134,8 @@ class ModuleNode(object):
     def zeroParameters(self):
         for p in self.parameters():
             torch.nn.init.constant_(p, 0.0)
+    def purge(self):
+        self.x = None
     def feed(self, x):
         self.x = x
     def forward(self, log):
@@ -141,13 +160,14 @@ class ModuleNode(object):
                 torch.std(p), torch.max(p)) << log.endl
 
 class ModuleGraph(ModuleNode):
-    def __init__(self, idx=-1, tag="", module=identity, parents=[], 
+    def __init__(self, idx=-1, tag="", module=identity, parents=[], shares_module=False,
             format_args=as_tuple, kwargs={}):
         check_torch()
         ModuleNode.__init__(self, 
             idx=idx, 
             tag=tag, 
             module=module, 
+            shares_module=shares_module,
             parents=parents, 
             format_args=format_args,
             kwargs=kwargs)
@@ -159,12 +179,13 @@ class ModuleGraph(ModuleNode):
     def __getitem__(self, node_tag):
         retag = "%s.%s" % (self.tag, node_tag) if not "." in node_tag else node_tag
         return self.node_map[retag]
-    def create(self, tag, parents=[], module=identity, 
+    def create(self, tag, parents=[], module=identity, shares_module=False,
             format_args=as_tuple, kwargs={}):
         idx = len(self.nodes)
         if tag == "": tag = "%d" % idx
         new_node = ModuleNode(idx=idx, tag=self.tag+"."+tag, 
-            parents=parents, module=module, format_args=format_args, kwargs=kwargs)
+            parents=parents, module=module, shares_module=shares_module, 
+            format_args=format_args, kwargs=kwargs)
         new_node.setDependencies()
         self.register(new_node)
         return new_node
@@ -182,8 +203,9 @@ class ModuleGraph(ModuleNode):
             node.setDependencies()
     def parameters(self):
         for n in self.nodes:
-            for p in n.parameters():
-                yield p
+            if not hasattr(n, "shares_module") or not n.shares_module:
+                for p in n.parameters():
+                    yield p
     def randomizeParameters(self, cmin=-1.0, cmax=1.0):
         for n in self.nodes: n.randomizeParameters(cmin, cmax)
     def importParameters(self, other, assignment={}):
@@ -194,6 +216,7 @@ class ModuleGraph(ModuleNode):
         else: nodes_other = other.nodes
         for node in nodes_other:
             tag_this = assignment[node.tag] if len(assignment) else node.tag
+            if not tag_this in self.node_map: continue
             node_this = self.node_map[tag_this]
             params_this = [ p for p in node_this.parameters() ]
             params_other = [ p for p in node.parameters() ]
@@ -242,6 +265,8 @@ class ModuleGraph(ModuleNode):
         if verbose: log << "]" << log.endl
         self.x = path[-1].x
         return self.x
+    def purge(self):
+        for node in self.nodes: node.purge()
     def save(self, archfile):
         with open(archfile, 'w') as f:
             f.write(pickle.dumps(self))
