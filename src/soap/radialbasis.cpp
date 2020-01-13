@@ -97,22 +97,46 @@ void RadialBasisGylm::configure(Options &options) {
     _ldamp = options.get<double>("radialbasis.ldamp");
     _wscale = options.get<double>("radialbasis.wscale");
     _wcentre = options.get<double>("radialbasis.wcentre");
-    double rng = _rmax - _rmin;
-    double sng = _smax - _smin;
-    double savg = 0.5*(_smax + _smin);
-    int n_fcts = int(sqrt(2.)*rng/savg + 1.);
-    double dr = rng/(n_fcts - 1);
-    double ds = sng/(n_fcts - 1);
-    _centres.clear();
-    _sigmas.clear();
-    _alphas.clear();
-    for (int i=0; i<n_fcts; ++i) {
-        _centres.push_back(_rmin + i*dr);
-        _sigmas.push_back(_smin + i*ds);
-        _alphas.push_back(1./(2.*(_smin+i*ds)*(_smin+i*ds)));
-        GLOG() << "G@ r=" << _centres[i] << "  s=" << _sigmas[i] << std::endl;
+    std::string mode = options.get<std::string>("radialbasis.mode");
+    if (mode == "equispaced") {
+        double rng = _rmax - _rmin;
+        double sng = _smax - _smin;
+        double savg = 0.5*(_smax + _smin);
+        int n_fcts = int(sqrt(2.)*rng/savg + 1.);
+        double dr = rng/(n_fcts - 1);
+        double ds = sng/(n_fcts - 1);
+        _centres.clear();
+        _sigmas.clear();
+        _alphas.clear();
+        for (int i=0; i<n_fcts; ++i) {
+            _centres.push_back(_rmin + i*dr);
+            _sigmas.push_back(_smin + i*ds);
+            _alphas.push_back(1./(2.*(_smin+i*ds)*(_smin+i*ds)));
+            GLOG() << "G@ r=" << _centres[i] << "  s=" << _sigmas[i] << std::endl;
+        }
+        _N = _centres.size(); // TODO Add checks that _N is updated if necessary
+    } else if (mode == "adaptive") {
+        _N = options.get<int>("radialbasis.N");
+        _sigmas.clear();
+        _alphas.clear();
+        _centres.clear();
+        double ssum = -0.5*(_smin + _smax);
+        for (int i=0; i<_N; ++i) {
+            double si = _smin + double(i)/(_N-1)*(_smax - _smin);
+            _sigmas.push_back(si);
+            _alphas.push_back(1./(2.*si*si));
+            ssum += si;
+        }
+        double f = (_rmax - _rmin)/ssum;
+        double r = _rmin;
+        for (int i=0; i<_N; ++i) {
+            _centres.push_back(r);
+            GLOG() << "G@ r=" << _centres[i] << "  s=" << _sigmas[i] << std::endl;
+            if (i < _N-1) r += 0.5*f*(_sigmas[i] + _sigmas[i+1]);
+        }
+    } else {
+        throw soap::base::OutOfRange("Mode '"+mode+"' not recognized.");
     }
-    _N = _centres.size(); // TODO Add checks that _N is updated if necessary
 }
 
 void RadialBasisGylm::computeCoefficients(

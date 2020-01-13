@@ -27,10 +27,11 @@ def default_options_gylm(as_cxx=True):
         "radialbasis.rmax": 4.5,
         "radialbasis.smin": 0.5,
         "radialbasis.smax": 1.0,
+        "radialbasis.N": 9,
+        "radialbasis.mode": "equispaced",
         "radialbasis.wcentre": 1.0,
         "radialbasis.wscale": 0.5,
         "radialbasis.ldamp": 4.,
-        "radialbasis.sigma": 0.5,
         "radialcutoff.Rc": 7.5,
         "radialcutoff.Rc_width": 0.5,
         "radialcutoff.type": "heaviside",
@@ -45,28 +46,32 @@ def default_options_gylm(as_cxx=True):
     if as_cxx: options = convert_json_to_cxx(options)
     return options
 
-def default_options():
-    options = soap.Options()
-    options.set("spectrum.global", False)
-    options.set("spectrum.gradients", False)
-    options.set("spectrum.2l1_norm", False)
-    options.set("radialbasis.type", "gaussian")
-    options.set("radialbasis.mode", "adaptive")
-    options.set("radialbasis.N", 9)
-    options.set("radialbasis.sigma", 0.5)
-    options.set("radialbasis.integration_steps", 15)
-    options.set("radialcutoff.Rc", 3.5)
-    options.set("radialcutoff.Rc_width", 0.5)
-    options.set("radialcutoff.type", "heaviside")
-    options.set("radialcutoff.center_weight", 1.0)
-    options.set("angularbasis.type", "spherical-harmonic")
-    options.set("angularbasis.L", 6)
-    options.set("basekernel.type", "dot")
-    options.set("basekernel.dot.exponent", 3.0)
-    options.set("basekernel.dot.coefficient", 1.0)
-    options.set("topkernel.type", "rematch")
-    options.set("topkernel.rematch.gamma", 0.01)
-    options.excludeCenters(["H"])
-    options.excludeTargets([])
+def default_options(as_cxx=True):
+    options = {
+        "spectrum.global": False,
+        "spectrum.gradients": False,
+        "spectrum.2l1_norm": False,
+        "radialbasis.type": "gaussian",
+        "radialbasis.mode": "adaptive",
+        "radialbasis.N": 9,
+        "radialbasis.sigma": 0.5,
+        "radialbasis.integration_steps": 15,
+        "radialcutoff.Rc": 3.5,
+        "radialcutoff.Rc_width": 0.5,
+        "radialcutoff.type": "heaviside",
+        "radialcutoff.center_weight": 1.0,
+        "angularbasis.type": "spherical-harmonic",
+        "angularbasis.L": 6,
+        "basekernel.type": "dot",
+        "basekernel.dot.exponent": 3.0,
+        "basekernel.dot.coefficient": 1.0,
+        "topkernel.type": "rematch",
+        "topkernel.rematch.gamma": 0.01,
+        "exclude_centers": ["H"],
+        "exclude_targets": [],
+        "exclude_target_ids": [],
+        "exclude_center_ids": []
+    }
+    if as_cxx: options = convert_json_to_cxx(options)
     return options
 

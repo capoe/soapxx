@@ -155,7 +155,7 @@ class PowerSpectrum(object):
         'store_cxx_serial' : False,
         'store_cmap' : False,
         'store_gcmap' : False,
-        'store_sd' : True,
+        'store_sd' : False,
         'store_gsd' : False,
         'store_sdmap' : False,
         'store_gsdmap' : False,
@@ -245,6 +245,7 @@ class PowerSpectrum(object):
         else:
             if self.verbose: self.log << "[cc] Computing power spectrum" << self.log.endl
             self.spectrum.computePower()
+            self.has_pnkl = True
             if self.options['spectrum.gradients']:
                 if self.verbose: self.log << "[cc] ... gradients ..." << self.log.endl
                 self.spectrum.computePowerGradients()
@@ -280,7 +281,6 @@ class PowerSpectrum(object):
                 adaptor = soap.soapy.kernel.KernelAdaptorFactory['global-specific-dmap'](None)
                 IX, IR, types = adaptor.adapt(self.spectrum, return_pos_matrix=True)
                 self.gsdmap = IX
-            self.has_pnkl = True
         return
     def save(self, hdf5_handle):
         g = hdf5_handle
