@@ -742,6 +742,7 @@ void DMapMatrix::registerPython() {
         .def("append", appendDMap)
         .def("append", appendSpectrum)
         .def("appendCoherent", &DMapMatrix::appendCoherent)
+        .def("clear", &DMapMatrix::clear)
         .def("sum", &DMapMatrix::sum)
         .def("slice", &DMapMatrix::slicePython)
         .def("normalize", &DMapMatrix::normalize)
