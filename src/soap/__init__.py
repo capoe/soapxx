@@ -2,7 +2,9 @@ from _soapxx import *
 from linalg import *
 from . import soapy
 from . import tools
+from . import external
 log = soapy.momo.osio
+Config = tools.ase_io.ConfigASE
 
 # Threading options
 import ctypes

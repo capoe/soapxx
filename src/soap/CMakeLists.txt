@@ -6,6 +6,7 @@ add_subdirectory(linalg)
 add_subdirectory(linalg/permanent)
 add_subdirectory(tools)
 add_subdirectory(soapy)
+add_subdirectory(external)
 
 # COMPILE SOURCES
 get_directory_property(LINALG_LOCAL_SOURCES DIRECTORY linalg DEFINITION LOCAL_SOURCES)

@@ -2,6 +2,7 @@
 import json
 import numpy as np
 import os
+from . import ptable
 from . import partition
 from .. import _soapxx as soap
 
@@ -23,6 +24,8 @@ class ConfigASE(object):
         return self.positions
     def get_chemical_symbols(self):
         return self.symbols
+    def get_atomic_numbers(self):
+        return np.array([ ptable.lookup[s].z for s in self.get_chemical_symbols() ])
     def create(self, n_atoms, fs):
         #header = fs.readline().split()
         # Parse header: key1="str1" key2=123 key3="another value" ...
