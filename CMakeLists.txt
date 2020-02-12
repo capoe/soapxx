@@ -48,6 +48,9 @@ else()
 endif()
 set(ignoreMe $WITH_SYSTEM_BOOST) # Needed to suppress cmake warning
 
+include_directories("/home/capoe/packages/intel/mkl/include")
+set(MKL_INCLUDE_DIR "/home/capoe/packages/intel/mkl/include")
+
 set(SOAPXX_LINK_LIBRARIES ${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${GSL_LIBRARIES})
 
 # SUMMARIZE INCLUDES & LIBS
@@ -64,5 +67,7 @@ foreach(lib ${local_dirs})
 endforeach()
 
 # SUBDIRECTORIES
+add_subdirectory(pybind11)
 add_subdirectory(src/soap)
+add_subdirectory(tools)
 
