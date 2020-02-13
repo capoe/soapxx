@@ -8,6 +8,7 @@
 ```bash
 git clone https://github.com/capoe/soapxx.git
 cd soapxx
+git clone https://github.com/pybind/pybind11.git
 ./build.sh --install_boost
 source soap/SOAPRC
 ```
