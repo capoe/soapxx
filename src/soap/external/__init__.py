@@ -29,16 +29,16 @@ class SoapGtoCalculator(object):
             nmax,
             lmax,
             sigma=1.0,
-            species=None,
+            types=None,
             periodic=False,
             average=False,
             sparse=False,
             encoder=lambda s: tools.ptable.lookup[s].z,
             decoder=lambda z: tools.ptable.lookup[int(z)].name):
-        self.species = species
-        self.species_z = np.array(sorted([ encoder(s) for s in self.species ]))
-        self.species_elem = np.array([ decoder(z) for z in self.species_z ])
-        self._Nt = len(self.species_z)
+        self.types = types
+        self.types_z = np.array(sorted([ encoder(s) for s in self.types ]))
+        self.types_elem = np.array([ decoder(z) for z in self.types_z ])
+        self._Nt = len(self.types_z)
         self._eta = 1/(2*sigma**2)
         self._sigma = sigma
         self._alphas, self._betas = self.setupBasisGTO(rcut, nmax)
@@ -75,20 +75,20 @@ class SoapGtoCalculator(object):
             rcut, cutoff_padding, 
             nmax, lmax, eta, atomic_numbers=None):
         n_atoms = len(system)
-        positions, Z_sorted, n_species, atomtype_lst = self.flattenPositions(system, atomic_numbers)
+        positions, Z_sorted, n_types, atomtype_lst = self.flattenPositions(system, atomic_numbers)
         centers = np.array(centers)
         n_centers = centers.shape[0]
         centers = centers.flatten()
         alphas = alphas.flatten()
         betas = betas.flatten()
         Z_sorted_global = np.array(list(set(Z_sorted)))
-        n_species = len(Z_sorted_global)
-        c = np.zeros(int((nmax*(nmax+1))/2)*(lmax+1)*int((n_species*(n_species + 1))/2)*n_centers, dtype=np.float64)
-        shape = (n_centers, int((nmax*(nmax+1))/2)*(lmax+1)*int((n_species*(n_species+1))/2))
+        n_types = len(Z_sorted_global)
+        c = np.zeros(int((nmax*(nmax+1))/2)*(lmax+1)*int((n_types*(n_types + 1))/2)*n_centers, dtype=np.float64)
+        shape = (n_centers, int((nmax*(nmax+1))/2)*(lmax+1)*int((n_types*(n_types+1))/2))
         evaluate_soapgto(c, positions, centers, 
             alphas, betas, Z_sorted, Z_sorted_global,
             rcut, cutoff_padding, 
-            n_atoms, n_species, 
+            n_atoms, n_types, 
             nmax, lmax, n_centers, eta, True)
         c = c.reshape(shape)
         return c
@@ -108,10 +108,10 @@ class SoapGtoCalculator(object):
             z_onetype = Z[condition]
             pos_lst.append(pos_onetype)
             z_lst.append(z_onetype)
-        n_species = len(atomic_numbers_sorted)
+        n_types = len(atomic_numbers_sorted)
         positions_sorted = np.concatenate(pos_lst, axis=0)
         atomic_numbers_sorted = np.concatenate(z_lst).ravel()
-        return positions_sorted, atomic_numbers_sorted, n_species, atomic_numbers_sorted
+        return positions_sorted, atomic_numbers_sorted, n_types, atomic_numbers_sorted
     def setupBasisGTO(self, rcut, nmax):
         # These are the values for where the different basis functions should decay
         # to: evenly space between 1 angstrom and rcut.
