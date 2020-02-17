@@ -73,7 +73,8 @@ class SoapGtoCalculator(object):
     def evaluateGTO(self, system, centers, 
             alphas, betas, 
             rcut, cutoff_padding, 
-            nmax, lmax, eta, atomic_numbers=None):
+            nmax, lmax, eta, atomic_numbers=None, 
+            use_global_types=True):
         n_atoms = len(system)
         positions, Z_sorted, n_types, atomtype_lst = self.flattenPositions(system, atomic_numbers)
         centers = np.array(centers)
@@ -81,7 +82,8 @@ class SoapGtoCalculator(object):
         centers = centers.flatten()
         alphas = alphas.flatten()
         betas = betas.flatten()
-        Z_sorted_global = np.array(list(set(Z_sorted)))
+        Z_sorted_global = self.types_z if use_global_types \
+            else np.array(list(set(Z_sorted)))
         n_types = len(Z_sorted_global)
         c = np.zeros(int((nmax*(nmax+1))/2)*(lmax+1)*int((n_types*(n_types + 1))/2)*n_centers, dtype=np.float64)
         shape = (n_centers, int((nmax*(nmax+1))/2)*(lmax+1)*int((n_types*(n_types+1))/2))
