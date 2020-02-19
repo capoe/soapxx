@@ -80,6 +80,8 @@ class PeriodicTable(object):
         elem = AtomicElement(z, name, mass, covrad, elneg, valence)
         self.elements_by_z[z] = elem
         self.elements_by_name[name] = elem
+        self.elements_by_name[name.upper()] = elem
+        self.elements_by_name[name.lower()] = elem
         return
     def getPropertyDict(self, key, convert = lambda v: v):
         props = {}

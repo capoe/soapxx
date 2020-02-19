@@ -22,14 +22,14 @@ limitations under the License.
 #include <pybind11/stl.h>    
 #include "celllist.hpp"
 #include "soapgto.hpp"
+#include "kernel.hpp"
 
 namespace py = pybind11;
 using namespace std;
 
 PYBIND11_MODULE(_soapgto, m) {
-    // SOAP
-    m.def("evaluate_soapgto", &soapGTO, "SOAP with gaussian type orbital radial basis set.");
-    // CellList
+    m.def("evaluate_soapgto", &soapGTO, "SOAP with gaussian type orbital radial basis set");
+    m.def("smooth_match", &smooth_match, "Smooth best-match assignment");
     py::class_<CellList>(m, "CellList")
         .def(py::init<py::array_t<double>, double>())
         .def("get_neighbours_for_index", &CellList::getNeighboursForIndex)

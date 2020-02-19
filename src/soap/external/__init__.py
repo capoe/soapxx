@@ -47,10 +47,14 @@ class SoapGtoCalculator(object):
         self._lmax = lmax
         self.periodic = periodic
         self._average = average
+    def getDim(self):
+        return self.getChannelDim()*self.getNumberOfChannels()
     def getChannelDim(self):
         return self._nmax*(self._nmax+1)/2*(self._lmax+1)
     def getNumberOfChannels(self):
         return self._Nt*(self._Nt+1)/2
+    def getNumberofTypes(self):
+        return len(self.types_z)
     def evaluate(self, system, positions=None):
         if self.periodic:
             cell = system.get_cell()
