@@ -1,5 +1,5 @@
 /*
-Adapted from dscribe/ext/soapGTO.h:
+Adapted and extended from dscribe/ext/soapGTO.h:
 
 Copyright 2019 DScribe developers
 
@@ -16,20 +16,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>  
 #include <pybind11/stl.h>    
 #include "celllist.hpp"
 #include "soapgto.hpp"
 #include "kernel.hpp"
+#include "gylm.hpp"
+#include "ylm.hpp"
 
 namespace py = pybind11;
 using namespace std;
 
 PYBIND11_MODULE(_soapgto, m) {
+    m.def("evaluate_gylm", &evaluate_gylm, "Gnl-Ylm frequency-damped convolutions");
     m.def("evaluate_soapgto", &soapGTO, "SOAP with gaussian type orbital radial basis set");
     m.def("smooth_match", &smooth_match, "Smooth best-match assignment");
+    m.def("ylm", &_py_ylm, "Spherical harmonic series");
     py::class_<CellList>(m, "CellList")
         .def(py::init<py::array_t<double>, double>())
         .def("get_neighbours_for_index", &CellList::getNeighboursForIndex)
