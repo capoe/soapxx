@@ -12,6 +12,18 @@
 #include "celllist.hpp"
 
 constexpr double radial_epsilon = 1e-10;
+constexpr double lnorm_0 = 1.;
+constexpr double lnorm_1 = 1./sqrt(3.);
+constexpr double lnorm_2 = 1./sqrt(5.);
+constexpr double lnorm_3 = 1./sqrt(7.);
+constexpr double lnorm_4 = 1./sqrt(9.);
+constexpr double lnorm_5 = 1./sqrt(11.);
+constexpr double lnorm_6 = 1./sqrt(13.);
+constexpr double lnorm_7 = 1./sqrt(15.);
+constexpr double lnorm_8 = 1./sqrt(17);
+constexpr double lnorm_9 = 1./sqrt(19.);
+constexpr double lnorm_10 = 1./sqrt(21.);
+constexpr double lnorm_11 = 1./sqrt(23.);
 
 void evaluate_deltas(
         double xi, double yi, double zi, 
@@ -82,25 +94,64 @@ void evaluate_gnl(
     }
 }
 
-void evaluate_qitnlm(double *jw, double *jgnl, double *jylm, 
-        int part_idx, int type_index, int n_nbs, 
-        int n_types, int nmax, int lmax, 
+void evaluate_qitnlm(double *jw, double *jgnl, double *jylm, int n_nbs, 
+        int nmax, int lmax, int offset_idx, int dim_nlm, int dim_nl, int dim_lm,
         double *qitnlm) {
-    int dim_nlm = nmax*(lmax+1)*(lmax+1);
-    int off = part_idx*type_index*dim_nlm;
-    int c_itnlm = off-1;
-    for (int nlm=0; nlm<dim_nlm; ++nlm) qitnlm[++c_itnlm] = 0.;
+    // >>> # NOTE Array layout:
+    // >>> i = 0
+    // >>> for nb in nbs:
+    // >>>     for l in range(lmax+1):
+    // >>>         for m in range(-l,l+1):
+    // >>>             ylmi = ylm[i++]
+    // >>> i = 0
+    // >>> for nb in nbs:
+    // >>>     for n in range(nmax):
+    // >>>         for l in range(lmax+1):
+    // >>>             gnli = gnl[i++]
+    // >>> # The offset index takes into account source 
+    // >>> # (= centre) and nb type index
+    // >>> offset = src_idx*dim_tnlm + type_idx*dim_nlm
+    int c_itnlm = offset_idx;
+    for (int nlm=0; nlm<dim_nlm; ++nlm) qitnlm[c_itnlm++] = 0.;
     int c_gnl = 0;
-    int c_ylm = 0;
     for (int j=0; j<n_nbs; ++j) {
-        c_itnlm = off-1;
+        c_itnlm = offset_idx;
+        // Note that here c_gnl == j*dim_nl
         for (int n=0; n<nmax; ++n) {
+            int c_ylm = j*dim_lm;
             for (int l=0; l<lmax+1; ++l) {
                 for (int m=-l; m <l+1; ++m) {
-                    qitnlm[++c_itnlm] += jw[j]*jgnl[c_gnl]*jylm[c_ylm];
+                    qitnlm[c_itnlm++] += jw[j]*jgnl[c_gnl]*jylm[c_ylm];
                     ++c_ylm;
                 }
                 ++c_gnl;
+            }
+        }
+    }
+}
+
+void evaluate_xtunkl(double *xitunkl, double *qitnlm, vector<double> &lnorm,
+        int n_src, int n_types, int nmax, int lmax, 
+        int dim_tnlm, int dim_nlm, int dim_lm) {
+    int itunkl = 0;
+    for (int i=0; i<n_src; ++i) {
+        for (int t=0; t<n_types; ++t) {
+            int tnlm_off = i*dim_tnlm + t*dim_nlm;
+            for (int u=t; u<n_types; ++u) {
+                int uklm_off = i*dim_tnlm + u*dim_nlm;
+                for (int n=0; n<nmax; ++n) {
+                    for (int k=0; k<nmax; ++k) {
+                        int tnlm = tnlm_off + n*dim_lm;
+                        int uklm = uklm_off + k*dim_lm;
+                        for (int l=0; l<lmax+1; ++l) {
+                            double x = 0.;
+                            for (int m=-l; m<l+1; ++m) {
+                                x += qitnlm[tnlm++]*qitnlm[uklm++];
+                            }
+                            xitunkl[itunkl++] = lnorm[l]*x;
+                        }
+                    }
+                }
             }
         }
     }
@@ -124,20 +175,29 @@ void evaluate_gylm(
         bool verbose) {
 
     // Get array pointers
+    double *xitunkl = (double*) coeffs.request().ptr;
     double *gnl_centres = (double*) gnl_centres_py.request().ptr;
     double *gnl_alphas = (double*) gnl_alphas_py.request().ptr;
     double *spos = (double*) src_pos.request().ptr;
     double *tpos = (double*) tgt_pos.request().ptr;
     int *ttypes = (int*) tgt_types.request().ptr;
-    std::cout << "# targets, sources =" << n_tgt << "," << n_src << std::endl;
-    for (int i=0; i<n_src; ++i) {
-        std::cout << "src @ " << spos[3*i] << " " << spos[3*i+1] << " " << spos[3*i+2] << std::endl;
-    }
-    for (int i=0; i<n_tgt; ++i) {
-        std::cout << ttypes[i] << " @ " << tpos[3*i] << " " << tpos[3*i+1] << " " << tpos[3*i+2] << std::endl;
-    }
-    for (int i=0; i<nmax; ++i) {
-        std::cout << "G of width " << gnl_alphas[i] << " @ " << gnl_centres[i] << std::endl;
+
+    // System info
+    if (verbose) {
+        std::cout << "# targets, sources =" << n_tgt 
+            << "," << n_src << std::endl;
+        for (int i=0; i<n_src; ++i) {
+            std::cout << "src @ " << spos[3*i] << " " 
+                << spos[3*i+1] << " " << spos[3*i+2] << std::endl;
+        }
+        for (int i=0; i<n_tgt; ++i) {
+            std::cout << ttypes[i] << " @ " << tpos[3*i] 
+                << " " << tpos[3*i+1] << " " << tpos[3*i+2] << std::endl;
+        }
+        for (int i=0; i<nmax; ++i) {
+            std::cout << "G of width " << gnl_alphas[i] 
+                << " @ " << gnl_centres[i] << std::endl;
+        }
     }
 
     // Cell list
@@ -149,33 +209,45 @@ void evaluate_gylm(
     map<int, int> type_index_map;
     set<int> type_set;
     for (int i=0; i<n_types; ++i) {
-        if (verbose) std::cout << "Register type " << all_types_list(i) << std::endl;
+        if (verbose) std::cout << "Register type " 
+            << all_types_list(i) << std::endl;
         type_set.insert(all_types_list(i));
     }
     int type_index = 0;
     for (auto it=type_set.begin(); it!=type_set.end(); ++it) {
-        if (verbose) std::cout << "Place type " << *it << " at index " << type_index << std::endl;
+        if (verbose) std::cout << "Place type " 
+            << *it << " at index " << type_index << std::endl;
         type_index_map[*it] = type_index++;
     }
 
     // Ancillary arrays
+    int dim_nl = nmax*(lmax+1);
+    int dim_lm = (lmax+1)*(lmax+1);
+    int dim_nlm = nmax*dim_lm;
+    int dim_tnlm = n_types*dim_nlm;
+    int dim_itnlm = n_src*dim_tnlm;
+    int dim_tunkl = n_types*(n_types+1)/2*nmax*nmax*(lmax+1);
+    int dim_itunkl = n_src*n_types*(n_types+1)/2*nmax*nmax*(lmax+1);
+    vector<double> lnorm = { 
+        lnorm_0, lnorm_1, lnorm_2,  lnorm_3,
+        lnorm_4, lnorm_5, lnorm_6,  lnorm_7,
+        lnorm_8, lnorm_9, lnorm_10, lnorm_11 };
+    // Deltas
     double *dx   = (double*) malloc(sizeof(double)*n_tgt);
     double *dy   = (double*) malloc(sizeof(double)*n_tgt);
     double *dz   = (double*) malloc(sizeof(double)*n_tgt);
     double *dr   = (double*) malloc(sizeof(double)*n_tgt);
     double *dr2  = (double*) malloc(sizeof(double)*n_tgt);
+    // Weights, Gnl's, Ylm's
     double *jw   = (double*) malloc(sizeof(double)*n_tgt);
-    double *jgnl = (double*) malloc(sizeof(double)*n_tgt*nmax*(lmax+1));
+    double *jgnl = (double*) malloc(sizeof(double)*n_tgt*dim_nl);
     double *jgn  = (double*) malloc(sizeof(double)*nmax);
     double *jhl  = (double*) malloc(sizeof(double)*(lmax+1));
-    double *jylm = (double*) malloc(sizeof(double)*n_tgt*(lmax+1)*(lmax+1));
-    // Expansions
-    // n_src x t x n x lm
-    int dim_itnlm = n_src*n_types*nmax*(lmax+1)*(lmax+1);
-    //int dim_itunkl = n_src*n_types*(n_types+1)/2*nmax*nmax*(lmax+1);
+    double *jylm = (double*) malloc(sizeof(double)*n_tgt*dim_lm);
+    // Qtnlm's
     double *qitnlm = (double*) malloc(sizeof(double)*dim_itnlm);
-    //double *xitunkl = (double*) malloc(sizeof(double)*dim_itunkl);
 
+    // Expansion loop
     int src_pos_idx = -1;
     for (int src_idx=0; src_idx<n_src; ++src_idx) {
         double xi = spos[++src_pos_idx];
@@ -197,17 +269,31 @@ void evaluate_gylm(
             evaluate_deltas(xi, yi, zi, tpos, 
                 dx, dy, dz, dr, dr2, 
                 nbs_of_type.second);
+            // Weight coefficients, Gnl's, Ylm's
             evaluate_weights(dr, n_nbs_of_type, 
                 r_cut, r_cut_width, jw);
             evaluate_gnl(dr, dr2, n_nbs_of_type, 
                 gnl_centres, gnl_alphas, nmax, lmax, jgn, jhl, jgnl);
             evaluate_ylm(dx, dy, dz, dr,
                 n_nbs_of_type, lmax, jylm);
-            evaluate_qitnlm(jw, jgnl, jylm, 
-                src_idx, type_index, n_nbs_of_type, n_types, nmax, lmax,
+            // Expansion coefficients Qnlm's
+            int offset_idx = src_idx*dim_tnlm + type_index*dim_nlm;
+            evaluate_qitnlm(jw, jgnl, jylm, n_nbs_of_type, 
+                nmax, lmax, offset_idx, dim_nlm, dim_nl, dim_lm,
                 qitnlm);
         }
     }
+
+    // Contractions
+    if (verbose) {
+        std::cout << "Contractions per centre: " << dim_tnlm  << " o " << dim_tnlm  
+            << " -> " << dim_tunkl << std::endl;
+        std::cout << "Contractions for system: " << dim_itnlm << " o " << dim_itnlm 
+            << " -> " << dim_itunkl << std::endl;
+    }
+    evaluate_xtunkl(xitunkl, qitnlm, lnorm,
+        n_src, n_types, 
+        nmax, lmax, dim_tnlm, dim_nlm, dim_lm);
 
     free(dx);
     free(dy);

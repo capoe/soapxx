@@ -1,5 +1,5 @@
 """
-Adapted from dscribe/descriptors/soap.py:
+Adapted and extended from dscribe/descriptors/soap.py:
 
 Copyright 2019 DScribe developers
 
@@ -56,7 +56,7 @@ class GylmCalculator(object):
         return self._Nt*(self._Nt+1)/2
     def getNumberofTypes(self):
         return len(self.types_z)
-    def evaluate(self, system, positions=None):
+    def evaluate(self, system, positions=None, verbose=False):
         if self.periodic:
             cell = system.get_cell()
         if positions is None:
@@ -72,13 +72,14 @@ class GylmCalculator(object):
             nmax=self._nmax,
             lmax=self._lmax,
             eta=self._eta,
-            atomic_numbers=None)
+            atomic_numbers=None,
+            verbose=verbose)
         return soap_mat
     def evaluateGylm(self, system, centers, 
             gnl_centres, gnl_alphas, 
             rcut, cutoff_padding, 
             nmax, lmax, eta, atomic_numbers=None, 
-            use_global_types=True):
+            use_global_types=True, verbose=False):
         n_tgt = len(system)
         n_src = len(centers)
         positions, Z_sorted, n_types, atomtype_lst = self.flattenPositions(system, atomic_numbers)
@@ -88,13 +89,13 @@ class GylmCalculator(object):
         Z_sorted_global = self.types_z if use_global_types \
             else np.array(list(set(Z_sorted)))
         n_types = len(Z_sorted_global)
-        coeffs = np.zeros(int((nmax*(nmax+1))/2)*(lmax+1)*int((n_types*(n_types + 1))/2)*n_centers, dtype=np.float64)
-        shape = (n_centers, int((nmax*(nmax+1))/2)*(lmax+1)*int((n_types*(n_types+1))/2))
+        coeffs = np.zeros(nmax*nmax*(lmax+1)*int((n_types*(n_types + 1))/2)*n_src, dtype=np.float64)
+        shape = (n_centers, nmax*nmax*(lmax+1)*int((n_types*(n_types+1))/2))
         evaluate_gylm(coeffs, centers, positions,
             gnl_centres, gnl_alphas, Z_sorted, Z_sorted_global,
             rcut, cutoff_padding, 
             n_src, n_tgt, n_types, 
-            nmax, lmax, True)
+            nmax, lmax, verbose)
         coeffs = coeffs.reshape(shape)
         return coeffs
     def flattenPositions(self, system, atomic_numbers=None):
