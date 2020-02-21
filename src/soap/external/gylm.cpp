@@ -11,19 +11,20 @@
 #include "ylm.hpp"
 #include "celllist.hpp"
 
-constexpr double radial_epsilon = 1e-10;
-constexpr double lnorm_0 = 1.;
-constexpr double lnorm_1 = 1./sqrt(3.);
-constexpr double lnorm_2 = 1./sqrt(5.);
-constexpr double lnorm_3 = 1./sqrt(7.);
-constexpr double lnorm_4 = 1./sqrt(9.);
-constexpr double lnorm_5 = 1./sqrt(11.);
-constexpr double lnorm_6 = 1./sqrt(13.);
-constexpr double lnorm_7 = 1./sqrt(15.);
-constexpr double lnorm_8 = 1./sqrt(17);
-constexpr double lnorm_9 = 1./sqrt(19.);
-constexpr double lnorm_10 = 1./sqrt(21.);
-constexpr double lnorm_11 = 1./sqrt(23.);
+// Unfortunately icc forbids use of math functions in constexpr
+constexpr double radial_epsilon  = +1.00000000000e-10; // constexpr double radial_epsilon = 1e-10;
+constexpr double lnorm_0         = +1.00000000000e+00; // constexpr double lnorm_0  = 1.;
+constexpr double lnorm_1         = +5.77350269190e-01; // constexpr double lnorm_1  = 1./sqrt(3.);
+constexpr double lnorm_2         = +4.47213595500e-01; // constexpr double lnorm_2  = 1./sqrt(5.);
+constexpr double lnorm_3         = +3.77964473009e-01; // constexpr double lnorm_3  = 1./sqrt(7.);
+constexpr double lnorm_4         = +3.33333333333e-01; // constexpr double lnorm_4  = 1./sqrt(9.);
+constexpr double lnorm_5         = +3.01511344578e-01; // constexpr double lnorm_5  = 1./sqrt(11.);
+constexpr double lnorm_6         = +2.77350098113e-01; // constexpr double lnorm_6  = 1./sqrt(13.);
+constexpr double lnorm_7         = +2.58198889747e-01; // constexpr double lnorm_7  = 1./sqrt(15.);
+constexpr double lnorm_8         = +2.42535625036e-01; // constexpr double lnorm_8  = 1./sqrt(17);
+constexpr double lnorm_9         = +2.29415733871e-01; // constexpr double lnorm_9  = 1./sqrt(19.);
+constexpr double lnorm_10        = +2.18217890236e-01; // constexpr double lnorm_10 = 1./sqrt(21.);
+constexpr double lnorm_11        = +2.08514414057e-01; // constexpr double lnorm_11 = 1./sqrt(23.);
 
 void evaluate_deltas(
         double xi, double yi, double zi, 
