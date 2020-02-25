@@ -22,6 +22,11 @@ void evaluate_gylm(
     int n_types, 
     int nmax, 
     int lmax,
+    double part_sigma,
+    bool wconstant,
+    double wscale,
+    double wcentre,
+    double ldamp,
     bool power,
     bool verbose);
 

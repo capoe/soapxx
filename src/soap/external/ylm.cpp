@@ -66,7 +66,9 @@ constexpr double pre6_d      = +2.52282450364e-01;  // constexpr double pre6_d =
 constexpr double pre6_e      = +1.18330958112e+00;  // constexpr double pre6_e = pre6_d*s_11*s_2;
 constexpr double pre6_f      = +3.41592052596e-01;  // constexpr double pre6_f = pre6_e*s_3/6.;
 
-void evaluate_ylm(double *x, double *y, double *z, double *r, int n_pts, int lmax, double *ylm_out) {
+void evaluate_ylm(
+        double *x, double *y, double *z, double *r, 
+        int n_pts, int lmax, double *ylm_out) {
     int dim = (lmax+1)*(lmax+1);
     for (int pt=0; pt<n_pts; ++pt) {
         int c = pt*dim;

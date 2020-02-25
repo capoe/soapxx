@@ -64,13 +64,18 @@ void evaluate_gnl(
         double *dr, double *dr2, int n_parts, 
         double *centres, double *alphas, 
         int nmax, int lmax, 
-        double *gn, double *hl, double *gnl) {
-    double part_sigma = 0.5;
-    bool wconstant = true;
-    double wcentre = 1.;
-    double wscale = 1.; //0.5;
+        double *gn, double *hl, double *gnl,
+        double part_sigma,
+        double wconstant,
+        double wscale,
+        double wcentre,
+        double ldamp) {
+    //double part_sigma = 0.5;
+    //bool wconstant = true;
+    //double wcentre = 1.;
+    //double wscale = 1.;
+    //double ldamp = 4.;
     double invs_wscale2 = 1./(wscale*wscale);
-    double ldamp = 4.;
     int c_gnl = -1;
     for (int j=0; j<n_parts; ++j) {
         double w = 1.;
@@ -205,6 +210,11 @@ void evaluate_gylm(
         int n_types, 
         int nmax, 
         int lmax,
+        double part_sigma,
+        bool wconstant,
+        double wscale,
+        double wcentre,
+        double ldamp,
         bool power,
         bool verbose) {
 
@@ -326,7 +336,8 @@ void evaluate_gylm(
             evaluate_weights(dr, n_nbs_of_type, 
                 r_cut, r_cut_width, jw);
             evaluate_gnl(dr, dr2, n_nbs_of_type, 
-                gnl_centres, gnl_alphas, nmax, lmax, jgn, jhl, jgnl);
+                gnl_centres, gnl_alphas, nmax, lmax, jgn, jhl, jgnl,
+                part_sigma, wconstant, wscale, wcentre, ldamp);
             evaluate_ylm(dx, dy, dz, dr,
                 n_nbs_of_type, lmax, jylm);
             // Expansion coefficients Qnlm's

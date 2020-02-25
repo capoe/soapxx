@@ -31,6 +31,11 @@ class GylmCalculator(object):
             lmax,
             rmin=0.0,
             sigma=1.0,
+            part_sigma=0.5,
+            wconstant=True,
+            wcentre=1.,
+            wscale=1.,
+            ldamp=4.,
             types=None,
             periodic=False,
             encoder=lambda s: tools.ptable.lookup[s].z,
@@ -38,6 +43,7 @@ class GylmCalculator(object):
         self.types = types
         self.types_z = np.array(sorted([ encoder(s) for s in self.types ]))
         self.types_elem = np.array([ decoder(z) for z in self.types_z ])
+        self.types_set = set(list(self.types_z))
         self._Nt = len(self.types_z)
         self._eta = 1/(2*sigma**2)
         self._sigma = sigma
@@ -47,6 +53,11 @@ class GylmCalculator(object):
         self._rcut_width = rcut_width
         self._nmax = nmax
         self._lmax = lmax
+        self.part_sigma = part_sigma
+        self.wconstant = wconstant
+        self.wcentre = wcentre
+        self.wscale = wscale
+        self.ldamp = ldamp
         self.periodic = periodic
     def getDim(self):
         return self.getChannelDim()*self.getNumberOfChannels()
@@ -56,13 +67,15 @@ class GylmCalculator(object):
         return self._Nt*(self._Nt+1)/2
     def getNumberofTypes(self):
         return len(self.types_z)
-    def evaluate(self, system, positions=None, power=True, verbose=False):
+    def evaluate(self, system, positions=None, 
+            power=True, 
+            verbose=False, 
+            normalize=False):
         if self.periodic:
             cell = system.get_cell()
         if positions is None:
             positions = system.get_positions()
-        threshold = 0.001
-        soap_mat = self.evaluateGylm(
+        X = self.evaluateGylm(
             system,
             positions,
             self._gnl_centres,
@@ -75,7 +88,10 @@ class GylmCalculator(object):
             atomic_numbers=None,
             power=power,
             verbose=verbose)
-        return soap_mat
+        if normalize:
+            z = 1./np.sum(X**2, axis=1)**0.5
+            X = (X.T*z).T
+        return X
     def evaluateGylm(self, system, centers, 
             gnl_centres, gnl_alphas, 
             rcut, cutoff_padding, 
@@ -83,7 +99,10 @@ class GylmCalculator(object):
             use_global_types=True, power=True, verbose=False):
         n_tgt = len(system)
         n_src = len(centers)
-        positions, Z_sorted, n_types, atomtype_lst = self.flattenPositions(system, atomic_numbers)
+        positions, Z_sorted, n_types, atomtype_lst = self.flattenPositions(
+            system, atomic_numbers)
+        if len(set(Z_sorted).union(self.types_set)) > len(self.types_set):
+            raise ValueError("Some types not recognized:", set(Z_sorted))
         centers = np.array(centers)
         n_centers = centers.shape[0]
         centers = centers.flatten()
@@ -100,7 +119,13 @@ class GylmCalculator(object):
             gnl_centres, gnl_alphas, Z_sorted, Z_sorted_global,
             rcut, cutoff_padding, 
             n_src, n_tgt, n_types, 
-            nmax, lmax, power, verbose)
+            nmax, lmax, 
+            self.part_sigma, 
+            self.wconstant, 
+            self.wscale, 
+            self.wcentre, 
+            self.ldamp,
+            power, verbose)
         coeffs = coeffs.reshape(shape)
         return coeffs
     def flattenPositions(self, system, atomic_numbers=None):

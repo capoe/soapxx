@@ -9,6 +9,42 @@ def assert_equal(z, target, eps=1e-5):
     if np.abs(z-target) > eps: raise ValueError(z)
     else: log << "+" << log.flush
 
+def get_calc(scale):
+    return soap.external.GylmCalculator(
+        rcut=scale*3.5,
+        rcut_width=scale*0.5,
+        nmax=9,
+        lmax=6,
+        sigma=scale*0.5,
+        part_sigma=scale*0.5,
+        wconstant=True,
+        wscale=scale*1.0,
+        wcentre=scale*1.0,
+        ldamp=4.,
+        types="C,N,O,S,H,F,Cl,Br,I,B,P".split(","),
+        #types="C,H".split(","),
+        periodic=False)
+
+def test_gylm_scaleinv():
+    log << log.mg << "<test_scaleinv>" << log.endl
+    calc0 = get_calc(scale=1.)
+    configs = soap.tools.io.read('structures.xyz')
+    for cidx, config in enumerate(configs):
+        log << "Struct" << cidx << log.flush
+        heavy = np.where(np.array(config.symbols) != "H")[0]
+        x0 = calc0.evaluate(system=config, positions=config.positions[heavy], normalize=True)
+        pos_orig = np.copy(config.positions)
+        for scale in [ 0.5, 1.5, 2.5 ]:
+            config.positions = scale*pos_orig
+            calc1 = get_calc(scale=scale)
+            x1 = calc1.evaluate(
+                system=config, 
+                positions=config.positions[heavy], 
+                normalize=True)
+            diff = np.max(np.abs(x0.dot(x0.T) - x1.dot(x1.T)))
+            assert_equal(diff, 0.0, 1e-10)
+        log << log.endl
+
 def test_gylm_rotinv():
     log << log.mg << "<test_rotinv>" << log.endl
     gylm_calc = soap.external.GylmCalculator(
@@ -17,7 +53,7 @@ def test_gylm_rotinv():
         nmax=9,
         lmax=6,
         sigma=0.5,
-        types="C,N,O,S,H,F,Cl,Br,I,B,P".split(","), #,Br,I,B,P".split(","),
+        types="C,N,O,S,H,F,Cl,Br,I,B,P".split(","),
         periodic=False)
     configs = soap.tools.io.read('structures.xyz')
     for cidx, config in enumerate(configs):
@@ -90,4 +126,5 @@ def test_ylm(lmax=6):
 if __name__ == "__main__":
     test_ylm()
     test_gylm_rotinv()
+    test_gylm_scaleinv()
 
