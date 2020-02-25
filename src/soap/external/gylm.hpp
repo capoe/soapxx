@@ -22,6 +22,7 @@ void evaluate_gylm(
     int n_types, 
     int nmax, 
     int lmax,
+    bool power,
     bool verbose);
 
 #endif
