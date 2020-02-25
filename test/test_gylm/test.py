@@ -72,7 +72,7 @@ def test_gylm_rotinv():
             assert_equal(diff, 0.0, 1e-10)
         log << log.endl
 
-def test_ylm(lmax=6):
+def test_ylm(lmax=7):
     log << log.mg << "<test_ylm>" << log.endl
     xyz_orig = np.random.normal(0, 1., size=(3,))
     xyz = xyz_orig/np.dot(xyz_orig,xyz_orig)**0.5

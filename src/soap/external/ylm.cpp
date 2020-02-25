@@ -65,6 +65,14 @@ constexpr double pre6_c      = +4.60602629757e-01;  // constexpr double pre6_c =
 constexpr double pre6_d      = +2.52282450364e-01;  // constexpr double pre6_d = pre6*s_7*invs_2*3;
 constexpr double pre6_e      = +1.18330958112e+00;  // constexpr double pre6_e = pre6_d*s_11*s_2;
 constexpr double pre6_f      = +3.41592052596e-01;  // constexpr double pre6_f = pre6_e*s_3/6.;
+constexpr double pre7        = +4.82842752529e-02;  // constexpr double pre7   = invs_2* 1./32*s_5*s_3*invs_pi;
+constexpr double pre7_a      = +4.51658037913e-02;  // constexpr double pre7_a = 0.5*pre7*invs_2*s_7;
+constexpr double pre7_b      = +1.10633173111e-01;  // constexpr double pre7_b = 3*pre7_a/s_3*s_2;
+constexpr double pre7_c      = +7.82294669311e-02;  // constexpr double pre7_c = pre7_b*invs_2;
+constexpr double pre7_d      = +5.18915578720e-01;  // constexpr double pre7_d = 2*pre7_c*s_11;
+constexpr double pre7_e      = +2.59457789360e-01;  // constexpr double pre7_e = 0.5*pre7_d;
+constexpr double pre7_f      = +1.32298033090e+00;  // constexpr double pre7_f = pre7_e*s_13*s_2;
+constexpr double pre7_g      = +3.53581366262e-01;  // constexpr double pre7_g = pre7_f/s_2/s_7;
 
 void evaluate_ylm(
         double *x, double *y, double *z, double *r, 
@@ -183,7 +191,34 @@ void evaluate_ylm(
             ylm_out[++c] =  pre6_d* (a4r+b4r)*c6r_4;
             ylm_out[++c] =  pre6_e* (a5r+b5r)*c1r;
             ylm_out[++c] =  pre6_f* (a6r+b6r);
-        }}}}}}
+        if (lmax > 6) {
+            double a7r = a4r*a3r - a4i*a3i;
+            double a7i = a4r*a3i + a4i*a3r;
+            double c7r = c4r*c3r;
+            double c7r_0 = 429*c7r - 693*c5r + 315*c3r - 35*c1r;
+            double c7r_1 = 429*c6r - 495*c4r + 135*c2r - 5;
+            double c7r_2 = 143*c5r - 110*c3r + 15*c1r;
+            double c7r_3 = 143*c4r - 66*c2r + 3;
+            double c7r_4 = 13*c3r - 3*c1r;
+            double c7r_5 = 13*c2r - 1;
+            double b7r = b4r*b3r - b4i*b3i;
+            double b7i = b4r*b3i + b4i*b3r;
+            ylm_out[++c] = -pre7_g* (a7i-b7i);
+            ylm_out[++c] = -pre7_f* (a6i-b6i)*c1r;
+            ylm_out[++c] = -pre7_e* (a5i-b5i)*c7r_5;
+            ylm_out[++c] = -pre7_d* (a4i-b4i)*c7r_4;
+            ylm_out[++c] = -pre7_c* (a3i-b3i)*c7r_3;
+            ylm_out[++c] = -pre7_b* (a2i-b2i)*c7r_2;
+            ylm_out[++c] = -pre7_a* (a1i-b1i)*c7r_1;
+            ylm_out[++c] =  s_2*pre7*c7r_0;
+            ylm_out[++c] =  pre7_a* (a1r+b1r)*c7r_1;
+            ylm_out[++c] =  pre7_b* (a2r+b2r)*c7r_2;
+            ylm_out[++c] =  pre7_c* (a3r+b3r)*c7r_3;
+            ylm_out[++c] =  pre7_d* (a4r+b4r)*c7r_4;
+            ylm_out[++c] =  pre7_e* (a5r+b5r)*c7r_5;
+            ylm_out[++c] =  pre7_f* (a6r+b6r)*c1r;
+            ylm_out[++c] =  pre7_g* (a7r+b7r);
+        }}}}}}}
     }
 }
 

@@ -17,10 +17,14 @@ limitations under the License.
 """
 
 import numpy as np
+import multiprocessing as mp
 from scipy.special import gamma
 from scipy.linalg import sqrtm, inv
 from _soapgto import *
 from .. import tools
+
+def eval_single(args):
+    return args["calc"].evaluate(**args)
 
 class GylmCalculator(object):
     def __init__(
@@ -67,10 +71,28 @@ class GylmCalculator(object):
         return self._Nt*(self._Nt+1)/2
     def getNumberofTypes(self):
         return len(self.types_z)
+    def evaluate_mp(self, systems, positions=None, 
+            power=True, 
+            normalize=True, 
+            verbose=False, 
+            procs=1):
+        args = [ {
+            "calc": self,
+            "system": systems[i], 
+            "positions": positions[i] if positions != None else None,
+            "power": power,
+            "normalize": normalize,
+            "verbose": verbose } \
+            for i in range(len(systems)) ]
+        pool = mp.Pool(processes=procs)
+        X_list = pool.map(eval_single, args)
+        pool.close()
+        return X_list
     def evaluate(self, system, positions=None, 
             power=True, 
             verbose=False, 
-            normalize=False):
+            normalize=False,
+            calc=None):
         if self.periodic:
             cell = system.get_cell()
         if positions is None:
