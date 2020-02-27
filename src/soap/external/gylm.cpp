@@ -70,11 +70,6 @@ void evaluate_gnl(
         double wscale,
         double wcentre,
         double ldamp) {
-    //double part_sigma = 0.5;
-    //bool wconstant = true;
-    //double wcentre = 1.;
-    //double wscale = 1.;
-    //double ldamp = 4.;
     double invs_wscale2 = 1./(wscale*wscale);
     int c_gnl = -1;
     for (int j=0; j<n_parts; ++j) {

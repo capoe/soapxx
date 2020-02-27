@@ -44,7 +44,7 @@ def calculate_distance_mat(R, P):
         R[:,1], P[:,1])**2 + np.subtract.outer(
         R[:,2], P[:,2])**2)
 
-def calculate_connectivity_mat(distance_mat, type_vec, cutoff=None):
+def calculate_connectivity_mat(distance_mat, type_vec, cutoff=None, cutoff_scale=1.15):
     dim = distance_mat.shape[0]
     if cutoff != None:
         connectivity_mat = np.zeros((dim,dim), dtype=bool)
@@ -56,7 +56,7 @@ def calculate_connectivity_mat(distance_mat, type_vec, cutoff=None):
                     connectivity_mat[i,j] = False
     else:
         cr = np.array([ COVRAD_TABLE[t] for t in type_vec ])
-        rrcut = 1.15*np.add.outer(cr,cr)
+        rrcut = cutoff_scale*np.add.outer(cr,cr)
         connectivity_mat = (np.heaviside(-distance_mat+rrcut, 0)).astype(bool)
         #for i in range(dim):
         #    for j in range(dim):
