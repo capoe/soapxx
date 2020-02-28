@@ -190,6 +190,27 @@ void evaluate_xtunkl(double *xitunkl, double *qitnlm, vector<double> &lnorm,
     }
 }
 
+void _py_evaluate_xtunkl(
+    py::array_t<double> _xitunkl,
+    py::array_t<double> _qitnlm,
+    int n_src,
+    int n_types,
+    int nmax,
+    int lmax) {
+    double *xitunkl = (double*) _xitunkl.request().ptr;
+    double *qitnlm = (double*) _qitnlm.request().ptr;
+    int dim_lm = (lmax+1)*(lmax+1);
+    int dim_nlm = nmax*dim_lm;
+    int dim_tnlm = n_types*dim_nlm;
+    vector<double> lnorm = { 
+        lnorm_0, lnorm_1, lnorm_2,  lnorm_3,
+        lnorm_4, lnorm_5, lnorm_6,  lnorm_7,
+        lnorm_8, lnorm_9, lnorm_10, lnorm_11 };
+    evaluate_xtunkl(xitunkl, qitnlm, lnorm,
+        n_src, n_types, nmax, lmax,
+        dim_tnlm, dim_nlm, dim_lm);
+}
+
 void evaluate_gylm(
         py::array_t<double> coeffs, 
         py::array_t<double> src_pos, 
@@ -324,7 +345,8 @@ void evaluate_gylm(
                 nbs_of_type.second);
             if (verbose) {
                 for (int j=0; j<n_nbs_of_type; ++j) {
-                    std::cout << "  " << dx[j] << " " << dy[j] << " " << dz[j] << " r=" << dr[j] << std::endl;
+                    std::cout << "  " << dx[j] << " " << dy[j] << " " << dz[j] 
+                        << " r=" << dr[j] << std::endl;
                 }
             }
             // Weight coefficients, Gnl's, Ylm's
@@ -338,7 +360,8 @@ void evaluate_gylm(
             // Expansion coefficients Qnlm's
             int offset_idx = src_idx*dim_tnlm + type_index*dim_nlm;
             if (verbose) {
-                std::cout << "  Store @ " << offset_idx << ", length = " << dim_nlm << std::endl;
+                std::cout << "  Store @ " << offset_idx 
+                    << ", length = " << dim_nlm << std::endl;
             }
             evaluate_qitnlm(jw, jgnl, jylm, n_nbs_of_type, 
                 nmax, lmax, offset_idx, dim_nlm, dim_nl, dim_lm,

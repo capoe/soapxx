@@ -7,6 +7,14 @@
 namespace py = pybind11;
 using namespace std;
 
+void _py_evaluate_xtunkl(
+    py::array_t<double> _xitunkl,
+    py::array_t<double> _qitnlm,
+    int n_src,
+    int n_types,
+    int nmax,
+    int lmax);
+
 void evaluate_gylm(
     py::array_t<double> coeffs, 
     py::array_t<double> tgt_pos, 

@@ -1068,7 +1068,7 @@ class CVLOO(object):
 class CVMC(object):
     def __init__(self, state, options):
         self.tag = "cv_mc"
-        self.n_samples = len(state)
+        self.n_samples = state if (type(state) is int) else len(state)
         self.n_reps = options.n_mccv
         self.f_mccv = options.f_mccv
         self.step = 0
@@ -1150,8 +1150,14 @@ cv_iterator = {
   "custom": CVCustom
 }
 
+def metric_mse(yp,yt):
+    return np.sum((yp-yt)**2)/yp.shape[0]
+
 def metric_rmse(yp,yt):
-    return (np.sum((yp-yt)**2)**0.5/yp.shape[0])**0.5
+    return metric_mse(yp,yt)**0.5
+
+def metric_mae(yp,yt):
+    return np.sum(np.abs(yp-yt))/yp.shape[0]
 
 def metric_rhop(yp,yt):
     return scipy.stats.pearsonr(yp, yt)[0]
@@ -1165,6 +1171,8 @@ def metric_auc(yp,yt):
 
 class CVEval(object):
     eval_map = { 
+        "mae": metric_mae,
+        "mse": metric_mse,
         "rmse": metric_rmse, 
         "rhop": metric_rhop,
         "auc":  metric_auc

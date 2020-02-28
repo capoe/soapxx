@@ -42,6 +42,8 @@ class GylmCalculator(object):
             ldamp=4.,
             types=None,
             periodic=False,
+            normalize=False,
+            power=True,
             encoder=lambda s: tools.ptable.lookup[s].z,
             decoder=lambda z: tools.ptable.lookup[int(z)].name):
         self.types = types
@@ -63,12 +65,21 @@ class GylmCalculator(object):
         self.wscale = wscale
         self.ldamp = ldamp
         self.periodic = periodic
-    def getDim(self):
-        return self.getChannelDim()*self.getNumberOfChannels()
-    def getChannelDim(self):
-        return self._nmax*(self._nmax+1)/2*(self._lmax+1)
-    def getNumberOfChannels(self):
-        return self._Nt*(self._Nt+1)/2
+        self.normalize = normalize
+        self.power = power
+    def getDim(self, with_power=None):
+        if with_power is None: with_power = self.power
+        return self.getChannelDim(with_power)*self.getNumberOfChannels(with_power)
+    def getChannelDim(self, with_power):
+        if with_power:
+            return self._nmax*self._nmax*(self._lmax+1)
+        else:
+            return self._nmax*(self._lmax+1)**2
+    def getNumberOfChannels(self, with_power):
+        if with_power:
+            return self._Nt*(self._Nt+1)/2
+        else:
+            return self._Nt
     def getNumberofTypes(self):
         return len(self.types_z)
     def evaluate_mp(self, systems, positions=None, 
@@ -89,9 +100,7 @@ class GylmCalculator(object):
         pool.close()
         return X_list
     def evaluate(self, system, positions=None, 
-            power=True, 
             verbose=False, 
-            normalize=False,
             calc=None):
         if self.periodic:
             cell = system.get_cell()
@@ -108,9 +117,9 @@ class GylmCalculator(object):
             lmax=self._lmax,
             eta=self._eta,
             atomic_numbers=None,
-            power=power,
+            power=self.power,
             verbose=verbose)
-        if normalize:
+        if self.normalize:
             z = 1./np.sum(X**2, axis=1)**0.5
             X = (X.T*z).T
         return X
@@ -186,6 +195,7 @@ class SoapGtoCalculator(object):
             periodic=False,
             average=False,
             sparse=False,
+            normalize=False,
             encoder=lambda s: tools.ptable.lookup[s].z,
             decoder=lambda z: tools.ptable.lookup[int(z)].name):
         self.types = types
@@ -200,6 +210,7 @@ class SoapGtoCalculator(object):
         self._lmax = lmax
         self.periodic = periodic
         self._average = average
+        self._normalize = normalize
     def getDim(self):
         return self.getChannelDim()*self.getNumberOfChannels()
     def getChannelDim(self):
@@ -215,7 +226,7 @@ class SoapGtoCalculator(object):
             positions = system.get_positions()
         threshold = 0.001
         cutoff_padding = self._sigma*np.sqrt(-2*np.log(threshold))
-        soap_mat = self.evaluateGTO(
+        X = self.evaluateGTO(
             system,
             positions,
             self._alphas,
@@ -226,7 +237,10 @@ class SoapGtoCalculator(object):
             lmax=self._lmax,
             eta=self._eta,
             atomic_numbers=None)
-        return soap_mat
+        if self._normalize:
+            z = 1./np.sum(X**2, axis=1)**0.5
+            X = (X.T*z).T
+        return X
     def evaluateGTO(self, system, centers, 
             alphas, betas, 
             rcut, cutoff_padding, 

@@ -29,6 +29,7 @@ namespace py = pybind11;
 using namespace std;
 
 PYBIND11_MODULE(_soapgto, m) {
+    m.def("evaluate_power", &_py_evaluate_xtunkl, "Power spectra for tnlm-type tensors");
     m.def("evaluate_gylm", &evaluate_gylm, "Gnl-Ylm frequency-damped convolutions");
     m.def("evaluate_soapgto", &soapGTO, "SOAP with gaussian type orbital radial basis set");
     m.def("smooth_match", &smooth_match, "Smooth best-match assignment");

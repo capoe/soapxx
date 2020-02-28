@@ -19,10 +19,10 @@ def get_calc(scale):
         part_sigma=scale*0.5,
         wconstant=True,
         wscale=scale*1.0,
-        wcentre=scale*1.0,
+        wcentre=1.0,
         ldamp=4.,
+        normalize=True,
         types="C,N,O,S,H,F,Cl,Br,I,B,P".split(","),
-        #types="C,H".split(","),
         periodic=False)
 
 def test_gylm_scaleinv():
@@ -32,15 +32,14 @@ def test_gylm_scaleinv():
     for cidx, config in enumerate(configs):
         log << "Struct" << cidx << log.flush
         heavy = np.where(np.array(config.symbols) != "H")[0]
-        x0 = calc0.evaluate(system=config, positions=config.positions[heavy], normalize=True)
+        x0 = calc0.evaluate(system=config, positions=config.positions[heavy])
         pos_orig = np.copy(config.positions)
         for scale in [ 0.5, 1.5, 2.5 ]:
             config.positions = scale*pos_orig
             calc1 = get_calc(scale=scale)
             x1 = calc1.evaluate(
                 system=config, 
-                positions=config.positions[heavy], 
-                normalize=True)
+                positions=config.positions[heavy])
             diff = np.max(np.abs(x0.dot(x0.T) - x1.dot(x1.T)))
             assert_equal(diff, 0.0, 1e-10)
         log << log.endl
