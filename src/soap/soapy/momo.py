@@ -204,7 +204,7 @@ class OptionsInterface(object):
         if default == None: required = True
         else: required = False
         # Construct default <help> it not given
-        if help == None: help = str(typ)
+        if help == None: help = "%s <default: %s>" % (repr(type), repr(default))
         # Construct <nickname> if not given
         if nickname == None:
             nickname = '-'

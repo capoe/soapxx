@@ -1189,11 +1189,21 @@ class CVEval(object):
         self.yp_map[channel] = self.yp_map[channel] + list(yp)
         self.yt_map[channel] = self.yt_map[channel] + list(yt)
         return
-    def evaluate(self, channel, metric):
+    def evaluate(self, channel, metric, bootstrap=0):
         if len(self.yp_map[channel]) < 1: return np.nan
-        return CVEval.eval_map[metric](
-            np.array(self.yp_map[channel]), 
-            np.array(self.yt_map[channel]))
+        if bootstrap == 0:
+            return CVEval.eval_map[metric](
+                np.array(self.yp_map[channel]), 
+                np.array(self.yt_map[channel])), 0.
+        else:
+            v = []
+            n = len(self.yp_map[channel])
+            yp = np.array(self.yp_map[channel])
+            yt = np.array(self.yt_map[channel])
+            for r in range(bootstrap):
+                re = np.random.randint(0, n, size=(n,))
+                v.append(CVEval.eval_map[metric](yp[re], yt[re]))
+            return np.mean(v), np.std(v)
     def evaluateNull(self, channel, metric, n_samples):
         if len(self.yp_map[channel]) < 1: return np.nan
         z = []
@@ -1205,20 +1215,23 @@ class CVEval(object):
                 yp_null, yt_null))
         z = np.sort(np.array(z))
         return z
-    def evaluateAll(self, metrics, log=None):
+    def evaluateAll(self, metrics, bootstrap=0, log=None):
         res = {}
         for channel in sorted(self.yp_map):
             res[channel] = {}
             vs = []
+            dvs = []
             for metric in metrics:
-                v = self.evaluate(channel, metric)
+                v, dv = self.evaluate(channel, metric, bootstrap=bootstrap)
                 res[channel][metric] = v
+                res[channel][metric+"_std"] = dv
                 vs.append(v)
+                dvs.append(dv)
             if log:
                 log << "%-9s : " % (channel) << log.flush
                 for v, metric in zip(vs, metrics):
-                    log << "%s=%+1.4e" % (
-                        metric, v) << log.flush
+                    log << "%s=%+1.4e +- %+1.4e" % (
+                        metric, v, dv) << log.flush
                 log << log.endl
         return res
     def save(self, jsonfile):
