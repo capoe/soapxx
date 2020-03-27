@@ -100,7 +100,8 @@ def project_harm_net(K, D, R0=None, checkfile=None, load_check=False, init='kern
         jac=gradient, 
         options={'gtol': gtol})
     XY_out = opt_out.x
-    return np.array([ XY_out[0:N], XY_out[N:] ]).T
+    e = energy(XY_out)
+    return np.array([ XY_out[0:N], XY_out[N:] ]).T, e
 
 class BondNetwork(object):
     def __init__(self, tags, K, M):
